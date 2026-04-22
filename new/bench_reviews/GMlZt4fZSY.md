@@ -1,24 +1,17 @@
-Now I have a thorough understanding of the paper and calibration anchors. Let me compile my final review.
+Now I have enough calibration data. Let me write the final review.
 
 ## Summary
 
-The paper introduces MobileLLM-R1, a series of sub-billion-parameter reasoning models trained using a data-centric framework comprising three stages: (1) pre-training with benchmark-free, influence-based data mixing on ~2T curated tokens (resampled to 4.2T training tokens), (2) mid-training with data-model co-evolution via iterative influence-based rejection sampling (200B tokens), and (3) post-training with staged SFT. The key claim is that strong reasoning abilities can emerge with far fewer training tokens than conventionally believed—MobileLLM-R1-950M uses only 11.7% of Qwen3-0.6B's 36T tokens and claims to match or surpass it on multiple reasoning benchmarks.
+MobileLLM-R1 presents a data-centric framework for training sub-billion parameter reasoning models using only 4.2T tokens—~11.7% of Qwen3-0.6B's 36T corpus. The paper introduces benchmark-free, self-evolving data optimization through leave-one-out analysis for dataset selection and influence-based cross-capability weighting for data mixing, combined with a data-model co-evolution strategy for mid-training. MobileLLM-R1-950M achieves competitive reasoning performance (e.g., AIME 15.5 vs. OLMo-2-1.48B's 0.6), and the authors release models, code, and training recipes.
 
 ## Strengths
 
-- **Strong controlled comparison over fully open-source baselines (Table 2):** When fine-tuned on the same reasoning SFT corpus, MobileLLM-R1-950M outperforms OLMo-2-1.48B (57.8 vs. 53.0 MATH, 68.5 vs. 58.8 GSM8K) and SmolLM2-1.7B (57.8 vs. 41.4 MATH, 68.5 vs. 50.5 GSM8K) despite having fewer parameters. The 360M model's 19.2 MATH vs. SmolLM2-360M's 3.2 is a dramatic gap. This cleanly isolates the contribution of the pre-training/mid-training data curation.
-
-- **Principled LOO analysis with non-obvious findings (Section 2.1.2, Figure 3):** The leave-one-out methodology quantifies per-dataset contributions across Code, Math, and Knowledge domains. The finding that StarCoder benefits math more than OpenWebMath benefits code challenges the commonly held view (Lewkowycz et al., 2022) that math data disproportionately helps code—a genuinely interesting and counterintuitive result.
-
-- **Influence-based datamix validated on actual downstream benchmarks (Figure 4):** The caption explicitly states validation uses "Math is averaged over MATH-500, GSM8K, Code on HumanEval, and General Reasoning is an average of 9 tasks, including ARC-easy, ARC-challenge, BoolQ, PIQA, SIQA, HellaSwag, OBQA, WinoGrand, and MMLU." The datamix consistently lowers perplexity on these held-out benchmarks compared to uniform sampling.
-
-- **Data-model co-evolution with convergence evidence (Figures 5–6):** The influence score distributions narrow from Stage 1 (widely spread) to Stage 2 (concentrated near zero), indicating dataset information exhaustion. Figure 6 shows subsampled data avoids the MMLU performance collapse of original data around 30K steps.
-
-- **Full transparency and reproducibility:** The paper commits to releasing all data sources, mixing ratios, code, and model checkpoints. This is a genuine contribution for small reasoning models, contrasting with partially open models like Qwen3 and DeepSeek distills.
-
-- **FLOPs-efficiency on Pareto frontier (Figure 1):** MobileLLM-R1-950M-base achieves ~45% HumanEval at ~25×10¹⁴ FLOPs, compared to Qwen2.5-1.5B's ~38% at ~150×10¹⁴ FLOPs—a 6× compute reduction for better performance.
-
-- **Post-training ablations with practical insights (Table 1):** Staged training (Tulu first, then reasoning SFT) yields 68.5 GSM8K vs. 53.1 for joint training; science reasoning data transfers strongly to math (62.2 GSM8K without math-specific data). These are useful practical findings.
+- **Comprehensive, fully open training recipe**: The paper discloses all data sources, mixing ratios, model architectures, and releases models and code (Abstract; Section A.3), which is genuinely valuable for the community and relatively rare for competitive reasoning models.
+- **Strong empirical results among fully open-source models**: MobileLLM-R1-950M substantially outperforms OLMo-2-1.48B (57.8 vs. 53.0 on MATH) and SmolLM2-1.7B (57.8 vs. 41.4 on MATH) while being smaller, establishing a strong result in the fully open-source category (Table 2, Figure 9).
+- **Insightful LOO analysis**: Figure 3 provides useful empirical data about cross-domain contributions (e.g., StarCoder benefiting math more than OpenWebMath benefits code), offering actionable insights for data curation.
+- **Mid-training influence compression finding**: Figure 6 shows that influence-based subsampled data avoids a performance dip at ~30K steps that original data suffers, providing concrete evidence for a practical benefit of data curation during mid-training.
+- **Honest scoping of "reasoning"**: The paper adopts a pragmatic stance (Section 2, first paragraph) about treating benchmark gains as proxies rather than claiming genuine cognitive reasoning, which is a healthy framing.
+- **Staged post-training ablation**: Table 1 shows that decoupled alignment-then-reasoning (Tulu first, then M+C+S) achieves 68.5 GSM8K vs. 53.1 for joint training, and that science data transfers to math—providing practical training insights.
 
 ## Weaknesses
 
@@ -27,77 +20,74 @@ None.
 
 ### Major
 
-- **The "matches or surpasses Qwen3-0.6B" framing is overclaimed for the final post-trained models.** The abstract states MobileLLM-R1-950M "matches or surpasses Qwen3-0.6B across multiple reasoning benchmarks." While this is well-supported for base models (HumanEval: 46.3% vs. 30.5%) and for LiveCodeBench post-trained (the text states "substantial accuracy gain over Qwen3-0.6B"), the paper itself describes post-trained MATH/AIME results as only "comparable" to Qwen3—not matching or surpassing. The conclusion's claim that it "matches Qwen3-0.6B with only 11.7% of its 36T-token training data" is stronger than what the evidence supports for the post-trained models, which are the actual end product. The paper would be more honest by clearly stating the dimensions where it wins (HumanEval base, LCB post-trained) and where it is competitive but not matching (MATH, AIME post-trained). Additionally, the comparison pits a 950M model against a 600M model (58% more parameters), and the token-efficiency framing should acknowledge this parameter asymmetry—MobileLLM-R1 uses fewer tokens but more parameters, and still does not match on MATH/AIME post-trained.
+- **Token-efficiency framing conflates data efficiency with model size advantages**: The paper's headline claim (Abstract, Introduction, Conclusion) repeatedly states the model "matches Qwen3-0.6B with only 11.7% of the tokens." However, MobileLLM-R1-950M has 950M parameters versus Qwen3-0.6B's 600M—a 58% parameter advantage. On a FLOPs basis (Size × Tokens), the gap narrows substantially (950M × 4.2T ≈ 4.0 vs. 600M × 36T ≈ 21.6 parameter-token units—a 5.4× ratio, not 8.5× as token-centric framing implies). The paper's own Figure 1 correctly visualizes the FLOPs comparison, but the text systematically privileges token counts. The claim should either include parameter-matched comparisons or use FLOPs-adjusted framing. Without this, the "data efficiency" narrative overclaims what the experiments support. **Why it matters**: The paper's core contribution claim is about token efficiency; if the 58% parameter advantage accounts for much of the gap, the claim is substantially weaker.
 
-- **LOO ablations are conducted at small scale (500K steps) with no validation that findings transfer to full-scale training (4.2T tokens).** The conclusions drawn from the LOO analysis—e.g., "FineWeb-Edu is most important," "StarCoder benefits math more than OpenWebMath benefits code"—are treated as general principles guiding the full-scale recipe. However, data source rankings can shift across orders of magnitude in training compute due to capacity saturation, data ordering effects, and interaction effects between datasets. The paper does not acknowledge this gap. While small-scale ablations are standard practice, the paper presents these findings with more certainty than the evidence supports.
+- **"Benchmark-free" claim is misleading**: The paper calls its approach "benchmark-free" (Abstract, Section 2.2, Section 6), but Section 2.1.1 describes constructing capability-probing datasets using FineWeb-EDU classifiers (score ≥ 4), Ask-LLM scoring with domain-specific prompts (code, math, knowledge), and semantic deduplication—these are explicitly designed to proxy the same capabilities measured by MATH, HumanEval, and MMLU. The influence scores (Equations 2–5) that drive all data mixing decisions are computed against these capability probes. The method does not directly use benchmark test sets during training, which is commendable, but it uses carefully constructed capability proxies targeting the same domains. Calling this "benchmark-free" misrepresents the degree of human prior knowledge built into the data pipeline. **Why it matters**: The paper positions itself as a self-evolving system, but the data curation is heavily guided by human-designed capability proxies.
+
+- **Table 2 comparison starts from different training stages**: Baselines use "instruct checkpoints" while MobileLLM-R1 uses "intermediate Tulu3-SFT checkpoints." The paper acknowledges this asymmetry (Table 2 footnote with *), but does not address whether this systematically advantages or disadvantages either side. Different post-training trajectories (instruct fine-tuning, which may include RLHF/DPO, vs. SFT-only) can significantly affect reasoning capability. **Why it matters**: The claim that MobileLLM-R1 outperforms baselines "under identical fine-tuning" depends on starting points being comparable.
 
 ### Minor
 
-- **The mid-training phase (200B tokens) contribution is not independently ablated.** The paper shows convergence of influence scores (Figure 5) and that subsampled data outperforms original data on MMLU (Figure 6), but there is no comparison of the final model with vs. without mid-training. It is unclear how much of the performance gain comes from mid-training vs. pre-training data curation alone.
+- **AIME evaluation protocol unspecified**: The AIME score of 15.5 is a headline result, but the paper does not specify whether this is pass@1 vs. pass@k, sampling temperature, or number of generations. For a 30-question competition, pass@k with high k yields very different results than pass@1. This makes the headline number uninterpretable without these details.
 
-- **The "benchmark-free" framing (Section 2.2) is somewhat misleading.** While no benchmark test sets are used during training or mixture optimization, the capability-probing datasets are constructed using domain-specific Ask-LLM prompts that encode strong prior assumptions about what constitutes reasoning-relevant data. These function as implicit benchmarks. The paper is transparent about this process, but the "benchmark-free" label oversells the degree of autonomy.
+- **No validation of influence score calibration**: The influence scores (Equations 2–5) underpin the entire data mixing framework. The paper computes influence via Hessian approximation (AutoMixer) but never validates that these scores are well-calibrated—e.g., by checking that influence-predicted rankings correlate with actual LOO performance differences from Section 2.1.2.
 
-- **The comparison in Table 2 uses different starting checkpoints across models.** Baselines use their instruct checkpoints while MobileLLM-R1 uses a Tulu3-SFT intermediate checkpoint (denoted with *). This asymmetry could affect the comparison—though it is unclear in which direction, as instruct models may be more or less receptive to new SFT depending on their prior fine-tuning.
+- **Influence convergence interpretation is overstated**: The paper claims (Section 3, Figure 5) that influence scores converging to zero indicates "the dataset's information has been largely exhausted." Standard optimization theory suggests gradient norms shrink as the model approaches a loss minimum, making influence estimates vanish. This is a statement about optimization dynamics rather than information content.
 
-- **Data reuse (4.2T tokens from ~2T source tokens) is not analyzed.** The paper mentions resampling but does not discuss how many epochs each datum is seen on average, whether this causes memorization or degradation, or how it affects the data-efficiency narrative. The claim "only ~2T tokens of high-quality data are sufficient" blurs the distinction between unique source tokens and training tokens.
+- **Missing data contamination analysis**: Several training datasets (FineMath, OpenWebMath, OpenMathReasoning) potentially overlap with MATH, GSM8K, and HumanEval. Given the emphasis on open-source data and reasoning benchmark performance, this omission is notable.
+
+- **Figure 1 does not include Qwen3-0.6B**: The scatter plot compares MobileLLM-R1 against Qwen2.5, LLaMA3.2, Gemma-3, and SmolLM2, but not Qwen3-0.6B—the primary comparison in the text. This disconnect between figure and narrative makes the FLOPs-based comparison harder to verify.
 
 ### Trivial
 None.
 
 ## Nice-to-Haves
 
-- A comparison of influence-based mixing against simple heuristic baselines (e.g., "double the weight of math and code data") would strengthen the case for the method's complexity.
-- Reporting Qwen3-0.6B results under the same SFT protocol as Table 2 would enable a fully fair comparison on the reasoning SFT axis.
-- A post-trained model version of Figure 1 (performance vs. FLOPs) would show whether the efficiency advantage holds after SFT.
+- A parameter-matched comparison (e.g., training a ~600M variant on 4.2T tokens) would substantially strengthen the data-efficiency claim.
+- Qualitative examples showing what the influence-based method selects as high vs. low influence samples would help readers understand what the method is optimizing for.
+- Reporting total compute cost of the data curation pipeline (LOO experiments, influence computation, iterative mid-training) alongside the training efficiency would allow holistic assessment of the "efficiency" claim.
 
 ## Removed Points
 
-*These points are flagged to be removed; treat them with caution.*
+These points are flagged to be removed, treat them with caution:
 
-- **Claim that influence-based data mixing is validated only on proxy perplexity metrics (harsh critic's Critical Issue #2):** This is factually wrong. Figure 4's caption explicitly states validation uses MATH-500, GSM8K, HumanEval, ARC-easy/challenge, BoolQ, PIQA, SIQA, HellaSwag, OBQA, WinoGrand, and MMLU—actual downstream benchmarks, not just capability-probing perplexity. The harsh critic confused the capability-probing datasets (used for influence computation) with the benchmarks used for validation.
+- **Harsh critic claim that LOO only tests single-dataset removal and doesn't inform mixing ratios**: The paper uses LOO for dataset *selection* (Section 2.1) and influence scores for *mixing ratios* (Section 2.2). These are explicitly two different steps in the pipeline. The LOO analysis is not claimed to directly determine mixing ratios—it identifies which datasets are beneficial, and then influence scores determine weights. The critic conflates these.
 
-- **Claim that MobileLLM-R1-950M loses to Qwen3-0.6B on LiveCodeBench post-trained:** The paper's text (Section 4.1) explicitly states "MobileLLM-R1-950M demonstrates a substantial accuracy gain over Qwen3-0.6B on LiveCodeBench." The harsh critic's numbers came from garbled OCR tables that misaligned model names with scores (e.g., showing MobileLLM-R1-950M-base with 0.7 on LCB when the text says it substantially outperforms Qwen3-0.6B).
+- **Harsh critic claim that "the comparison is not simply misleading—it is the basis for the paper's most prominent contribution claim"**: While the token-centric framing is indeed misleading (kept as a major weakness), the paper also has substantive contributions beyond the Qwen3-0.6B comparison—namely the open recipe, LOO insights, influence-based mixing, and mid-training co-evolution. This is not a case where the overclaim invalidates all contributions.
 
-- **Claim that "closed-form" oversells Eq. 5:** While Eq. 5 is a normalized weighted average, calling it "closed-form" is technically correct. This is a trivial notation nitpick.
+- **Formatting nitpicks**: The harsh critic notes some table formatting issues in the extracted text (e.g., Figure 8 tables with "0.0" in the "Open-source weights, data source and training recipes" column for Qwen3 models). These appear to be parser artifacts.
 
-- **Claim about computational overhead of domain-specific models for influence computation:** The paper uses these models only for influence scoring, not for training, and the overhead is a one-time cost. Demanding quantification of this is a reproducibility nitpick.
+- **Demand for ablation of the full curation pipeline against uniform sampling**: The paper already compares Datamix vs. Original (uniform sampling) in Figure 4, showing consistent PPL improvements. The critic's request for a full end-to-end ablation would require training entire models from scratch, which is an unreasonable additional compute request for a submission.
 
-- **Demand for confidence intervals on benchmark results:** Not standard in this field for large-scale model training papers.
-
-- **Missing related works claims:** Cannot verify without external sources.
-
-- **Formatting/style complaints about garbled OCR tables:** These are parser artifacts, not paper issues.
+- **Missing appendix proofs/cost analysis**: The parser strips appendices, so these may exist in the original submission.
 
 ## Novel Insights
 
-The most interesting insight is the StarCoder→Math transfer asymmetry: code data benefits math reasoning more than math data benefits code reasoning, which directly challenges the established view from Lewkowycz et al. (2022). If this finding holds at scale, it has practical implications for data allocation in small model training—prioritizing code data may be more efficient than math data even for math reasoning goals. Additionally, the convergence of influence scores toward zero/negative during mid-training (Figure 5) provides a principled stopping criterion for data-model co-evolution, though the generalization of this convergence signal across model scales remains an open question.
+The paper reveals a practical and surprisingly effective finding: StarCoder benefits math more than OpenWebMath benefits code (reversing the common assumption from Lewkowycz et al., 2022), and FineWeb-Edu acts as cross-domain "glue." The mid-training influence compression finding—that subsampled data avoids a performance dip at ~30K steps (Figure 6)—is a non-obvious result with practical implications for training stability. However, the gap between the paper's ambitious "benchmark-free, self-evolving" narrative and the reality of heavily human-guided capability proxies is the most important meta-observation: the method's success may owe more to the quality of the human-designed capability probes than to the self-evolving nature of the influence optimization.
 
 ## Suggestions
 
-- Tone down the "matches or surpasses Qwen3-0.6B" claim in the abstract and conclusion to accurately reflect where MobileLLM-R1 wins (HumanEval base, LCB post-trained) vs. where it is merely competitive (MATH, AIME post-trained).
-- Add a brief discussion of the parameter asymmetry (950M vs. 600M) when making token-efficiency claims.
-- Include at least one validation that LOO rankings at 500K steps correlate with final model performance, even if approximate.
+- Reframe the core efficiency claim in FLOPs-adjusted terms rather than token-only terms, either providing a parameter-matched comparison or clearly discussing the model-size vs. token-count trade-off per Chinchilla scaling.
+- Replace "benchmark-free" with a more precise term like "benchmark-test-set-free" or "indirect-benchmark-guided," and explicitly discuss how the capability-probing datasets encode prior knowledge about target capabilities.
+- Report evaluation protocol details (pass@1 vs. pass@k, temperature, number of samples) for AIME and all benchmarks.
+- Start all models compared in Table 2 from the same training stage (either all from base or all from instruct checkpoints) to make the comparison fair and transparent.
 
-## Evaluation on Key Axes
+## Calibration
 
-- **Originality:** Moderate. The influence-based data mixing extends AutoMixer with cross-domain influences; the data-model co-evolution for mid-training is a reasonable but incremental extension. The LOO analysis framework is well-designed but the approach itself is straightforward. The counterintuitive StarCoder→Math finding is the most novel observation.
-- **Importance of research question:** High. Training small reasoning models with open recipes is highly valuable for the community, and the data-efficiency question is timely.
-- **Claims well supported:** Partially. The core claim about outperforming fully open-source models is well-supported (Table 2). The "matches Qwen3-0.6B" claim is overclaimed for post-trained models. The influence-based mixing is validated on benchmarks at small scale but not at full training scale.
-- **Soundness of experiments:** Good for the main results (Table 2, Figure 1). Weaker for the LOO analysis (small scale only) and mid-training (no ablation).
-- **Clarity of writing:** Good overall. The pipeline is clearly visualized (Figure 2). The distinction between capability-probing datasets and validation benchmarks could be clearer.
-- **Value to community:** High. Full open-source release of models, data, and training recipes for small reasoning models fills an important gap, as most competitive small reasoning models are opaque.
+**Anchors used:**
 
-## Score and Decision
+| Paper | Avg Human Score | Topic | Comparison |
+|-------|----------------|-------|------------|
+| Why Less is More (Theory of Data Curation) | 7.50 | Data curation theory | Stronger theoretical grounding; MobileLLM-R1 has more engineering contribution |
+| How to Train Data-Efficient LLMs | 6.80 | Data-efficient pretraining (AskLLM) | Similar scope; MobileLLM-R1 has stronger empirical results but more overclaimed narrative |
+| Tina (Tiny Reasoning via LoRA) | 5.50 | Small reasoning models, open recipe | Similar "open recipe" contribution; Tina is more incremental, MobileLLM-R1 is more comprehensive |
+| Fast-dLLM v2 | 6.00 | Overclaimed efficiency, strong engineering | Similar pattern of strong engineering with overclaimed efficiency framing |
+| Go4RL | 4.00 | Data mixture for pretraining | Weaker methodology; MobileLLM-R1 is substantially stronger empirically |
+| SPUS | 3.00 | Misleading parameter-matched claims, overclaimed efficiency | Notably overclaimed; MobileLLM-R1 is more honest |
+| PREMISE | 2.67 | Overclaimed 84.3% token-reduction | Much more overclaimed than MobileLLM-R1 |
+| ThinkDial | 5.00 | Open recipe, overclaimed novelty | Similar scope, moderate overclaim |
 
-Calibration anchors:
-- **OLMoE** (avg 8.67, Oral): Fully open model with strong results and full transparency. MobileLLM-R1 is below OLMoE—OLMoE has broader impact and stronger overall results.
-- **PDS / Data Selection via Optimal Control** (avg 8.0, Oral): Theoretically grounded data selection. MobileLLM-R1 is below PDS—PDS has stronger theoretical contribution and validation at scale.
-- **RegMix** (avg 7.2, Spotlight): Data mixture as regression with rigorous small→large scale validation. MobileLLM-R1 is below RegMix—RegMix validates more carefully at scale.
-- **EURUS** (avg 6.5, Accept Poster): Claims to match proprietary models with some overclaiming. MobileLLM-R1 is comparable to EURUS—similar pattern of strong results with slightly overclaimed comparisons.
-- **phi-1** (avg 6.0, Reject): Small model with curated data, impressive but narrow results. MobileLLM-R1 is above phi-1—more comprehensive methodology, multiple sizes, better baselines, full openness.
-- **Paramanu-Ganita** (avg 2.33, Reject): 208M model claiming to beat large LLMs. MobileLLM-R1 is far above—proper baselines, no absurd claims, comprehensive evaluation.
+MobileLLM-R1 has genuinely strong engineering results and practical contributions (open recipe, LOO insights, mid-training co-evolution). Its main weakness is the overclaimed "data efficiency" and "benchmark-free" narrative. Compared to anchors like "How to Train Data-Efficient LLMs" (6.8) and Fast-dLLM v2 (6.0) which have similar patterns of strong engineering with some overclaimed framing, and Tina (5.5) which is a weaker but similar-topic contribution, MobileLLM-R1 sits in the same band. It is stronger than Go4RL (4.0) and ThinkDial (5.0) which have more fundamental methodological issues, but the overclaim on data efficiency holds it back from the 7+ range of purely well-calibrated papers.
 
-MobileLLM-R1 sits between phi-1 (6.0) and EURUS (6.5), closer to EURUS given the more comprehensive methodology and genuine contributions, but with the overclaiming issue pulling it down slightly. The paper's core results (Table 2) are strong and the transparency contribution is real, but the overclaiming in the abstract/conclusion and the small-scale LOO validation are meaningful concerns.
-
-MY FINAL SCORE: <pineapple>6.5</pineapple>
+MY FINAL SCORE: <pineapple>6.0</pineapple>
 MY FINAL DECISION: <orange>Accept</orange>

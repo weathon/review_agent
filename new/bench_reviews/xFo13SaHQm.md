@@ -1,24 +1,30 @@
-Now I have all the information needed to write the final review. Let me synthesize everything.
+Now I have a good set of calibration anchors. Let me compile my findings and write the final review.
+
+Let me verify one more thing — the user study figure labels issue. The harsh critic says "Cure," "iDetch," "Uniformal" don't match method names. Looking at the paper, Figure 8's caption says the methods are "Cure, UNO, iDetch, Uniformal, OmniGen." The paper text (line 302-304) confirms this. "Cure" = WithAnyone, "iDetch" = ID-Patch, "Uniformal" = UniPortrait — these appear to be abbreviated/nickname versions. This is confusing but not a "labeling error" per se. The paper does not provide a mapping table, which is a real presentation issue.
+
+Let me also check the claim that multi-person evaluation is missing key baselines:
+
+From Table 2, the multi-person baselines are: DreamID, OmniGen, OmniGen2, GPT, UNO, USO, UniPortrait, ID-Patch. The single-person baselines (Table 1) include: DreamO, OmniGen, OmniGen2, FLUX.1 Kontext, Qwen-Image-Edit, GPT-4o Native, UNO, USO, UMO, UniPortrait, ID-Patch, InfU, PuLID, InstantID.
+
+Indeed, InstantID, PuLID, UMO, DreamO, and InfU are absent from Table 2. However, the paper explains on line 209: "only those supporting multi-ID generation were additionally tested on the multi-person subset." This is a reasonable explanation — some methods are single-ID only. But for multi-ID capable methods like PuLID and InstantID that are missing, the paper doesn't explain their absence. Actually, PuLID and InstantID are primarily single-ID methods; they may not natively support multi-ID generation. UMO is also mentioned as a multi-ID method but appears absent.
+
+Now let me write the final review.
 
 ## Summary
 
-This paper addresses the "copy-paste artifact" in identity-consistent image generation, where models over-replicate reference faces rather than preserving identity across natural variations. The authors make three contributions: (1) MultiID-2M, a large-scale paired multi-identity dataset with ~500k labeled images; (2) MultiID-Bench, a benchmark introducing a Copy-Paste (CP) metric that measures relative angular bias toward the reference vs. ground truth; and (3) WithAnyone, a FLUX-based model using paired training, a GT-aligned ID loss, and an ID contrastive loss with extended negatives to mitigate copy-paste while maintaining high identity similarity.
+The paper introduces WithAnyone, a diffusion-based model for controllable, identity-consistent image generation that addresses the "copy-paste artifact" — the tendency of models to replicate reference images rather than generating diverse appearances of the same identity. The paper contributes three components: (1) MultiID-2M, a large-scale dataset of ~500k paired multi-identity images with diverse references per identity; (2) MultiID-Bench, a benchmark with a novel Copy-Paste (CP) metric that quantifies reference-bias vs. ground-truth alignment; and (3) WithAnyone, a FLUX-based model trained with a GT-aligned ID loss, ID contrastive loss with extended negatives, and a four-phase training pipeline that transitions from reconstruction to paired tuning.
 
 ## Strengths
 
-- **Formalization and metric for the copy-paste artifact.** The paper identifies a concrete failure mode that prior work largely overlooked and provides a principled metric for it (Eq. 2). Figure 2's 3D density plot powerfully shows that models like InstantID produce face-similarity distributions sharply peaked near 1.0, while real photo pairs of the same person have much broader distributions (scores of 0.77, 0.46, 0.46, 0.30 for the same person under natural variation).
+- **Novel formalization of the copy-paste artifact**: The paper identifies and operationalizes a real, previously under-examined failure mode in ID-consistent generation. Figure 2's density plot compellingly shows that existing models (InstantID, PuLID) concentrate at near-perfect face similarity while real photo pairs and WithAnyone show broader, more natural distributions. The CP metric (Eq. 2) provides a principled, normalized measure of reference-bias that addresses the flaw in Sim(Ref)-only evaluation.
 
-- **Breaking the fidelity–copy-paste trade-off.** Figure 5 is the paper's most striking evidence—all other evaluated methods lie approximately along a regression curve between Sim(GT) and Copy-Paste, while WithAnyone is positioned clearly in the upper-right region (high similarity, low copy-paste). This demonstrates the combination transcends what prior methods achieve rather than merely trading one metric for another.
+- **MultiID-2M dataset fills a real gap**: The dataset of ~500k paired multi-ID images with hundreds of references per identity across ~3k identities (Section 3) directly addresses the data bottleneck that forces prior work into reconstruction-only training. No prior multi-ID dataset provides this scale of paired references.
 
-- **Paired training paradigm that directly targets copy-paste.** The Phase 3 paired tuning strategy—using a different image of the same identity as reference versus target—directly breaks the reconstruction shortcut. Table 3 ablation confirms this: removing Phase 3 increases CP from 0.161 to 0.239 while Sim(GT) remains essentially unchanged (0.406 vs. 0.405), proving the CP reduction comes at no cost to ground-truth identity similarity.
+- **Strong empirical evidence for trade-off breaking**: Figure 5 is the paper's most compelling evidence — scatter plots show all baseline methods lying approximately on a regression curve between Sim(GT) and CP, while WithAnyone clearly sits off the curve in the desired upper-right region. Table 1 quantifies this: WithAnyone achieves Sim(GT)=0.460 (competitive with InstantID's 0.464) while reducing CP from 0.337 to 0.144.
 
-- **GT-aligned ID loss enabling supervision across all noise levels.** Using ground-truth landmarks rather than noisy predicted landmarks for ArcFace embedding extraction is a simple but effective idea. Figure 7 shows this yields consistently lower ID loss across all noise levels (0.2–0.8) and higher-variance, more informative gradients at high noise. Table 3 confirms the practical impact: removing GT-Align drops Sim(GT) from 0.405 to 0.385 and worsens CP from 0.161 to 0.175.
+- **GT-aligned ID Loss is a technically sound contribution**: Using GT landmarks to align generated faces for ArcFace extraction (Section 5.1, Eq. 4) avoids unreliable landmark detection in noisy intermediates, enabling ID supervision at all noise levels. Figure 7 provides convincing evidence that GT-Align yields lower and more informative ID loss across noise levels, and Table 3 confirms removing it drops Sim(GT) from 0.405 to 0.385.
 
-- **Sim(GT) as a more faithful identity evaluation metric.** The insight that Sim(Ref) inadvertently rewards copy-paste is well-argued. Table 1 shows the GT row has Sim(Ref) = 0.521, yet InstantID achieves 0.734—exceeding what natural variation produces—while having lower Sim(GT) (0.464 vs. WithAnyone's 0.460).
-
-- **Comprehensive baseline comparison spanning 14+ methods** on both single- and multi-person subsets (Tables 1–2), providing a broad and useful characterization of the current landscape.
-
-- **Fully open-sourced project** including dataset, benchmark, and model.
+- **Phased training pipeline is well-motivated**: The four-phase training (Section 5.2) that transitions from reconstruction to paired tuning is cleanly designed. Table 3 shows Phase 3 reduces CP from 0.239 to 0.161 with nearly unchanged Sim(GT) (0.406→0.405), validating paired tuning as the key mechanism for suppressing copy-paste.
 
 ## Weaknesses
 
@@ -27,84 +33,90 @@ None.
 
 ### Major
 
-- **CP metric's per-method filtering makes cross-method comparisons potentially unfair.** Tables 1–2 state that "for Copy-Paste ranking, only cases with Sim(GT) > 0.40 [or 0.35] are considered." This threshold is applied per-case, meaning different methods are evaluated on *different subsets* of test cases. A method with poor identity preservation that barely crosses the threshold on a few easy cases may have its CP computed on a highly selective (and possibly easier) subset, while a stronger method is evaluated on a broader distribution. The paper does not report how many cases pass the filter for each method, nor does it compute CP on a common subset. This directly affects whether the headline CP comparison is fair. While the Figure 5 scatter plot provides a more holistic view that mitigates this concern, the per-method CP rankings in Tables 1–2 are the primary quantitative claims and they rely on potentially non-comparable subsets. Reporting per-method case counts through the filter and/or a common-subset analysis would substantially strengthen the evaluation.
+- **Ablation data partially contradicts the narrative about contrastive loss**: Table 3 shows that removing extended negatives (w/o Ext. Neg.) *decreases* CP from 0.161 to 0.074 while also decreasing Sim(GT) from 0.405 to 0.368. This means the ID contrastive loss with extended negatives *increases* copy-paste artifacts — it operates squarely on the very trade-off curve the paper claims to break. The actual component that breaks the trade-off is Phase 3 (paired tuning), which reduces CP from 0.239→0.161 with virtually no Sim(GT) cost. However, the abstract and introduction present the contrastive loss as part of the solution (e.g., "a novel training paradigm with a contrastive identity loss that leverages paired data to balance fidelity with diversity"), and the ablation discussion (Section 6.3) focuses only on the Sim(GT) drop from removing extended negatives while ignoring that CP simultaneously *improved*. The paper should honestly acknowledge that the contrastive loss trades higher identity fidelity for higher CP, and assign proper credit for the trade-off breaking to the paired training phase.
 
-- **The ID contrastive loss with extended negatives increases CP, which the paper's narrative does not acknowledge.** Table 3 shows that removing extended negatives (w/o Ext. Neg.) reduces CP from 0.161 to 0.074—a 55% reduction—while also reducing Sim(GT) from 0.405 to 0.368. This means the contrastive loss with extended negatives *increases* copy-paste tendency even as it improves identity fidelity. Yet the abstract states the contrastive loss "leverages paired data to balance fidelity with diversity," and Section 5's preamble claims the training strategies "suppress trivial copy-paste artifacts." The actual mechanism is: paired training (Phase 3) reduces CP; the contrastive loss improves identity fidelity at the cost of somewhat increased CP. The paper does not explicitly acknowledge this trade-off *within* the method itself. While the ablation table transparently shows the numbers, the textual narrative gives the misleading impression that all components conspire to reduce copy-paste. This should be corrected to give an honest account of what each component contributes.
+- **Missing key face-customization baselines in the most relevant multi-person evaluation**: Table 2's multi-person evaluation omits PuLID, InstantID, UMO, InfU, and DreamO — methods that appear in Table 1's single-person evaluation. The paper states (line 209) "only those supporting multi-ID generation were additionally tested on the multi-person subset," but does not clarify which of these methods lack multi-ID support. For the multi-ID capable baselines (e.g., UMO is described in Section 2 as a multi-ID method), their absence needs explanation. The multi-person setting is the paper's core use case (the dataset is called *Multi*ID-2M), making these gaps consequential.
+
+- **No variance or significance information for any quantitative result**: The paper claims to "break the long-observed trade-off" between identity fidelity and copy-paste. This is a strong claim requiring strong evidence. None of the tables report standard deviations, confidence intervals, or results from multiple runs. Figure 5 shows WithAnyone positioned above the fitted curve, but without variance estimates it is unclear whether this deviation is statistically significant or within noise. While the gap appears large in absolute terms (CP 0.144 vs. the next competitive method at ~0.233), reporting variance would substantially strengthen the evidence.
 
 ### Minor
 
-- **The "FFHQ only" ablation conflates dataset quality with the paired-training paradigm.** Replacing MultiID-2M with FFHQ removes both the dataset's diversity/quality *and* the paired training signal simultaneously. It cannot distinguish whether improvements come from having paired data at all (which could potentially come from simpler sources) or from MultiID-2M's specific scale and diversity. However, this is partially mitigated by the separate "w/o Phase 3" ablation that isolates the paired training effect on the same dataset, so the conflation is not complete.
+- **CP metric requires a GT image, limiting real-world applicability**: The CP metric (Eq. 2) normalizes by the reference-GT angular distance, requiring access to a ground-truth target image. In real-world deployment — the scenario the paper targets — no GT image exists. The paper acknowledges this implicitly by using the benchmark setting, but should discuss how copy-paste artifacts could be detected in the absence of GT (e.g., via self-similarity across generations with different references for the same identity).
 
-- **The Eq. 5 loss is labeled "InfoNCE" but omits the positive term from the denominator.** Standard InfoNCE includes exp(cos(g,t)/τ) in both numerator and denominator. The paper's formulation omits it from the denominator, making it closer to a margin-based objective. With M=4096 negatives the practical difference is small, but calling it "follows the InfoNCE (Oord et al., 2018) formulation" is technically incorrect. The deviation should be acknowledged or justified.
+- **The Sim(GT) > 0.40 threshold filter for CP ranking is not discussed**: Table 1's caption notes that "only cases with Sim(GT) > 0.40 are considered" for Copy-Paste ranking, and Table 2 uses Sim(GT) > 0.35. This filtering could systematically advantage or disadvantage certain methods by excluding cases where they produce low-fidelity results from the CP comparison. The paper does not analyze the effect of this threshold choice.
 
-- **User study figure (Fig. 8) uses different method names** ("Cure" instead of "WithAnyone," "iDetch" instead of "InstantID," "Uniformal" instead of "UniPortrait") that don't match the rest of the paper, creating potential confusion about whether the evaluation setup differs.
+- **User study presentation is limited**: Figure 8 uses method nicknames ("Cure", "iDetch", "Uniformal") that do not appear elsewhere in the paper, making it hard to map these to actual method names (presumably Cure=WithAnyone, iDetch=ID-Patch, Uniformal=UniPortrait). The study has only 10 participants, and no inter-rater agreement statistic is reported. The paper references Appendix H for statistical details, which are not available in the main text.
+
+- **Identity matching threshold of 0.4 cosine similarity needs analysis**: The dataset construction pipeline (Section 3) assigns identities by matching ArcFace embeddings at a 0.4 cosine similarity threshold. For ArcFace embeddings, this is relatively low and could introduce false positive identity assignments. No precision/recall analysis is provided for this critical parameter that governs the quality of the entire paired supervision.
 
 ### Trivial
-None.
+- Figure 8's method labels should include a clear mapping to the paper's method names.
 
 ## Nice-to-Haves
-
-- Ablating paired training on a simpler paired dataset (e.g., CelebA with identity grouping) to isolate the specific contribution of MultiID-2M beyond just having paired data.
-- Analysis of the CP metric's sensitivity to θ_{tr} magnitude, particularly when reference and GT are very close or very far in embedding space.
-- Explicit discussion of the contrastive-loss/CP trade-off, including analysis of when the net effect is positive.
-- Reporting per-method case counts passing the Sim(GT) filter in Tables 1–2.
+- Report results on non-celebrity identities to demonstrate generalization beyond the training distribution of publicly photographed individuals.
+- Provide failure cases where avoiding copy-paste leads to identity drift (wrong person generated).
+- Evaluate whether the CP metric correlates with human judgments of copy-paste on a per-image basis (not just rank-level), to validate the metric's perceptual validity.
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution.
+These points are flagged to be removed, treat them with caution:
 
-- **GPT-4o prior knowledge flagging.** The harsh critic suggests GPT-4o results should be excluded due to prior knowledge of identities. The paper already clearly flags this issue in the Table 2 caption ("GPT exhibits prior knowledge of identities from TV series in subsets with more than two IDs, leading to abnormally high similarity scores"). Including it with an explicit caveat is standard practice; exclusion would reduce transparency. The flag is visible in the table caption.
+- **Harsh critic: "No statistical significance, variance, or confidence intervals reported"** — This is valid but overstated as "Critical Issue #2." For large-scale benchmark evaluation with deterministic models, single-run reporting is standard practice in the generative image community. The concern is real but not "severe" — it's a major weakness, not a fatal one. Kept in Major but downgraded from "Critical Issue."
 
-- **Missing hyperparameters/training details.** The critic flags missing learning rates, batch sizes, optimizer, etc. These are standardly deferred to appendices in this venue. The paper mentions key details (20k/40k steps, λ values of 0.1). Per the rules, this is a nitpick about trivial implementation details impractical to include in the main text.
+- **Harsh critic: "The benchmark conflates matching a specific GT photo with correctly rendering identity"** — The paper explicitly uses Sim(GT) rather than Sim(Ref) precisely to penalize copying. While there's a valid concern that a model generating a valid but GT-different image might score poorly, this is inherent to any reference-based evaluation, and the paper's CP metric is specifically designed to separate these concerns. The critique also claims "CP metric cannot be computed without GT, making it inapplicable to real-world deployment" — this is true but is a property of any benchmark, not a flaw. Benchmarks use GT for evaluation; real-world use doesn't need GT. Partially kept as a Minor concern about real-world CP applicability.
 
-- **Identity matching threshold of 0.4 concern.** The critic questions whether cosine similarity 0.4 for ArcFace is too low, potentially creating false-positive identity matches. While a valid concern about data quality, this is speculative—the paper could have quality analysis in the appendix (which we cannot see). The threshold is clearly stated.
+- **Harsh critic: "GPT-4o result should be disqualified for prior knowledge"** — The paper already footnotes this issue in Table 2's caption. The information is disclosed for the reader to interpret, which is the right approach. Removed as a weakness.
 
-- **ε value unspecified.** The paper mentions ε is "a small constant for numerical stability" without giving its value. This is a very minor detail that doesn't affect the metric's interpretation.
+- **Harsh critic: Training phase transition criteria are soft (20k steps, "satisfactory")** — These are standard hyperparameter choices, not a structural problem. Training recipes in practice always use such heuristics. This is a minor reproducibility concern at most, not a critical issue. Removed.
 
-- **Dummy prompt in Phase 1 not ablated.** This is a nice-to-have ablation, not a weakness. The paper provides sufficient ablations on the main components.
+- **Harsh critic: Ethics statement about CC filters being unreliable** — The paper describes its data collection methodology; questioning the reliability of search engine CC filters is speculative and outside the paper's scope. Removed.
 
-- **User study sample size (10 participants).** While 10 participants is modest, user studies in this area are often similarly sized. The paper reports the study as supplementary evidence, and the quantitative metrics are the primary evaluation. Flagging lack of confidence intervals is reasonable but this is more of a nice-to-have than a substantive weakness for this type of paper.
+- **Harsh critic: User study figure labels are a "labeling error"** — The labels are abbreviated nicknames, not errors. The real issue is the missing mapping, which is a presentation concern. Moved to Minor.
 
-- **Missing failure cases.** A reasonable suggestion but not a core weakness; most papers in this area present primarily successful outputs.
+- **Harsh critic: Train-test asymmetry from GT landmarks** — The paper's ablation already shows GT-Align helps. GT landmarks are available during both training and evaluation (the benchmark has GT images). This is not an asymmetry issue. Removed.
 
-- **Missing related works.** Per the rules, I cannot confirm the existence of suggested missing references.
+- **Strength finder: "Extended negative pool substantially improves discrimination"** — While Sim(GT) does improve (0.368→0.405), the extended negatives also increase CP (0.074→0.161). Presenting this as an unqualified strength conflicts with the verified Major weakness that contrastive loss increases copy-paste. Downgraded as a standalone strength.
+
+- **Strength finder: "Comprehensive baseline comparison across 12+ SOTA models"** — This is only true for the single-person setting. In the multi-person (core) setting, key baselines are missing. Qualified as a partial strength.
 
 ## Novel Insights
 
-The most insightful observation across the reviews is that this paper's ablation table (Table 3) reveals an internal tension within the proposed method: the contrastive loss with extended negatives and the paired training phase push in opposite directions on the CP metric. The paired training is the primary mechanism for CP reduction, while the contrastive loss provides identity fidelity at the cost of increased CP. The net result (the full model) achieves a favorable trade-off, but this is a *balance* of competing forces rather than a *conspiracy* of complementary ones. Acknowledging this honestly would strengthen the paper's credibility and provide clearer guidance for future work on how to tune this balance.
+The ablation structure reveals an important architectural insight: the copy-paste artifact and identity fidelity are not monolithic objectives addressable by a single mechanism. The paper's three training components — GT-aligned ID loss, contrastive loss, and paired tuning — each target different points on the fidelity-copy-paste plane. The GT-aligned loss improves fidelity without much affecting CP. The contrastive loss improves fidelity at the cost of increased CP. Paired tuning reduces CP without fidelity loss. This compositional decomposition of the problem space is arguably the paper's most interesting methodological contribution, even though the paper does not explicitly articulate it this way.
 
 ## Suggestions
 
-- Report the number of test cases passing the Sim(GT) filter for each method in Tables 1–2, and optionally compute CP on the common intersection of cases that pass the filter for all methods. This single addition would substantially address the major evaluation concern.
-- Revise the narrative around the contrastive loss to acknowledge that it primarily strengthens identity fidelity while somewhat increasing CP, and that the overall system's low CP is achieved primarily through paired training. This honest framing would not diminish the paper's contribution.
+- Reframe the contribution narrative to accurately attribute trade-off breaking to the paired tuning phase (Phase 3), and present the contrastive loss as an identity-fidelity booster that comes with a CP trade-off, which is then mitigated by Phase 3. This would make the ablation story coherent rather than contradictory.
+- Add a mapping table in the user study section linking nickname labels to method names.
+- Report standard deviations or at least results on 2-3 random seeds for key metrics.
+- Clarify which Table 1 baselines support multi-ID generation and why absent ones were excluded from Table 2.
+- Include a CP metric analysis section discussing threshold effects (Sim(GT) > 0.40 filter) and the metric's behavior when no GT is available.
 
-## Score and Decision
+## Evaluation
 
-**Calibration comparison:**
+**Originality**: The copy-paste artifact formalization and CP metric are genuinely novel. The GT-aligned ID loss is a clever engineering contribution. The training pipeline (especially paired tuning) is well-designed but builds incrementally on established ideas.
 
-| Anchor Paper | Path | Avg Score | Comparison |
-|---|---|---|---|
-| DisenBooth | /home/wg25r/review_agent/human_reviews/FlhjUkC7vH.md | 7.5 | Similar identity-preservation topic with disentanglement; this paper is more comprehensive (dataset+benchmark+method) but has evaluation methodology concerns that DisenBooth doesn't |
-| RB-Modulation | /home/wg25r/review_agent/human_reviews/bnINPG5A32.md | 8.0 | Addresses content leakage in diffusion; more theoretically grounded but narrower scope than this paper |
-| Bright Ending Attention | /home/wg25r/review_agent/human_reviews/p4cLtzk4oe.md | 7.33 | Novel memorization observation with practical method; comparable novelty in problem identification |
-| DreamBench++ | /home/wg25r/review_agent/human_reviews/4GSOESJrk6.md | 6.0 | Benchmark for personalized generation; this paper goes further with method+dataset, but DreamBench++ had cleaner evaluation |
-| RetriBooru | /home/wg25r/review_agent/human_reviews/IjVCcykKdr.md | 4.5 | Addresses same fundamental issue (reference leakage/copy-paste) in anime domain; this paper is much more comprehensive and well-executed |
-| Unsupervised FL Face Recognition | /home/wg25r/review_agent/human_reviews/XH3OiIhtvf.md | 2.0 | Genuinely weak paper; this paper is clearly far above this level |
-| Memorization Detection/Mitigation | /home/wg25r/review_agent/human_reviews/84n3UwkH7b.md | 8.0 | Directly addresses copy-paste replication in diffusion from memorization angle; comparable significance but cleaner methodology |
+**Importance**: The problem of copy-paste in ID-consistent generation is practically important and under-addressed. MultiID-2M fills a real data gap. The benchmark enables standardized evaluation in a space where prior work used ad-hoc protocols.
 
-This paper sits above the medium anchors (DreamBench++ at 6.0, RetriBooru at 4.5) due to its comprehensive contributions and strong core results. It is somewhat below the high anchors (DisenBooth 7.5, Bright Ending 7.33) because those papers had cleaner evaluation methodology and more precise claims, while this paper has the CP filtering concern and the partial mischaracterization of the contrastive loss's role. The core finding (Figure 5—breaking the fidelity–copy-paste trade-off) is compelling and the paired training insight is genuine. The weaknesses are addressable but represent real gaps in the current presentation.
+**Claims well supported?**: The main claim of breaking the trade-off is supported by Figure 5 and Table 1, but the ablation reveals the attribution is partially incorrect (contrastive loss contributes to the trade-off, not the breaking of it). This is an overclaim in the narrative, not in the results themselves.
 
-**Originality:** High. The copy-paste formalization and CP metric are novel and fill a gap in the literature.
+**Soundness of experiments**: Comprehensive single-ID evaluation with 14 baselines. Multi-ID evaluation is weaker due to missing key baselines. No variance reported. Ablation is informative but the discussion of the contrastive loss ablation is incomplete.
 
-**Importance of research question:** High. Identity-consistent generation is a major research direction, and the copy-paste artifact is a real practical problem.
+**Clarity**: Generally well-written with clear motivation, but the user study figure labels are confusing and the ablation discussion is incomplete regarding the CP implications of contrastive loss.
 
-**Claims support:** Moderate-to-good. The main claim (breaking the trade-off) is well-supported by Figure 5 and ablations, but the CP filtering issue weakens the precision of cross-method CP comparisons, and the component-level claims are partially misleading.
+**Value to community**: The dataset and benchmark are high-value resources. The method and training recipe provide a practical framework for future work on controllable ID-consistent generation.
 
-**Soundness of experiments:** Good overall, with the noted evaluation methodology gap.
+## Calibration Anchors
 
-**Clarity of writing:** Good. The paper is well-structured with clear motivation.
+| Paper | Avg Score | Comparison |
+|-------|-----------|------------|
+| /home/wg25r/review_agent/human_reviews_2026/DM0Y0oL33T.md (ViVerBench) | 8.0 | Strong benchmark+model paper with comprehensive evaluation, multiple data pipelines, and clear methodology; WithAnyone is less polished but makes a similar dataset+benchmark+model tripartite contribution |
+| /home/wg25r/review_agent/human_reviews_2026/DVmR3Ij0ap.md (OmniPortrait) | 5.5 | Similar domain (face ID customization) with dataset contribution; OmniPortrait had weaker baselines and outdated architecture but no narrative-contradicts-ablation issue; WithAnyone is stronger on empirical evidence but has the ablation narrative inconsistency |
+| /home/wg25r/review_agent/human_reviews_2026/x2DWTywZ1i.md (SIGMA-Gen) | 5.0 | Multi-identity generation with synthetic dataset; similar scope but WithAnyone has more real data and clearer trade-off analysis; SIGMA-Gen was accepted despite synthetic data concerns |
+| /home/wg25r/review_agent/human_reviews_2026/XJ3T70nELl.md (CrossFaceID) | 2.67 | FaceID customization dataset paper with weak evaluation and missing baselines; WithAnyone is substantially stronger on all axes |
+| /home/wg25r/review_agent/human_reviews_2026/rz6V1RI3rH.md (trade-off overclaim) | 4.0 | Claims fundamental "trade-off" but evidence contradicted narrative; similar pattern to WithAnyone's contrastive loss issue but WithAnyone's overall evidence is much stronger |
+| /home/wg25r/review_agent/human_reviews_2026/NbdCwOgk4m.md (trajectory invariance overclaim) | 4.0 | Overclaimed trade-off resolution with limited ablation; WithAnyone has stronger empirical grounding but similar narrative issue |
 
-**Value to community:** High. The dataset, benchmark, and metric are valuable community resources.
+WithAnyone is notably stronger than the low-scoring anchors (CrossFaceID at 2.67, trade-off overclaim papers at 4.0) because its empirical evidence (Figure 5, Tables 1-3) is genuinely compelling and its dataset/benchmark contributions are substantial. It is slightly below the high-scoring anchor (ViVerBench at 8.0) due to the ablation narrative inconsistency and missing multi-person baselines. It sits in a similar range to OmniPortrait (5.5) and SIGMA-Gen (5.0) but with a more substantial dataset contribution and clearer problem definition. The primary differentiator from these mid-range papers is the (partially) valid trade-off breaking claim and the valuable CP metric.
 
-MY FINAL SCORE: <pineapple>7.0</pineapple>
+MY FINAL SCORE: <pineapple>6.0</pineapple>
 MY FINAL DECISION: <orange>Accept</orange>

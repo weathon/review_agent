@@ -1,16 +1,48 @@
-Now I have all the information needed to write the final review. Let me synthesize everything.
+Now I have a thorough understanding of the paper. Let me also check the claim about LR_hf information content (the "circularity" concern) and the inference-time claim more carefully.
+
+The key claims from the harsh critic I need to verify:
+
+1. **LR_hf circularity**: The harsh critic claims LR_hf contains "most of the discriminative texture information" and creates near-circular information flow. Let me verify: For s=4, s²=16. So LR_hf = y - y↓_{16}↑_{16}. The LR image y has resolution H/s × W/s from HR (H×W). Downsampling by s²=16 from the LR resolution would give incredibly tiny images. Wait - I need to re-read. The Eq 4 says y_{hf} = y - y↓_{s²}↑_{s²}. But y is the LR image (resolution H/s × W/s). So y↓_{s²} would be H/(s·s²) × W/(s·s²) = H/(4·16) × W/(4·16) if s=4... that's H/64 × W/64, extremely tiny. Then upsampling back gives a heavily blurred version of y. The high-frequency component y_{hf} retains most of y's information.
+
+Actually wait - looking again at line 162: "For a scale factor of s = 4, the key hyperparameters are s' = 2". Let me check if there's an s' that replaces s². Let me look more carefully at what s² means in context.
+
+Looking at line 4 (Eq. 4): y_{hf} = y - y↓_{s²}↑_{s²}. For s=4, this would be 16-fold. But the paper also mentions s'=2 at line 162. Let me check if s' might be used instead of s² in practice.
+
+Actually, re-reading line 94: "Its input is the high-frequency component of the LR image, computed by subtracting the s²-fold downsampled-then-upsampling LR image from the original LR image". And line 162 mentions s' = 2 separately from Eq. 4. So s' seems like a different parameter.
+
+The harsh critic's complaint about s² making LR_hf contain nearly all information seems valid in principle - when s=4, 16-fold downsampling of the LR image and upsampling back creates a heavily low-pass filtered version, so the residual y_{hf} would contain nearly all the high-frequency structure. However, the paper explicitly states this is by design in the three criteria (discriminative, not the LR itself, simple). The question is whether this is truly "near-circular" or just informative conditioning.
+
+The harsh critic's concern about near-circular information flow is interesting but not entirely fair. The conditioning signal LR_hf is not the same as giving the model the LR image directly - it's a high-frequency component. The model still needs to learn the degradation mapping. The concern about "shortcut learning" is somewhat addressed by the fact that the model must still denoise noisy HR features to produce LR predictions.
+
+2. **Dual-mode claim**: The paper claims LDP works as both a training loss and inference post-processing. Looking at the experiments:
+- Tables 3-4: fine-tuning mode (training-time)
+- Table 5: posterior sampling mode (inference-time, diffusion models only)
+
+The harsh critic claims the inference-time mode is only demonstrated for diffusion models. Checking the paper: Section 3.3 describes "Diffusion Posterior Sampling with LDP" using DPS (Eq. 17), which is indeed only for diffusion models. The abstract and introduction claim "inference post-processing step to correct artifacts" which is verified only for diffusion models. For non-diffusion models, only the fine-tuning mode is shown.
+
+This is a valid concern - the claim is somewhat overgeneralized.
+
+3. **Generalization to unseen degradations**: The synthetic test uses BSRGAN.plus (BSRGAN + Real-ESRGAN patterns). While these are from the same family, Real-ESRGAN adds additional degradation patterns not in BSRGAN training. The real-world datasets (RealSR, DPED, RealSRSet) are genuinely unseen. So the "unseen" generalization claim has some basis, but it's not from truly out-of-distribution degradation types.
+
+4. **Ablations**: The ablations only vary loss terms (Table 6-7) and τ. No ablation of removing DPM conditioning, removing noise, or comparing with cycle consistency baseline. This is a valid gap.
+
+5. **Posterior sampling results**: Looking at Table 5, many improvements are indeed marginal (e.g., CLIPIQA 0.5353→0.5354 for ResShift on RealSR).
+
+Now let me compose my final review.</think>Now I have all the information needed. Let me compose the final review.
 
 ## Summary
 
-LDP proposes a lightweight denoising autoencoder plugin that enhances single-image super-resolution model generalization by modeling the degradation process within a DAE framework. LDP conditions on LR high-frequency components to predict LR images from SR/HR outputs, enforcing cycle consistency during fine-tuning or inference-time posterior sampling correction. The method is evaluated across four SR architectures (GAN, diffusion, transformer, Mamba) on synthetic and real-world benchmarks.
+LDP proposes a lightweight (642K parameter) denoising autoencoder plug-in for single-image super-resolution that improves generalization to unseen degradations via LR cyclic consistency. It conditions degradation prediction on the LR high-frequency component (LR_hf), uses patch-wise noise addition to model spatially-varying degradation, and can be applied either as a fine-tuning auxiliary loss or as an inference-time posterior sampling correction for diffusion-based SR models.
 
 ## Strengths
 
-- **Principled conditioning mechanism**: The LR_hf conditioning (Eq. 4) is a well-motivated design that avoids network shortcuts while being discriminative for different degradations. The three stated criteria (Section 3.1) are clearly articulated and the approach satisfies them.
-- **Insightful degradation model analysis**: Tables 1–2 and Figure 3 provide a genuine diagnostic contribution by demonstrating that DRN collapses to trivial bicubic downsampling (PSNR ~34 to downsampled SR) while LDP does not, explaining why prior degradation models fail for blind SR.
-- **Dual-mode versatility**: The framework operates effectively both as a fine-tuning auxiliary loss (Eq. 16, Tables 3–4) and as an inference-time posterior sampling module (Eq. 17, Table 5), demonstrated across four distinct SR architectures and four diffusion models.
-- **Lightweight and practical**: At 642k parameters and ~16 hours training on a single A6000 (Section 4.1), LDP is genuinely lightweight as a plugin without significant computational overhead.
-- **Partially disentangled ablation**: Table 6 shows that L_fre alone gives +0.47 PSNR, while adding LDP cycle consistency losses yields +0.83 PSNR on SwinIR Hybrid, providing some evidence that LDP contributes beyond just frequency-domain supervision.
+- **Consistent improvements across diverse SR architectures**: Table 3 demonstrates PSNR gains on synthetic benchmarks across four architecturally distinct SR models (FeMaSR, StableSR, SwinIR, MambaIR) and five degradation types, with particularly notable gains for StableSR (e.g., +2.16 dB on Hybrid, +1.74 dB on JPEG). This broad applicability supports the "plug-and-play" nature of the contribution.
+
+- **Lightweight and efficient design**: The LDP module has only 642K parameters and trains in 16 hours on a single RTX A6000 (Section 4.1), making it practical for real use and substantially more efficient than per-image optimization methods like DualSR.
+
+- **Innovative degradation model evaluation**: Table 2 provides a useful diagnostic by measuring similarity between degradation model outputs and simple downsampling, demonstrating that LDP avoids trivial collapse (PSNR 25–28 vs. DRN's 31–35), unlike DRN which collapses to near-bicubic behavior.
+
+- **Dual application modes**: The framework supports both training-time regularization and inference-time posterior sampling for diffusion models (Eq. 17), with both modes empirically validated (Tables 3–5).
 
 ## Weaknesses
 
@@ -19,67 +51,74 @@ None.
 
 ### Major
 
-- **Fine-tuning experiments lack a critical "fine-tuned without LDP" control (Tables 3, 4)**: The "Original" baselines are pretrained models, while "+LDP" versions are fine-tuned on DF2K with BSRGAN degradation patterns plus LDP losses. The paper does not report results for models fine-tuned on the same DF2K+BSRGAN data using only the original SR loss (without LDP or L_fre). This means improvements in Tables 3–4 conflate (a) the effect of fine-tuning on degradation-augmented data, (b) the frequency loss L_fre, and (c) the LDP cycle consistency. The ablation in Table 6 partially addresses this—L_fre alone gives +0.47 PSNR on SwinIR Hybrid, and the full LDP gives +0.83—but the most basic control (fine-tune on BSRGAN data with original loss only) is absent. Without it, we cannot determine how much of the reported gains in Tables 3–4 come from LDP itself versus simply exposing the model to diverse degradations during fine-tuning. This undermines the paper's central claim that LDP is responsible for the generalization improvements.
+- **Insufficient ablation isolating the conditioning signal from the architecture**: The ablation study (Tables 6–7) only varies loss terms and the τ hyperparameter. It does not test what happens when LR_hf conditioning is removed, when noise addition is removed (t=0), or when a simpler cycle-consistency baseline (learnable downsampler + L_fre) is used instead of the full DAE framework. Since LR_hf = y − y↓_{s²}↑_{s²} (Eq. 4) retains most of the LR image's information (especially for s=4 where s²=16-fold downsampling creates an extreme low-pass filter), this conditioning alone may account for a significant portion of LDP's effectiveness. Without these ablations, it is impossible to determine whether the DAE architecture and diffusion alignment mechanism contribute meaningfully beyond what the informative conditioning signal already provides. This directly undermines the paper's core claim that reinterpreting degradation modeling via denoising autoencoders (Section 3.1) is the mechanism driving improvements.
 
-- **Overclaimed generalization given mixed real-world results**: The abstract states LDP "substantially improves the generalization of existing SR models to unseen degradations," yet FeMaSR+LDP degrades performance on multiple real-world metrics: DPED shows NIQE worsens by +0.659, MUSIQ drops by −5.07, QAlign drops by −0.167, and CLIPIQA drops by −0.1163 on RealSR (Table 4). While the paper attributes this to "metrics favoring visually striking but structurally inaccurate results" (Section 4.3), this explanation is offered without empirical validation (no user study, no alternative metric analysis, no controlled experiment). Other models (SwinIR, MambaIR) show mostly positive real-world results, which supports LDP's utility, but the sweeping "substantially improves" claim is not uniformly supported.
+- **Inference-time post-processing claim is overgeneralized**: The abstract and introduction state LDP can be applied "as an inference post-processing step to correct artifacts" generically. However, Section 3.3 only describes this mode for diffusion models via DPS (Eq. 17), and Table 5 exclusively evaluates diffusion models (LDM, StableSR, ResShift, UPSR) in this mode. For all non-diffusion baselines (SwinIR, MambaIR, FeMaSR), LDP is used only during fine-tuning as an auxiliary loss (Section 4.3). The claim of dual-mode applicability to "arbitrary SR models" (Figure 1 caption) is unsupported for non-diffusion models.
+
+- **Posterior sampling results are marginal at best for most diffusion models**: Table 5 shows that many of the reported improvements under posterior sampling are within measurement noise. For example, ResShift+LDP: CLIPIQA on RealSR changes from 0.5353→0.5354, MUSIQ on DPED changes from 44.63→44.59. LDM+LDP worsens NIQE on all three datasets. UPSR+LDP degrades QAlign on DPED (2.271→2.257). These results do not convincingly demonstrate that inference-time LDP correction provides meaningful improvements, which weakens the second claimed contribution.
 
 ### Minor
 
-- **Theoretical motivation (diffusion alignment) is loosely connected to the actual architecture**: The paper invokes the DR2 property that noisy HR and LR features become "aligned" (Section 3.1), but LDP uses a single-step CNN denoiser with patch-dependent timesteps sampled from [500, 1000], not iterative diffusion sampling. The alignment property in DR2 is established for iterative denoising trajectories at a global noise level, not single-step prediction with spatially varying noise. The "diffusion" framing is motivational rather than rigorous—this doesn't invalidate the method, but the theoretical grounding is weaker than presented.
+- **Generalization claims are tested within the BSRGAN degradation family**: The synthetic benchmarks use BSRGAN.plus (BSRGAN + Real-ESRGAN degradation patterns), which overlap with the training distribution. The real-world datasets (RealSR, DPED, RealSRSet) provide some out-of-distribution evidence, but no systematically diverse OOD degradation types (e.g., sensor-specific noise, video compression, unusual blur kernels) are evaluated. The generalization claim is partially supported but not as broadly as the title and abstract suggest.
 
-- **L_fre is bundled with LDP's contribution without clear separation**: The frequency loss (Eq. 14–15) is not part of the LDP architecture but is included in the fine-tuning loss. The ablation shows L_fre alone accounts for +0.47 PSNR of the +0.83 total (Table 6), meaning roughly half the synthetic improvement comes from a component that is conceptually independent of LDP. The paper does not clearly delineate what LDP's cycle consistency uniquely contributes versus what the frequency loss provides.
+- **Real-world results are mixed for FeMaSR**: On DPED (Table 4), FeMaSR+LDP degrades on NIQE (+0.659), MANIQA (−0.039), MUSIQ (−5.07), and QAlign (−0.167). The paper selectively attributes CLIPIQA degradation to metrics "favoring visually striking but structurally inaccurate results," but this explanation is not applied consistently—when LDP improves CLIPIQA, the metric is treated as valid.
 
-- **Synthetic test degradations overlap with training distribution**: The synthetic benchmarks are generated using BSRGN-plus degradations (Section 4.1), which closely overlap with the BSRGAN degradation patterns used to train LDP and fine-tune the SR models. This undermines the "unseen degradation" framing for the synthetic results, though the real-world benchmarks provide a more genuine test of generalization.
+- **The s² scale choice in LR_hf computation is not justified or ablated**: Eq. 4 uses s²-fold downsampling to compute the low-frequency component of y (the LR image itself). For s=4, this means 16-fold downsampling before interpolation, which creates an extreme low-pass filter leaving LR_hf with nearly all the LR image's information. This choice is central to the design but not analyzed or compared against alternatives (e.g., s-fold or smaller factors) in the main paper.
 
 ### Trivial
 None.
 
 ## Nice-to-Haves
 
-- A "fine-tuned on DF2K+BSRGAN with original loss only" baseline in Tables 3–4 would definitively isolate LDP's contribution and significantly strengthen the paper.
-- Training LDP on a different degradation distribution (e.g., Real-ESRGAN) and testing on BSRGAN-plus would test the generalization claim for LDP itself.
-- Analysis of when and why LDP hurts FeMaSR's real-world performance (rather than post-hoc rationalization) would inform practical applicability.
-- User study or controlled analysis to validate the claim that no-reference metrics favor GAN artifacts over structurally accurate outputs.
+- Ablations removing LR_hf conditioning and noise addition (t=0) would clarify how much improvement comes from the DAE architecture vs. the informative conditioning signal.
+
+- Quantifying the information content of LR_hf (e.g., reconstruction PSNR from y↓_{s²}↑_{s²} + y_{hf} = y) would assess the circularity concern directly.
+
+- Demonstration of inference-time correction for at least one non-diffusion model, or appropriate qualification of the dual-mode claim.
 
 ## Removed Points
 
 These points are flagged to be removed, treat them with caution:
 
-- **Harsh critic: "s² = 16 contradicts the condition criterion"**: The critic claims LR_hf captures "nearly all of the LR image's information," but this mischaracterizes the operation. For 4× SR, y_hf = y − y↓₁₆↑₁₆ computes the high-frequency residual of the LR image. The very low-frequency base is removed; y_hf is NOT the LR image itself, satisfying criterion (1). The empirical evidence (Table 2) confirms LDP does not collapse to trivial downsampling. However, the choice of s² over s is not well justified—this is moved to a minor clarity concern.
+- **"LR_hf conditioning creates near-circular information flow, undermining the degradation modeling claim"** (Harsh Critic Issue #1): While this raises a legitimate question, the claim that it is "near-circular" overstates the case. The model must still learn to denoise corrupted HR features and predict the correct degradation pattern—the conditioning provides information about *which* degradation, not the degradation mapping itself. The concern is better framed as an ablation gap (moved to Major weakness above) rather than a fundamental circularity that invalidates the paper.
 
-- **Harsh critic: "Variable F is overloaded"**: F in Eq. 12 (Downsample Module input) refers to the final CRB output F_t from Eq. 11, not a separate variable. This is a minor notation clarity issue, not a conceptual error.
+- **Formatting issues**: All formatting/typo complaints are parser artifacts and removed per rules.
 
-- **Harsh critic: "Patch-dependent noise creates boundary discontinuities"**: The denoiser uses AdaLN conditioning with patch-specific timestep embeddings (Eqs. 8–11), which naturally handles varying noise levels across patches. While the paper could be clearer about how boundaries are handled, calling this an unresolved architectural issue is overstated given the empirical success.
+- **Missing references/appendices**: References to Appendix F for ablations of patch size, frequency band, and scale factor are stripped by the parser—they exist in the original submission.
 
-- **Harsh critic: "DRN outperforms LDP on 3/5 degradation types by PSNR in Table 1"**: This is factually correct but misleading. LDP outperforms DRN on 2/5 PSNR, 3/5 SSIM, and 3/5 LPIPS metrics, and crucially does not collapse to trivial downsampling (Table 2). The comparison is mixed, not clearly unfavorable.
-
-- **Harsh critic: "Contributions 2 and 3 are overlapping"**: While there is overlap, contribution 2 emphasizes the conditional degradation model with LR_hf, while contribution 3 emphasizes the dual-mode application. This is a minor presentation issue.
-
-- **Strength finder: "Spatially varying degradation modeling" as a supporting strength**: While patch-dependent timesteps are a reasonable design, the paper does not provide evidence that this specifically improves results over a global timestep. The strength is plausible but unverified.
-
-- **Harsh critic: "Report per-image variance or confidence intervals"**: This is a nice-to-have for large-scale benchmarks where single-run evaluation is the norm in this community. Moved to nice-to-have.
-
-- **Harsh critic: demands failure case visualizations**: While helpful, this is standard feedback for most papers and not a specific weakness of this submission.
+- **Reproducibility concerns**: Complaints about undisclosed hyperparameters are removed per rules—τ, λ values, and training details are specified in the paper.
 
 ## Novel Insights
 
-The paper reveals an important structural limitation of prior degradation models for blind SR: when the degradation model's input is only the HR/SR image (as in DRN), it collapses to trivial downsampling because it has no signal to distinguish which degradation produced the LR input. LDP's conditioning on LR high-frequency components elegantly addresses this by providing just enough degradation-specific information without leaking the full LR image. However, this insight is somewhat undercut by the experimental confound—the paper does not cleanly demonstrate that this better degradation modeling translates to better SR generalization beyond what fine-tuning on diverse degradations alone would achieve.
+The paper raises an interesting design question about conditioning signal informativeness in degradation models: using LR_hf as a condition satisfies multiple criteria simultaneously (not the LR itself, discriminative for different degradations, simple to compute), but its high information content may reduce the burden on the learned degradation model. This tension between informativeness and non-triviality of the conditioning signal is a subtle design tradeoff that the community should consider when building conditional degradation models, and it is not fully resolved by this paper.
 
 ## Suggestions
 
-- **Add a fine-tuned baseline without LDP**: Fine-tune each SR model on DF2K+BSRGAN with only the original loss and report results alongside "Original" and "+LDP." This single experiment would resolve the most critical weakness.
-- **Tone down the abstract**: Replace "substantially improves" with more measured language that acknowledges the mixed real-world results, especially for GAN-based models.
-- **Separate L_fre from LDP's core contribution**: Either clearly position L_fre as an orthogonal technique bundled for practical benefit, or show results with LDP-only losses (without L_fre) in the main tables to isolate LDP's contribution.
+- Add ablations that remove DPM conditioning (LR_hf) and noise addition (t=0) to isolate whether the DAE architecture itself contributes beyond the informative conditioning signal. A simple cycle-consistency baseline with a learnable downsampler + L_fre would also be informative.
+- Qualify the "inference post-processing step" claim to apply only to diffusion-based SR models, or demonstrate corrective post-processing for at least one non-diffusion architecture.
+- Consider testing on genuinely out-of-distribution degradation types (e.g., camera ISP noise, video compression) to strengthen the generalization claim.
 
-## Score and Decision
+## Evaluation
 
-**Calibration anchors**:
-- **High**: Recursive Generalization Transformer (avg 7.5, Accept poster) — solid SR contribution with proper experimental methodology. LDP is below this due to the fine-tuning confound and overclaimed generalization.
-- **Medium**: PnP-Flow (avg 5.5, Accept poster) — plugin-style method with some comparison fairness concerns (whether a simple U-Net baseline would match results). LDP has a more severe confound (pretrained vs. fine-tuned comparison) but also has non-confounded evidence (posterior sampling results, degradation model analysis).
-- **Low**: Restorer Guided Diffusion (avg 2.0, Reject) — fundamentally flawed theoretical claims and misleading comparisons. LDP is well above this; it has genuine contributions and the method does work, just not as cleanly demonstrated as claimed.
-- **Medium-low**: Text Boosts Generalization / Res-Captioner (avg 4.25, Withdrawn) — plug-and-play module with limited improvement over simpler baselines (ShareCaptioner). LDP is somewhat above this because its degradation model analysis (Tables 1–2) provides genuine insight.
+**Originality**: The idea of integrating a lightweight DAE conditioned on LR high-frequency components as a degradation-aware regularizer for SR is a reasonable and somewhat novel contribution. The connection to diffusion alignment (DR2) provides theoretical motivation, though the single-step DAE deviates significantly from full diffusion models.
 
-LDP sits in the borderline range. The fine-tuning confound is a significant gap that prevents confident attribution of improvements to LDP itself, but the posterior sampling results (Table 5), degradation model analysis (Tables 1–2), and the partial ablation (Table 6) provide supporting evidence. The method is genuinely lightweight and versatile. The paper would be substantially stronger with the missing fine-tuning control, which is a straightforward experiment to run.
+**Research Question Importance**: Improving generalization to unseen degradations in SISR is an important and practical problem.
+
+**Claim Support**: The training-time mode is well-supported (Table 3). The inference-time mode for diffusion models is weakly supported at best (Table 5 marginal gains). The core architectural claim (DAE as degradation model) is not isolated from the conditioning signal in ablations.
+
+**Soundness of Experiments**: Synthetic evaluations are within the BSRGAN family. Real-world evaluations show mixed results, particularly for FeMaSR. A key ablation (removing conditioning) is missing.
+
+**Clarity**: The paper is generally well-written and organized, though the dual-mode claim could be more precisely stated.
+
+**Value**: If the ablation gap is addressed and the conditioning signal is not the sole driver of improvements, this could be a useful plug-in contribution. As-is, the value is partially established but uncertain.
+
+## Score Calibration
+
+- **High anchor**: Papers like GenDR (avg 6.0) and SAVL (avg 5.6) — degradation-aware SR with strong experimental frameworks and novel representations, both accepted as posters. LDP's experimental results are broadly similar in scope.
+- **Medium anchor**: Plug-in IQC for posterior diffusion SR (avg 5.0, rejected) — similar marginal gains in posterior sampling but with stronger theoretical claims. KernelFusion (avg 4.0) — zero-shot blind SR with overclaimed "unrestricted kernel" paradigm and limited evaluation. LDP has stronger training-time results than these.
+- **Low anchor**: DGMS (avg 2.5) and DSPO (avg 2.5) — weak papers with overclaimed contributions, poor presentation, and limited novelty. LDP is clearly above these.
+
+LDP's training-time fine-tuning results (Table 3) are solid and consistent across models. Its weaknesses are the missing ablation isolating architectural contribution, overclaimed dual applicability, and marginal posterior sampling results. These are significant but not paper-killing — the training-time results stand on their own merit. Compared to SAVL (5.6), LDP has weaker ablations. Compared to GenDR (6.0), LDP has similar scope but more uncertainty about core mechanism. Compared to IQC (5.0, rejected), LDP has better fine-tuning results but similar posterior sampling issues.
 
 MY FINAL SCORE: <pineapple>5.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

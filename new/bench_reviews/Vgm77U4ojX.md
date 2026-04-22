@@ -1,24 +1,22 @@
-Now I have all the information I need. Let me write the final consolidated review.
+Now I have sufficient calibration data. Let me write the final review.
 
 ## Summary
 
-SIGMADOCK introduces a fragment-based SE(3) Riemannian diffusion model for molecular docking that decomposes ligands into rigid-body fragments and learns to reassemble them within a binding pocket, replacing the torsional parametrization used by prior methods with a factorized product-space formulation over SE(3)^m. The paper provides theoretical motivation (Theorem 1: torsional models produce entangled measures), a fragmentation reduction scheme (FR3D), soft triangulation constraints (Lemma 1), and an SO(3)-equivariant architecture, achieving 79.9% PB-valid Top-1 on PoseBusters—substantially above prior deep learning methods (12.7–32.8%) and classical baselines.
+SIGMADOCK introduces a fragment-based SE(3) Riemannian diffusion model for molecular docking that decomposes ligands into rigid-body fragments via a novel FR3D fragmentation scheme, replacing torsional parameterization with independent SE(3) transforms per fragment. The method achieves 79.9% Top-1 PB-valid on the PoseBusters benchmark, claiming to be the first deep learning approach to surpass classical physics-based docking under the PB train-test split, while demonstrating competitive performance with AlphaFold3 using far less training data.
 
 ## Strengths
 
-- **Principled theoretical motivation for fragment-based over torsional diffusion**: Theorem 1 formally proves that torsional models produce "highly entangled, non-product induced measures" when mapped to Cartesian coordinates, while disjoint rigid fragments yield a factorised product of Haar measures on SE(3)^m. This provides a rigorous, non-empirical justification for why fragment-space diffusion should yield better-conditioned learning. (Section 2.2.2)
+- **Novel and well-motivated formulation**: The fragment-based SE(3)^m approach is a genuine departure from torsional diffusion. The theoretical critique in Theorem 1 (Section 2.2.2) correctly identifies that torsional models induce non-product measures in Cartesian space, while the fragment formulation yields a factorized product of Haar measures. This is a principled motivation supported by the practical issues of gauge ambiguity and the lever effect (Section 2.2.2).
 
-- **Strong empirical results with comprehensive ablations**: SIGMADOCK achieves 79.9% PB-valid Top-1 on PoseBusters, dramatically surpassing prior DL methods (DiffDock: 38.0%, G2G/Vibe2: 58.1%) under the same split. Table 1 provides thorough ablations confirming the contribution of each component: triangulation conditioning (−12.8 pp PB-valid), fragment merging (−6.2 pp), protein-ligand interactions (−3.6 pp). (Figure 4, Table 1)
+- **Soft triangulation constraints (Lemma 1)**: An elegant mechanism that injects bond-length/angle priors via cross-fragment distances without constraining dihedrals, effectively shrinking the DOF gap between fragment and torsional models. The ablation (Table 1, Config A) confirms a 12.8pp drop in PB-valid when removed, making it the single largest contributor.
 
-- **FR3D fragmentation and soft triangulation constraints are elegant inductive biases**: FR3D reduces fragments from k+1 to m ≈ 2/3(k+1), narrowing the DoF upper bound. Lemma 1 proves that triangulation distances uniquely determine bond angles across fragment boundaries without restricting dihedral freedom. These are well-motivated structural chemistry priors, not ad hoc engineering. (Sections 2.2.3, Figure 3)
+- **Near-parity between RMSD<2Å (80.5%) and PB-valid (79.9%)**: Table 1 Config I shows SIGMADOCK almost never generates geometrically close but chemically implausible poses—directly addressing the key failure mode identified by Butenschön et al. (2024) for prior DL methods.
 
-- **Co-factor failure analysis provides evidence against memorization**: Failures concentrate in complexes with co-factors (natural ligands: 41.2% failure rate; ions: 23.6%) that SIGMADOCK deliberately excludes, versus 16.2% for complexes without co-factors—consistent with partial-observability failures rather than memorization. (Table 2, Section 3.2)
+- **Interpretable failure analysis**: Table 2 shows failure rates correlate systematically with co-factor absence (41.2% when natural ligands present vs. 16.2% with none), providing evidence that the model learns genuine physicochemical interactions rather than memorizing poses.
 
-- **No post-hoc minimization or separately trained confidence model required**: SIGMADOCK achieves high PB-validity without the energy minimization hack common in prior DL docking methods, which is a genuine practical advantage. (Section 2.5, Section 3.2)
+- **Data efficiency and principled evaluation scope**: SIGMADOCK deliberately restricts to PDBBind v2020 for fair comparison (Section 3.1), acknowledges train-test leakage concerns, and reaches AF3-competitive results with only 19k training complexes (Table 4).
 
-- **Proven invariance to local coordinate orientation**: Theorem 2 establishes that the training objective and sampling procedure are invariant to the choice of local coordinate frame orientation, resolving a fundamental parametrization ambiguity in fragment SE(3) models. (Section 2.4)
-
-- **Data efficiency and speed relative to co-folding models**: Competitive performance with AF3 (~79.9% vs ~80.2% PB-valid overall) using 19k training complexes and 50× faster sampling. (Table 4, Section 3.2)
+- **SO(3)-equivariant architecture with coordinate ambiguity resolution**: Theorem 2 (Section 2.4) establishes invariance to local coordinate orientation via pseudo-force prediction, resolving a real design challenge.
 
 ## Weaknesses
 
@@ -27,74 +25,81 @@ None.
 
 ### Major
 
-- **Physics-based energy scoring contributes ~14 pp to headline result, and this contribution is systematically understated**: Table 1 Configuration D shows that removing energy scoring drops PB-valid from 79.9% to 66.1%—a 13.8 pp contribution, larger than any other single ablation. The paper describes this as "a simple and cheap heuristic" (Section 2.5), which significantly underplays its role. The abstract's claim that SIGMADOCK is "the first deep learning approach to surpass classical physics-based docking" is internally misleading when classical physics-based scoring is embedded in the pipeline and responsible for a substantial share of performance. That said, even without energy scoring (66.1% PB-valid), SIGMADOCK likely still surpasses the classical baselines shown (PDBBind: 15.9% under holo-specified; Vina: ~57% RMSD < 2Å under pocket-specified), so the claim is not false—just not as decisive as presented. The paper should report the generative model's standalone accuracy prominently and moderate the framing.
+- **Metric reporting inconsistency across comparisons makes the headline improvement claim partially unverifiable**: The abstract compares SIGMADOCK's "RMSD < 2Å PB-valid" (79.9%) against "12.7–32.8% reported by recent deep learning approaches," but Figure 4 does not clearly indicate whether baseline numbers are RMSD<2Å or PB-valid. For example, G2G and Vibe2 report 58.1% in Figure 4 left under "Top-1 (%)" without specifying which metric. The 12.7–32.8% range appears to come from Butenschön et al. (2024) reporting PB-valid rates for DL methods in holo-specified mode, while SIGMADOCK operates in pocket-specified mode—a different evaluation condition not clearly flagged. The paper does not report both RMSD<2Å and PB-valid for every baseline in one table, making it impossible for the reader to determine the true gap on the same metric under the same conditions. This doesn't invalidate the results but undermines the precision of the headline claims.
 
-- **"Consistent generalisation" claim is overstated**: The abstract claims "consistent generalisation to unseen proteins," but Table 4 shows a clear degradation: 72% PB-valid at ≤30% sequence similarity vs. 87% at 95–100%—a 15 percentage point gap. While 72% is still strong in absolute terms (far above baselines), describing a 15 pp gradient as "consistent" overstates the case. The paper's text in Section 3.2 says SIGMADOCK "excels on proteins with low sequence similarity, overcoming the common critique that deep learning models memorise rather than learn physics"—the absolute performance supports this, but the degradation suggests some memorization component remains.
+- **Contradictory generalization numbers between Figure 4 (right) and Table 4**: Figure 4 right reports Top-1 percentages of 51%, 53%, 53% across the three sequence similarity bins (counts 109, 76, 123), while Table 4 reports PB-valid percentages of 72%, 79%, 87% for the same bins with the same counts. The Figure 4 right numbers average to ~52%, wildly inconsistent with the ~80% overall rate. These cannot both be the same metric on the same data. The paper does not clarify what metric Figure 4 right uses. Since the paper's generalization claim ("consistent generalisation to unseen proteins") is central to its contribution, this ambiguity significantly weakens the evidence for that claim.
+
+- **Opaque energy scoring component undermines the "surpassing classical methods" claim**: Table 1 Config D shows that removing "(pseudo) binding energy" scoring drops performance from 80.5%/79.9% to 67.2%/66.1%—a 13.3pp absolute contribution. The energy function is described only as a "simple and cheap heuristic" (Section 2.5, line 180) with details deferred to the appendix (which is stripped). If this scoring incorporates classical force field terms, then the claim of being "the first deep learning approach to surpass classical physics-based docking" is misleading: the method surpasses classical docking partly *by using* classical scoring to rank its own samples. The paper does not present the comparison of SIGMADOCK-without-energy-scoring vs. classical methods on PB-valid, which would be the fair test for this claim. Note: even without energy scoring, 66.1% PB-valid may still exceed some classical baselines on RMSD<2Å, but the paper doesn't show this comparison.
 
 ### Minor
 
-- **Unexplained discrepancy between Figure 4 right chart and Table 4**: The right panel of Figure 4 reports Top-1 values of 51%, 53%, 53% across the three sequence similarity bins (109, 76, 123 complexes), while Table 4 reports PB-valid of 72%, 79%, 87% for the same bins and complex counts. The paper does not clarify whether these represent different metrics, conditions, or experimental configurations. This discrepancy is confusing for readers trying to assess generalization and should be explicitly addressed.
+- **Cross-setting DiffDock comparison**: The "6.3× higher PB-validity than DiffDock" claim (Section 3.2) compares SIGMADOCK (pocket-specified, PB-valid) against DiffDock (holo-specified, PB-valid from an external source). These are different evaluation conditions. The paper does compare fairly against pocket-specified baselines (G2G, Vibe2) showing a 79.9% vs. 58.1% gap, but buries this more modest (though still substantial) improvement.
 
-- **No controlled ablation isolating fragment vs. torsional parametrization**: The paper's central theoretical argument (Theorem 1) is that fragment parametrization is superior to torsional parametrization. Empirically, SIGMADOCK is compared against DiffDock, which differs in architecture, training data, training procedure, and inference strategy. A within-framework ablation implementing a torsional variant with the same architecture and training would isolate the effect of the parametrization and substantially strengthen the empirical case for the theoretical claim.
+- **AF3 comparison inconsistency**: The paper states "we cannot directly compare SIGMADOCK to co-folding methods" (line 260) but then provides Table 4 comparing against AF3 on PB-valid, calling it "competitive performance." These two statements are in tension. Since AF3 does co-folding (jointly predicting protein structure) on a different task, the comparison is informative but should not be characterized as competitive on the same task.
+
+- **Vina PB-valid rate not reported**: Table 3 shows Vina's RMSD<2Å rates (~57%) but not PB-valid. Since PB-valid is the paper's chosen primary metric and the basis for the "surpassing classical methods" claim, reporting Vina's PB-valid rate is important.
+
+- **Table 1 ablation training vs. inference-time confound**: Rows A–C are retrained from scratch while rows D–H appear to be inference-time ablations. The paper notes "A–C are re-trained from scratch" (line 237) but does not explicitly flag D–H as inference-only, which affects how readers interpret the contributions.
+
+- **Stochastic fragmentation variance uncharacterized**: FR3D (Section 2.2.3) uses stochastic search, meaning the same ligand can receive different fragmentations. The paper does not analyze how much performance varies across different fragmentation outcomes, which affects reproducibility and reliability.
 
 ### Trivial
 None.
 
 ## Nice-to-Haves
 
-- Specify the energy scoring function in the main text rather than deferring to the appendix, given its outsized contribution (~14 pp) to the headline number.
-- Explicitly compare the standalone generative model (without energy scoring) against classical methods to establish whether the generative model alone surpasses them.
-- Report median RMSD across all 40 samples (not just top-1), which would reveal the generative model's calibration and the degree to which scoring compensates for poor samples.
-- Provide qualitative failure mode analysis on the ≤30% sequence similarity set, particularly where the conformer approximation breaks down.
+- Report both RMSD<2Å and PB-valid for all baselines in one unified table, clearly specifying evaluation conditions (pocket-specified vs. holo-specified).
+- Define the pseudo binding energy function in the main text, and show SIGMADOCK-without-energy-scoring vs. Vina on PB-valid to isolate the DL contribution from the classical scoring contribution.
+- Clarify what metric Figure 4 right reports and reconcile the numbers with Table 4.
+- Analyze FR3D fragmentation variance and its impact on stability.
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution.
+These points are flagged to be removed, treat them with caution:
 
-- **Harsh critic: "PDBBind* baseline is unclear and inconsistent with Vina 57.2%"**: The 15.9% (PDBBind, Holo Specified, PB-valid metric) and 57.2% (Vina, Pocket Specified, RMSD < 2Å metric) are under different conditions and metrics. There is no real inconsistency—just different experimental setups, which are clearly labeled in the figure.
+- **Harsh critic claim that the abstract's 12.7–32.8% range is "cherry-picking" or "dishonest"**: The range 12.7–32.8% appears to come from Butenschön et al. (2024) reporting PB-valid rates for DL methods. This is not fabricated; the issue is metric/condition clarity, not dishonesty.
 
-- **Harsh critic: "Mixing Holo Specified and Pocket Specified in a single visualization is misleading"**: The conditions are clearly labeled in the figure. Readers can compare within the same condition. This is a standard presentation choice, not a misleading one.
+- **Harsh critic claim that this is "not a presentation gap—it makes it impossible to verify"**, phrased as a fatal issue: While the metric inconsistency is a genuine major concern, the numbers are present in the paper and can be cross-referenced by a careful reader. The issue is ambiguity, not absence of data.
 
-- **Harsh critic: "Excluding DiffDock-L and AF3 from Figure 4 while mentioning them in text is contradictory"**: The paper explicitly explains this choice (footnote 9: "For fairness, we compare our method in the main body against models trained on the same train-test split"). Including AF3 in Table 4 as a reference comparison while excluding it from the main benchmark figure is a reasonable and transparent editorial decision, not a contradiction.
+- **Harsh critic claim that the energy scoring dependency is "fundamentally misleading"**: This is an important concern but calling it "fundamentally misleading" goes too far. The paper does disclose using energy scoring (Section 2.5) and shows the ablation (Table 1). The issue is about the framing of the "surpassing classical methods" claim, not deception.
 
-- **Harsh critic: "FR3D's stochastic search criteria for merging are vague"**: The paper provides Algorithm 1 in Appendix D.4. The stochastic search is described as starting from torsion-free fragments and branching through candidate merge actions. This is adequate for the main text with details deferred.
+- **Strength Finder claim that "SIGMADOCK is the first DL method to surpass classical physics-based docking on the PB benchmark"**: This claim is partially undermined by the energy scoring dependency (Major weakness #3). While the method does surpass classical baselines on PB-valid, the contribution of classical scoring to this result is substantial (13.3pp). The claim is not fully supported as stated but the result is still genuine.
 
-- **Harsh critic: "The fragment model's data distribution also does not factorize over SE(3)^m"**: The paper explicitly acknowledges this ("inter-fragment correlations enter only via the learnt score") and the point is about the forward/noise kernel factorizing, not the data distribution. The harsh critic mischaracterizes the paper's claim.
+- **Harsh critic claim about DiffDock comparison being a "category error"**: This overstates the case. DiffDock was evaluated in holo-specified mode because that was its original setting. The comparison is imperfect but not a category error—both are re-docking tasks, just with different receptor specification methods.
 
-- **Harsh critic: "Theorem 2 proof deferred to appendix, making it difficult to verify"**: This is a standard practice for proofs in conference papers. Removed as a nitpick about appendix-deferred content.
+- **Harsh critic note about "symmetry correction implementation matters"**: Specific implementation details of Meli & Biggin (2020) symmetry correction are a reasonable concern but standard practice. The paper cites the method used, which is the community standard.
 
-- **Harsh critic: "Architectural innovations not ablated individually"**: The paper already provides comprehensive ablations for the main components. Individual ablation of virtual nodes, smooth distance decay, and pseudo-force prediction head would be excessive.
+- **Request for confidence intervals / statistical tests on Table 2**: Not standard in this field for docking benchmarks and would be a nice-to-have, not a weakness.
 
-- **Harsh critic: "Equal-compute comparisons with baselines"**: Requesting all methods to use the same total inference budget is a reasonable suggestion but goes beyond standard practice in the field. Moved to nice-to-have.
-
-- **Strength Finder: "Consistent generalization to low-sequence-similarity proteins" with Figure 4 right chart values of 51%, 53%, 53%**: This strength conflicts with the verified Major weakness about generalization degradation (Table 4: 72%, 79%, 87%). The Figure 4 values are unexplained relative to Table 4, so this strength cannot be confidently asserted. Removed to avoid contradiction.
+- **Harsh critic assertion that Theorem 1 is "essentially a definitional observation"**: While the mathematical content may seem definitional, the practical implications (stiff dynamics, gauge ambiguity) are the real contribution, and the theorem formally justifies the design choices. This is appropriate for the paper's scope.
 
 ## Novel Insights
 
-The paper reveals a subtle but important design principle for molecular docking diffusion models: the choice of parametrization space (fragment SE(3)^m vs. torsional SE(3)×T^k) fundamentally determines whether the forward diffusion kernel factorizes, which in turn affects the conditioning of the learning problem. This is a contribution that goes beyond the specific method—any future diffusion-based docking method must reckon with Theorem 1's implication that torsional noise creates entangled Cartesian measures. However, the paper also inadvertently demonstrates a broader lesson: when a lightweight classical scoring component contributes 14 pp to a DL method's headline number, the boundary between "deep learning surpasses classical methods" and "deep learning + classical methods surpasses classical methods alone" becomes semantic. The community would benefit from reporting standards that separate generative model quality from post-hoc ranking quality.
+The fragment-based SE(3)^m formulation represents a genuine conceptual advance over torsional diffusion for molecular docking. The key insight—that independent rigid-body fragments yield a factorized product measure avoiding the entangled induced measures of torsional models—is both theoretically clean and empirically impactful. However, the paper's evaluation framework has a notable gap: the near-parity between RMSD<2Å and PB-valid suggests the fragment structure + triangulation constraints are doing the heavy lifting for chemical validity, while the pseudo binding energy scoring does most of the work for ranking accuracy. Disentangling these two contributions more carefully would clarify whether the core advance is in generation quality (the SE(3)^m diffusion itself) or in the evaluation/ranking pipeline.
 
 ## Suggestions
 
-- Report the generative model's standalone PB-valid (66.1%) prominently alongside the full pipeline result (79.9%) in the abstract and main results, and qualify the "first to surpass" claim accordingly (e.g., "the first deep learning pipeline to surpass…").
-- Replace "consistent generalisation" with "strong generalisation" or similar, acknowledging the 15 pp degradation while noting that absolute performance at low similarity (72%) remains well above baselines.
-- Add a clarifying note in the figure caption or main text explaining the relationship between the Figure 4 right chart values (51%, 53%, 53%) and Table 4 values (72%, 79%, 87%) for the same similarity bins.
+- Create a single comprehensive table with all methods, both metrics (RMSD<2Å and PB-valid), clearly labeled evaluation conditions (pocket-specified vs. holo-specified), and sample counts (N_seeds). This would immediately resolve the metric ambiguity concern.
+- Run the experiment: SIGMADOCK (no energy scoring) vs. Vina on PB-valid with the same N_samples. This single comparison would either validate or invalidate the "surpassing classical methods" claim independently of classical scoring contributions.
+- Add a caption or footnote to Figure 4 right specifying which metric is plotted (RMSD<2Å or PB-valid) and reconcile with Table 4 numbers.
 
 ## Score and Decision
 
-**Calibration anchors used:**
+**Calibration anchors:**
 
-| Paper | Path | Avg Score | Comparison |
-|-------|------|-----------|------------|
-| ShEPhERD | /home/wg25r/review_agent/human_reviews/KSLkFYHlYg.md | 8.0 | SE(3)-equivariant diffusion for molecular design, Oral. SIGMADOCK has comparable technical novelty and stronger empirical docking results, but has overclaiming issues ShEPhERD doesn't have. Below this anchor. |
-| UniMatch | /home/wg25r/review_agent/human_reviews/v9EjwMM55Y.md | 7.5 | Few-shot drug discovery, Spotlight. SIGMADOCK has comparable empirical strength but more framing issues. Slightly below. |
-| GroupBind | /home/wg25r/review_agent/human_reviews/zDC3iCBxJb.md | 6.75 | Group docking, Poster. SIGMADOCK has stronger results and more comprehensive ablations. Above this anchor. |
-| IPDiff | /home/wg25r/review_agent/human_reviews/qH9nrMNTIW.md | 6.25 | Interaction prior for diffusion, Poster. SIGMADOCK is clearly stronger in results and ablations. Well above. |
-| DynamicFlow | /home/wg25r/review_agent/human_reviews/9qS3HzSDNv.md | 6.2 | Full-atom flow for flexible docking, Poster. SIGMADOCK is stronger. Well above. |
-| PDE-Diffusion | /home/wg25r/review_agent/human_reviews/3sOE3MFepx.md | 2.2 | Overclaimed SOTA, fundamental methodology issues. SIGMADOCK is far above—its core method is sound. |
-| Restorer-Guided Diffusion | /home/wg25r/review_agent/human_reviews/KqTzfiNjWU.md | 2.0 | Misleading claims, theoretically unsound. SIGMADOCK's issues are framing, not fundamental. |
-| Outliers Memorized | /home/wg25r/review_agent/human_reviews/6ZuDeSHzjj.md | 1.5 | Synthetic data only, no real contribution. SIGMADOCK is far above. |
+1. **High-scoring**: Quotient-Space Diffusion Models (3JPAkwSVc4, avg 7.5, Accept Oral) — similar SE(3) theoretical framework for molecular generation, principled formal contribution. SIGMADOCK has comparable theoretical novelty but weaker evaluation transparency.
 
-SIGMADOCK sits between GroupBind (6.75) and UniMatch (7.5). It has genuine theoretical contributions (Theorem 1, Lemma 1), strong empirical results with comprehensive ablations, and a well-motivated method. The main deductions are for the overclaiming around the energy scoring contribution and generalization, which are significant framing issues but don't invalidate the core contribution. The paper is clearly above the acceptance threshold.
+2. **High-scoring**: La-Proteina (RDerF20JYT, avg 8.0, Accept Poster) — strong empirical results with novel flow matching for protein generation. SIGMADOCK's results are strong but evaluation issues hold it below this level.
 
-MY FINAL SCORE: <pineapple>7.0</pineapple>
+3. **Medium-scoring**: Matcha (r9Uw9kKjUy, avg 4.0, Reject) — Riemannian flow matching for docking, flagged for unfair metric conflation on PoseBusters, missing baselines. SIGMADOCK has similar metric conflation issues but much stronger core results and a more novel formulation.
+
+4. **Medium-scoring**: PoseX (qqzxKudD4T, avg 5.0, Accept Poster) — benchmark with cross-docking metric conflation concerns. SIGMADOCK has more substantive technical contribution.
+
+5. **Medium-scoring**: Bento (kIxAQxUZHq, avg 5.0, Reject) — benchmarking paper, limited novelty. SIGMADOCK is well above this in technical contribution.
+
+6. **Low-scoring**: MagicDock (nVnPqLtO8r, avg 3.5, Reject) — claims surpassing classical docking but evaluation methodology is weak. SIGMADOCK is clearly above this.
+
+SIGMADOCK's core contribution (fragment SE(3)^m diffusion with triangulation constraints) is genuinely novel and the empirical performance is strong. However, the evaluation has significant transparency issues (metric inconsistency, contradictory Figure/Table numbers, large dependence on an undefined classical scoring component). These are not fatal but they meaningfully undermine the precision of the central claims. Compared to Matcha (4.0, similar metric issues but weaker method), SIGMADOCK is clearly superior. Compared to Quotient-Space Diffusion (7.5, cleaner evaluation), SIGMADOCK falls short on evaluation rigor but has comparable technical contribution. The paper sits above the medium anchors but below the high anchors primarily due to evaluation transparency.
+
+MY FINAL SCORE: <pineapple>6.0</pineapple>
 MY FINAL DECISION: <orange>Accept</orange>

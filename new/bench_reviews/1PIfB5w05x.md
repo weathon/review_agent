@@ -1,78 +1,101 @@
-Now I have all the information needed to write the final consolidated review. Let me synthesize everything.
+Now I have all the information needed to write the review. Let me also check the inconsistency between equations (9) and (12) one more time by re-reading exactly.
+
+The key facts:
+- Equation (9) coefficient of n₁: $\log\left(1 + \frac{\delta(2\sigma_2^2 - \sigma_1^2)s}{2\sigma_2^2}\right)$
+- Equation (12) numerator: $\log\left(1 + \frac{\delta(2\sigma_2^2 - \sigma_1^2)s}{2\sigma_1^4}\right)$
+- These denominators differ: $2\sigma_2^2$ vs $2\sigma_1^4$
+- The paper explicitly says γ is defined from the coefficients in (9) (lines 189-192)
+- Equation (14) uses the formula from (12) with $2\sigma_1^4$ and arrives at $\gamma \simeq 2 - \sigma_1^2/\sigma_2^2$
+
+This inconsistency is real and significant. If the correct coefficient from (9) were used, the low SNR₂ approximation would give a different result.
+
+Now let me write the final review.</think>Now I have all the information needed. Let me compose the final review.
 
 ## Summary
 
-This paper studies sparse signal recovery when observations come from two sources with different noise levels (high-quality and low-quality). It establishes the first sufficient conditions on sample sizes $(n_1, n_2)$ for both information-theoretic and LASSO-based algorithmic recovery. The central conceptual contribution is the "Price of Quality" γ—the number of low-quality samples that can replace one high-quality sample while preserving the sufficient condition. In the agnostic setting (decoder unaware of noise levels), γ is uniformly bounded below 2; in the informed setting (decoder knows per-sample variances), γ can diverge to infinity. A LASSO phase transition theorem shows the algorithmic threshold depends only on total sample size and average noise, revealing a contrast between information-theoretic and algorithmic sensitivity to data quality.
+This paper studies sparse recovery under mixed-quality (heterogeneous Gaussian noise) data, establishing sample-size conditions for both information-theoretic and algorithmic recovery. It introduces the "Price of Quality" γ—the number of low-quality samples replaceable by one high-quality sample—as a scalar summary of the quality-quantity trade-off. For the agnostic setting (decoder unaware of noise levels), γ is bounded by 2 under the sufficient condition; for the informed setting (decoder knows noise levels), γ can grow arbitrarily. For the LASSO, a necessary-and-sufficient phase transition shows the threshold depends only on total sample size and average noise, making high- and low-quality data contribute equally—a striking contrast to the IT thresholds.
 
 ## Strengths
 
-- **First results on a natural and timely problem.** Mixed-quality data is ubiquitous (weak supervision, LLM-annotated data, multi-site clinical trials), and this paper provides the first formal analysis of sparse recovery under heterogeneous noise. The two-source model is the right starting point (§1.1.2, §1.2).
+- **Complete LASSO phase transition (Theorem 3):** Both necessity (part i, eq. 26) and sufficiency (part ii, eq. 27) are proven, extending Wainwright (2009) to the heterogeneous-noise setting. The finding that the threshold $n_{\mathrm{ALG}}$ is unchanged and the regularization condition involves only $\sigma_{\mathrm{avg}}^2$ is clean and potentially surprising.
 
-- **Theorem 3 (LASSO phase transition) is the paper's strongest contribution.** It provides a tight two-sided characterization (both necessity and sufficiency) showing the LASSO threshold $n_{\text{ALG}} = 2s\log(p-s) + s + 1$ is independent of individual noise levels $\sigma_1^2, \sigma_2^2$ (eq. 26–27), with the regularization condition depending only on $\sigma_{\text{avg}}^2$ (eq. 28). This is a non-trivial extension of Wainwright (2009) requiring a QR decomposition of $X_S$ and Haar measure arguments (§4, Lemma D.6) to handle the broken Wishart structure.
+- **Novel proof technique for LASSO under heterogeneous noise (§4):** The classical Wishart-structure argument breaks down because $\Sigma$ is no longer scalar. The proof overcomes this via QR decomposition of $X_S$ (eq. 49) and Haar-measure analysis (Lemma D.6), providing a new technical tool applicable beyond this setting.
 
-- **Conceptually useful Price of Quality framework.** Even if the specific numerical bound γ ≤ 2 is tied to the proof technique, the idea of quantifying the trade-off between high- and low-quality data via the slope of the sample-complexity boundary is a good conceptual contribution that future work can refine (eq. 5, §1.2.1).
+- **Conceptual framework of Price of Quality:** Defining γ = α₁/α₂ as a single interpretable scalar quantifying the quality–quantity trade-off is a useful conceptual contribution. The stark contrast—γ bounded by 2 (agnostic IT), γ → ∞ (informed IT), γ = 1 (LASSO)—captures a genuine and important structural insight.
 
-- **Transparent about limitations.** The paper clearly states the sufficiency-only nature of the IT results (Remark 3.2), the non-optimality of the agnostic estimator (Remark 3.2), and the difficulty of the informed LASSO extension (Remark 4.2). The conclusion explicitly notes that "the agnostic information-theoretic condition is sufficient but not proven tight" (§5).
+- **First conditions for sparse recovery under heterogeneous noise:** To the best of our knowledge, this is the first work providing sample-size conditions for this setting, filling a gap in the sparse recovery literature.
 
 ## Weaknesses
 
 ### Fatal
+
 None.
 
 ### Major
 
-- **The central agnostic-vs-informed contrast is partially driven by asymmetric bound tightness, which the paper insufficiently addresses.** The agnostic sufficient condition (Theorem 1, eq. 9) results from a *relaxed* Chernoff bound—the paper notes in Remark 3.2 that optimizing the exponent leads to a cubic equation whose solution would be tighter. The informed condition (Theorem 2, eq. 16) optimizes the Chernoff exponent exactly. The headline contrast—bounded γ in the agnostic setting vs. unbounded γ in the informed setting—could therefore be partly an artifact of the agnostic bound being looser rather than a fundamental structural difference. The paper acknowledges this asymmetry in Remarks 3.2 and 3.3 but does not discuss its implications for interpreting the contrast. A tighter agnostic analysis might yield a much larger γ, potentially narrowing the gap between the two settings. Without at least a numerical investigation of how much tightness is lost (e.g., solving the cubic from Remark 3.2 for specific parameters), the reader cannot assess whether the qualitative contrast is robust or primarily proof-driven. The claim of a "fundamental difference" in the abstract is partially undermined by this gap.
+- **Formula inconsistency between eq. (9) and eq. (12):** The sufficient condition (9) defines the n₁ coefficient as $\log\!\bigl(1 + \tfrac{\delta(2\sigma_2^2 - \sigma_1^2)s}{2\sigma_2^2}\bigr)$, with denominator $2\sigma_2^2$. However, the Price of Quality definition (12) defines γ's numerator as $\log\!\bigl(1 + \tfrac{\delta(2\sigma_2^2 - \sigma_1^2)s}{2\sigma_1^4}\bigr)$, with denominator $2\sigma_1^4$. Since γ is explicitly described as the ratio of the coefficients from condition (9) (lines 189–192: "The coefficients of the sample sizes reveal that one unit of high-quality data is worth: γ := …"), these should match. This inconsistency in the paper's central definition—different denominators for what should be the same coefficient—casts doubt on the precise meaning of γ and the validity of the derivation in (14), which depends on the (12) form. The entire framework relies on this being correct.
 
-- **The paper's story is incomplete: no informed LASSO result.** The stated contribution is to expose "a fundamental difference between how the information-theoretic and algorithmic thresholds adapt to changes in data quality." For information-theoretic thresholds, both agnostic and informed settings are analyzed; for algorithmic thresholds, only the agnostic setting is covered. The informed extension is acknowledged as nontrivial (Remark 4.2), but its absence means the central comparison is between (agnostic IT, informed IT) on one side and only (agnostic ALG) on the other. Whether the LASSO's noise-averaging robustness persists when the loss is reweighted is an open question that directly affects the paper's narrative arc.
+- **Overclaimed sharpness of the informed IT threshold:** The conclusion (line 354) states "the informed information-theoretic threshold and the LASSO threshold are sharp." For the LASSO, this is justified by Theorem 3 (both necessity and sufficiency). For the informed IT threshold, Theorem 2 only provides a *sufficient* condition, and Remark 3.3 explicitly notes: "Establishing full necessity in the heterogeneous setting remains an interesting direction for future work." Claiming sharpness without a necessity proof is an overstatement, and the caveat is buried in a remark rather than reflected in the conclusion.
+
+- **Price of Quality γ ≤ 2 is a property of a loose sufficient condition, not of the IT limit:** The central headline finding—"one high-quality sample is never worth more than two low-quality samples"—holds only under Theorem 1's sufficient condition, which the authors explicitly acknowledge is not expected to be information-theoretically sharp (Remark 3.2: "not expected to be information-theoretically sharp"). This bound γ ≤ 2 could be an artifact of the Chernoff relaxation rather than a fundamental property. The abstract and introduction present this finding prominently without adequate qualification that it applies only to a possibly-loose sufficient condition. This does not invalidate the result but significantly limits the strength of the "never worth more than two" claim.
 
 ### Minor
 
-- **No numerical verification of the sufficient conditions.** Simulations plotting recovery probability as a function of $(n_1, n_2)$ for various $(\sigma_1^2, \sigma_2^2)$ would allow readers to assess how loose the agnostic bound is and whether the γ ≤ 2 finding is empirically approximately correct. This is standard practice even in theoretical papers in this area (e.g., the sparse phase retrieval literature includes numerical phase diagrams).
+- **Incomparable signal models across sections:** The IT results (§3) assume binary signals β* ∈ {0,1}ᵖ, while the LASSO result (§4) assumes β* ∈ C_{p,s}(ρ). The paper's narrative contrasts these thresholds, but they are not directly comparable under different signal assumptions. Remark 3.1 argues the binary case is "hardest" (supporting the sufficiency direction), but the LASSO necessity direction (Theorem 3 part i) might not hold for binary signals.
 
-- **The agnostic coefficient for $n_1$ depends on $\sigma_2^2$** (eq. 9): the value assigned to a high-quality sample in the sufficient condition is affected by the noise level of low-quality samples, which is presumably an artifact of the unweighted loss function and the Chernoff relaxation rather than a meaningful property. This is not discussed in the paper but deserves acknowledgment.
-
-- **Remark 3.4 (generalization to arbitrary Σ) is stated without proof.** The extension to general invertible Σ giving conditions (22) and (23) is presented as a natural extension of the proof strategy but without even a sketch of why the arguments carry through.
+- **No numerical or experimental validation:** The paper is entirely theoretical. Simulations confirming (e.g.) that LASSO recovery indeed depends only on total n and σ²_avg, or illustrating the gap between the sufficient condition and empirical recovery, would strengthen the presentation and help readers assess the tightness of the agnostic IT bounds.
 
 ### Trivial
-None.
+
+- The alternative estimator suggested in Remark 3.2 (weighting by 1/Yᵢ²) is mentioned without any analysis, which raises more questions than it answers. A brief comment on feasibility would help, but this is a minor scope issue.
 
 ## Nice-to-Haves
 
-- Solving the cubic equation from Remark 3.2 numerically for specific parameter values and comparing the resulting γ against the relaxed γ ≤ 2 bound would directly address the tightness concern and substantially strengthen the paper's conceptual claims.
-- Phase diagrams in the $(n_1, n_2)$ plane for concrete $(\sigma_1^2, \sigma_2^2, s, p)$ would make the Price of Quality immediately visible.
-- Establishing even partial necessity (e.g., showing recovery fails when both $n_1$ and $n_2$ are too small) would elevate the IT results from "sufficient conditions with interpretable coefficients" to a characterization of the trade-off.
+- Numerical experiments comparing the sufficient condition boundaries against empirical recovery rates, which would reveal the gap between Theorem 1's condition and the true threshold and help assess whether γ ≤ 2 is tight.
+- Explicit characterization of the "more data can hurt" phenomenon implied by Proposition 4.1 (increasing n₂ can push σ²_avg beyond the feasibility bound (30)).
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution:
+*These points are flagged to be removed; treat them with caution.*
 
-- **Harsh critic's claim that the abstract omits the "under our sufficient condition" qualifier**: This is factually incorrect. The abstract explicitly states "one high-quality sample is never worth more than two low-quality samples *for this sufficient condition to hold*" (line 23). The body text is also consistent in including this qualifier (§1.2.1, §3.1, §5). The overclaiming concern is more about the broader framing ("fundamental difference") than about the specific γ ≤ 2 statement.
+- **The informed IT Chernoff optimization being "exact" (Harsh Critic point 2 partial):** The harsh critic notes the Chernoff optimization in the informed case is "exact" but this still only gives sufficiency. The paper does acknowledge this (Remark 3.3). The partial overclaim in the conclusion is kept as a Major weakness above, but the broader point that the Chernoff exponent is tight in the homogeneous case is a reasonable argument for likely tightness that the paper does not fully rely on.
 
-- **Harsh critic's claim about Remark 3.1 overstating WLOG**: The remark does not use the phrase "without loss of generality." It carefully states that results "can be viewed as applying to signals whose non-zero components are at least 1 in magnitude" and provides the correct intuition that detecting a component of magnitude 1 is at least as hard as detecting a stronger component. The presentation is adequate.
+- **Remark 3.4 generalization being conservative with σ_max(Σ):** This is a minor observation about a remark; the paper explicitly flags it as a generalization and does not overclaim tightness. Removed as too minor.
 
-- **Demand for the paper to address problems outside its scope** (e.g., variance-aware agnostic estimators, sub-Gaussian extensions): The paper explicitly scopes its analysis to the unweighted least-squares estimator and Gaussian noise. Requesting analysis of more sophisticated agnostic estimators or non-Gaussian settings is a nice-to-have, not a weakness.
+- **"More data can hurt" for LASSO (Harsh Critic §4 note):** This is implicit in Proposition 4.1's condition on σ²_avg, but is not explicitly discussed. Moved to Nice-to-Haves since it's an interesting observation the authors could highlight but not a flaw in their results.
 
-- **Formatting/presentation nitpicks**: Removed per instructions.
+- **Missing experiments (Harsh Critic):** Moved to Minor; pure theory papers are common in this community, but empirical validation would strengthen the paper in this case because the tightness of the agnostic sufficient condition is a key open question.
+
+- **Demand for tighter agnostic IT bounds or analysis of eq. (37):** This is beyond the paper's stated scope. The authors acknowledge this as future work. Moved to Nice-to-Haves.
+
+- **Reproducibility/implementation concerns:** Removed per rules.
+
+- **The conclusion's speculation about algorithmic thresholds being "more robust" (Harsh Critic §5):** The conclusion offers this as a broader observation supported by one example plus cited work; this is reasonable speculative discussion and not an overclaim. Removed.
+
+- **Formatting artifacts, typos, notation issues:** Removed per rules.
 
 ## Novel Insights
 
-The paper identifies a genuinely interesting structural phenomenon: the LASSO's algorithmic threshold is completely insensitive to noise heterogeneity (depending only on total sample size and average noise), while information-theoretic recovery is sensitive to quality differences. This mirrors a broader pattern in the sparse recovery literature where algorithmic thresholds appear more "robust" to model perturbations than information-theoretic ones (cf. sparse design results of Omidiran & Wainwright 2008). The Price of Quality framing—while not fully established quantitatively—captures a real and practically important insight: knowing uncertainty levels and rescaling the loss accordingly is disproportionately valuable when quality disparities are large.
+The most distinctive insight is the fundamental decoupling between IT and algorithmic robustness to data heterogeneity: in the agnostic IT setting, one high-quality sample replaces at most two low-quality ones (γ ≤ 2), yet algorithmically the LASSO treats both equally (γ = 1). This means computational recovery is *more robust* to data quality variation than any agnostic information-theoretic decoder. However, this insight's precision is undermined by the formula inconsistency in the central definition of γ, which must be resolved.
 
 ## Suggestions
 
-- Add a short numerical section (even 1–2 figures) solving the cubic from Remark 3.2 for specific parameters and comparing the resulting γ to the relaxed γ ≤ 2. This would cost little space and directly address the most important open question about the paper's central claim.
-- Moderate the "fundamental difference" language in the abstract to acknowledge that the agnostic γ ≤ 2 result is derived from a non-tight sufficient condition. For example: "expose a qualitative difference...though the agnostic bound may tighten with further analysis."
-- Discuss why the agnostic γ should be bounded independent of the bound tightness: is there an information-theoretic argument that, without quality knowledge, high-quality data has fundamentally limited marginal value? Even a paragraph of informal reasoning would strengthen the interpretability of the result.
+- **Resolve the formula inconsistency between equations (9) and (12)** before publication. Verify which denominator is correct (likely the one from (9), since it derives from the Chernoff bound), update the Price of Quality definition and all subsequent approximations consistently, and re-derive equation (14).
+- **Qualify the "sharpness" claim for the informed IT threshold** in the conclusion, or at minimum add "expected to be sharp" rather than stating it as established, to match the honest caveat in Remark 3.3.
+- **Add a prominent qualification** in the abstract/introduction that γ ≤ 2 in the agnostic setting holds under a sufficient condition that is not proven tight, to avoid readers interpreting it as a fundamental IT bound.
+- Add even a simple simulation figure to validate the LASSO phase transition prediction and illustrate the (n₁, n₂) recovery boundary.
 
 ## Score and Decision
 
 **Calibration anchors:**
 
-- **High band (>7):** Sparse phase retrieval with provable algorithm (BlkxbI6vzl, avg 7.0, poster) — has both theory and experiments with tighter results; Streaming ℓ_p regression (Kpjvm2mB0K, avg 8.0, spotlight) — deep theory with tight upper and lower bounds; Data selection under weak supervision (HhfcNgQn6p, avg 7.75, oral) — mixed-quality data with theory + experiments + practical insights.
-- **Medium band (4–6):** Multi-index model with sufficient conditions (QY52D9BeJo, avg 6.0, reject) — sufficient conditions that miss structural details, similar overclaiming pattern; Sparse RL sample complexity (nIEjY4a2Lf, avg 6.0, poster) — sufficient conditions for a new problem; Denoising under distribution shift (WmB803HJkD, avg 4.33, reject) — pure theory with questionable assumptions and no tight results.
-- **Low band (<3):** Increasing batch size/LR (l2odw7OiNw, avg 2.5, reject) — acceleration claims from loose upper bounds, likely incorrect; Neural bounds on Bayes error (Hh0Cg4epYY, avg 2.33, reject) — oversold claims with loose bounds and poor soundness.
+1. **High-scoring anchors (avg >7):** 8KcjEygedc (7.5, Accept Poster) — theoretical framework for data curation with exact phase transitions; Q3yLIIkt7z (7.0, Accept Oral) — phase diagram with LASSO connections; AUXvYQlQLZ (7.33, Accept Oral) — necessary and sufficient conditions, clean theory. These papers have clean, complete results with no major internal inconsistencies.
 
-The paper under review is clearly above the low-band papers: its LASSO result (Theorem 3) is tight and technically sound, the problem is well-motivated, and the paper is honest about limitations. However, it falls below the high-band papers: those have tight characterizations, experimental validation, or more complete stories. Compared to medium-band papers, it is comparable to the multi-index model paper (avg 6.0, rejected) which also had sufficient-but-not-necessary conditions and was dinged for not fully establishing its conceptual claims. However, our paper has a stronger algorithmic result (Theorem 3 is tight two-sided) and identifies a more directly practical problem. I place it slightly above the QY52D9BeJo anchor but below the nIEjY4a2Lf anchor (which was accepted as poster). The paper's incomplete story (no informed LASSO) and the non-tightness of the central conceptual claim pull it down from a clear accept, but the genuine contributions—particularly Theorem 3—keep it from being a reject.
+2. **Medium-scoring anchors (4-6):** hisAy19yMP (5.5, Reject) — sufficient-only conditions for identifiability, flagged as key weakness; YM6KIpl6aR (5.0, Reject) — fundamental efficiency-confidence bound with tightness concerns; TP4gsjpi7z (3.5, Reject) — phase transition in shuffled regression with approximation concerns.
+
+3. **Low-scoring anchors (<3):** TW5DEgtacg (2.0, Reject) — overclaimed necessity from sufficient conditions, logical errors.
+
+**Comparison:** This paper has a genuine and important contribution (the LASSO phase transition with the novel QR/Haar proof technique), plus a useful conceptual framework (Price of Quality). However, the formula inconsistency between (9) and (12) is a significant mathematical error in the paper's central definition — it's not a cosmetic typo but an error affecting what γ means. The overclaimed sharpness of the informed IT threshold and the insufficient qualification of the γ ≤ 2 bound are serious but addressable presentation issues. Compared to the high-scoring anchors (7+), those papers have clean, complete results without internal inconsistencies. Compared to the medium anchors (4-5.5), those have sufficient-only conditions flagged as weaknesses — this paper shares that issue. The formula error puts this paper below the high-scoring tier. The LASSO result and the conceptual framework are real contributions above the purely weak/overclaimed anchors (3-4 range). I place this paper in the upper range of the medium tier, penalized by the formula error but buoyed by the solid LASSO contribution.
 
 MY FINAL SCORE: <pineapple>5.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>
