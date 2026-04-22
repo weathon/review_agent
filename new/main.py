@@ -46,7 +46,7 @@ _error_handler = logging.FileHandler(_error_log_path, mode="a")
 _error_handler.setFormatter(logging.Formatter("%(asctime)s | %(message)s"))
 _error_logger.addHandler(_error_handler)
 
-HUMAN_REVIEW_DIR = os.path.abspath("../human_reviews_2026/")
+HUMAN_REVIEW_DIR = os.path.abspath("../human_reviews/")
 CONCURRENCY = int(os.environ.get("CONCURRENCY", 1))
 
 # ── Agent-level retry ────────────────────────────────────────────────

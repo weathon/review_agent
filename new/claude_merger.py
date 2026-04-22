@@ -15,7 +15,7 @@ from openai import OpenAI
 import dotenv
 dotenv.load_dotenv()
 
-HUMAN_REVIEW_DIR = os.path.abspath("../human_reviews_2026/")
+HUMAN_REVIEW_DIR = os.path.abspath("../human_reviews/")
 
 # ── Build indexes (mirrors tools.py) ──────────────────────────────────
 _bm25_db: dict = {}
@@ -40,12 +40,12 @@ def _ensure_indexes():
     _bm25_db["bm25"] = BM25Okapi(tokenized)
     _bm25_db["files"] = all_file_paths
 
-    with open("./human_reviews_embeddings_2026.pkl", "rb") as f:
+    with open("./human_reviews_embeddings.pkl", "rb") as f:
         db = pickle.load(f)
     _bm25_db["filenames"] = list(db.keys())
     _bm25_db["vectors"] = np.array(list(db.values()))
 
-    with open("./human_review_score_index_2026.pkl", "rb") as f:
+    with open("./human_review_score_index.pkl", "rb") as f:
         _bm25_db["score_index"] = pickle.load(f)
 
 
@@ -168,7 +168,7 @@ def _make_merger_mcp_server(paper_dir: str, no_cal: bool = False):
                 if not np.isfinite(masked[idx]):
                     break
                 fn = filenames[idx]
-                fpath = os.path.abspath(f"../human_reviews_2026/{fn}")
+                fpath = os.path.abspath(f"../human_reviews/{fn}")
                 rel = similarities[idx]
                 avg = score_index.get(fn, -1.0)
                 with open(fpath, "r", errors="replace") as fh:

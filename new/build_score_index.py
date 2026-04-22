@@ -7,8 +7,8 @@ Idempotent: skips files already containing an `- Avg Score:` line.
 import os
 import pickle
 
-REVIEW_DIR = os.path.abspath("../human_reviews_2026/")
-INDEX_PATH = os.path.abspath("./human_review_score_index_2026.pkl")
+REVIEW_DIR = os.path.abspath("../human_reviews/")
+INDEX_PATH = os.path.abspath("./human_review_score_index.pkl")
 
 
 def parse_scores(line: str) -> list[float]:
