@@ -29,7 +29,7 @@ Pipeline 对极端低分/高分论文**系统性地不敢给极端分**,把所�
 
 ### 走过的错误假设 (按被推翻顺序)
 
-1. **PDF parser contamination** — 早期一度低估了它。旧的 `iclr2026_cspaper` 确实有大量 parser noise: 行号 run、断词、公式碎裂、图表占位符都明显高于 2025。最初只看单篇 clean-parse rerun 时, 觉得单独清 parse 只能贡献 ~+0.5 (如 VbTLgEUocp: 4.5 → 5.0), 不足以解释整体现象。但后面把 `../iclr2026_cspaper` 整套换成 API parser 重跑得到 `../iclr2026_cspaper_new` 后, **在 calibration set 还没改的情况下 benchmark 就已经明显改善**。这说明 parser shift 不是边角噪声, 而是 2026 失真的一个主要来源。现在更合理的表述是: parser 是 **major factor**, calibration 仍然重要, 但它不是唯一主因。
+1. **PDF parser contamination** — 这是一个被反复误判的假设。旧的 `iclr2026_cspaper` 确实更脏: 行号 run、断词、公式碎裂、图表占位符都明显高于 2025。中途一度因为换成 API reparse 后的 `../iclr2026_cspaper_new` 早期 benchmark 看起来更好, 就把 parser 当成 major factor。但后面为了和 baseline 公平对比, 又切回旧的 "dirty" corpus 跑长 benchmark, **结果也恢复正常 / 相关性也出来了**。这说明之前还是被 early signal 误导了。更合理的结论是: parser noise 可能有边际影响, 但**不是主因**, 不足以解释 2026 的随机感。
 
 2. **2026 bench 是 reviewer-disagreement-heavy subset** — `iclr2026_cspaper/papers/` 只有 203 / 571 的 ratings.csv, 这个 disk subset 的 one-vs-rest reviewer r=0.609 vs full ratings.csv 的 0.722。真的有偏。但不能解释 pipeline 在所有 gt 上都压缩,也不能解释 pred std 恒低。 *真实但非主因。*
 
@@ -67,10 +67,11 @@ metric.py 里加了 per-bin accept rate (pred vs individual human) — 这是最
 
 ### 后续修正 (2026-04-22)
 
-- 上面第 1 条后来被新实验部分推翻: 用 `main.py` 单论文路径里的 API PDF parser, 把 `../iclr2026_balanced` 和 `../iclr2026_unbalanced` 里的原始 PDF 全部重 parse 到 `../iclr2026_cspaper_new`。
+- 用 `main.py` 单论文路径里的 API PDF parser, 把 `../iclr2026_balanced` 和 `../iclr2026_unbalanced` 里的原始 PDF 全部重 parse 到 `../iclr2026_cspaper_new`。
 - 新 corpus 共 200 篇, `reparse_manifest.txt` 记录 `failures=0`。
-- 在 **不改 calibration set** 的前提下 rerun benchmark, 用户观察到结果已经明显变好。
-- 所以现在对 2026 问题的判断应改成: **旧 parser / 文本表示漂移本身就足以显著伤害分数相关性**, 不是单纯 calibration 才导致的。
+- 一开始在 **不改 calibration set** 的前提下 rerun benchmark, 早期结果看起来明显变好, 一度以为 parser shift 抓到了主因。
+- 但后面为了和 baseline 公平, 又切回旧的 dirty corpus 跑长 benchmark, 发现结果同样可以恢复正常。这说明前面的判断还是吃了 partial / prefix result 的亏。
+- 当前更稳的判断是: **不要从 early partial run 下结论**。parser 可能有 marginal effect, 但 strong general LLM 并不会因为 text 有点脏就完全失去信号; 2026 的问题更像是 benchmark 早期波动 / sample composition / 长跑稳定性, 而不是 parser 本身。
 
 ---
 

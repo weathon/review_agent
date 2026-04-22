@@ -1,63 +1,90 @@
+Now I have all the information I need. Let me write the final review.
+
 ## Summary
-This paper studies sparse support recovery from *mixed-quality* (two-variance) Gaussian linear measurements, comparing an **agnostic** decoder that ignores per-sample variances versus an **informed** decoder that uses them. It derives closed-form *sufficient* recovery conditions that induce a “Price of Quality” (PoQ) exchange rate between high- and low-quality samples, and proves an agnostic heteroscedastic extension of the classic LASSO signed-support phase transition where heterogeneity enters only through an average noise variance.
+
+This paper studies sparse recovery under heterogeneous noise from two quality sources (high-quality with variance σ₁² and low-quality with variance σ₂²), establishing sufficient conditions for information-theoretic recovery in agnostic and informed settings, and a necessary-and-sufficient phase transition for LASSO recovery. The paper introduces the "Price of Quality" γ — the number of low-quality samples equivalent to one high-quality sample under the sufficient condition — showing γ ≤ 2 in the agnostic IT setting, γ → ∞ in the informed IT setting, and γ = 1 for the LASSO (sample count threshold depends only on n₁+n₂).
 
 ## Strengths
-- **Clear, explicit sufficient conditions for IT recovery with an interpretable linear trade-off**: Theorems 1–2 give concrete inequalities (Eq. (9) and Eq. (16)) of the form “weighted \(n_1,n_2\) exceed \(n^*\)”, enabling a direct PoQ definition (Eq. (5)) and regime analysis (Secs. 3.1–3.2).
-- **Nontrivial algorithmic contribution extending Wainwright-style LASSO threshold analysis to heteroscedastic noise**: Theorem 3 keeps the sample-size threshold at \(n_{\text{ALG}}=2s\log(p-s)+s+1\) (Eqs. (26)–(27)), with noise entering via \(\sigma^2_{\text{avg}}\) (Eq. (6)) and feasibility characterized by Proposition 4.1 (Eq. (30)); the proof sketch indicates genuinely different technical handling (QR/Haar) due to \(\Sigma\) (Sec. 4, after Thm. 3).
+
+- **The LASSO phase transition (Theorem 3) is a genuine, non-trivial contribution.** It cleanly extends Wainwright (2009) to heterogeneous noise by providing necessary (Eq. 26) and sufficient (Eq. 27) conditions, showing the threshold depends only on total sample size n₁+n₂. The proof technique — using QR decomposition and Haar measure properties (Lemma D.6) to handle the non-Wishart structure introduced by the diagonal Σ — is a real technical advance over the homogeneous-noise proof.
+
+- **The "Price of Quality" is a clean, interpretable metric.** The linear trade-off form α₁n₁ + α₂n₂ ≥ n* (Eqs. 9, 16) makes γ = α₁/α₂ well-defined and interpretable, and the closed-form expressions across SNR regimes (Eqs. 12–14, 18–21) provide immediate practical guidance.
+
+- **The distinction between agnostic and informed settings is well-motivated and practically relevant**, correctly identifying that the key difference is whether Σ⁻¹ rescaling is available. The practical implication — "quantify uncertainty in the annotations and rescale the loss accordingly" (§5) — is directly supported by the provable gap between the agnostic and informed Price of Quality.
+
+- **Systematic analysis across all SNR regimes** for both agnostic and informed settings gives a complete picture of when quality matters most, and the generalization to arbitrary invertible Σ (Remark 3.4, Eqs. 22–23) shows the results are not artifacts of the two-block assumption.
 
 ## Weaknesses
 
 ### Fatal
-- **Apparent algebraic inconsistency in the agnostic PoQ formula, which directly undermines the “\(<2\)” headline.**  
-  The sufficient condition in Theorem 1 uses the coefficient  
-  \[
-  n_1\log\!\Big(1+\frac{\delta(2\sigma_2^2-\sigma_1^2)s}{2\sigma_2^2}\Big)\quad\text{(Eq. (9))}
-  \]
-  so the PoQ should be the ratio of that coefficient to the \(n_2\) coefficient \(\log(1+\delta s/(2\sigma_2^2))\). However Eq. (12) instead defines
-  \[
-  \gamma := \frac{\log(1+\delta(2\sigma_2^2-\sigma_1^2)s/(2\sigma_1^4))}{\log(1+\delta s/(2\sigma_2^2))}\quad\text{(Eq. (12))}
-  \]
-  which replaces the \(\,2\sigma_2^2\,\) denominator inside the first log by \(\,2\sigma_1^4\,\) (dimensionally and structurally different), and the subsequent asymptotics (Eqs. (13)–(14)) are derived from Eq. (12). Since the paper’s key qualitative statement “\(\gamma<2\)” in the agnostic setting (Eq. (14) and Abstract/Sec. 1.2.1/Conclusion) depends on this PoQ derivation, this mismatch must be resolved for the central message to be trustworthy.
+None.
 
 ### Major
-- **Overinterpretation of a non-tight sufficient condition as a “fundamental” property of the agnostic setting.**  
-  The paper repeatedly frames bounded PoQ in the agnostic regime as a phenomenon of the *setting* (Abstract: “uniformly bounded”; Sec. 1.2.1; Conclusion), yet it explicitly concedes non-tightness and decoder dependence: Remark 3.2 states Theorem 1 “is sufficient and is not expected to be information-theoretically sharp” and attributes looseness to a relaxation of a Chernoff optimization; it also notes alternative “agnostic” procedures (e.g., data-dependent reweighting by \(1/Y_i^2\)). Even if Eq. (12) were corrected, the bounded-\(\gamma\) takeaway is currently established only for one specific decoder (Eq. (8)) plus a deliberately relaxed analysis, with no lower bound showing *any* agnostic procedure must have bounded PoQ.
 
-- **The “LASSO depends only on average noise / HQ and LQ contribute equally” messaging needs tighter scoping to the actual statement.**  
-  Theorem 3’s sample-size threshold indeed depends on total \(n=n_1+n_2\) (Eqs. (26)–(27)), but success additionally requires tuning/noise scaling constraints (Eq. (28)) and feasibility is explicitly limited by Proposition 4.1 (Eq. (30)) through \(\sigma^2_{\text{avg}}\). The Introduction and Conclusion claim “only depends on the average noise level” and “high-quality and low-quality samples contribute equally” (Sec. 1.2.2; Conclusion), which is easy to misread as “heterogeneity doesn’t hurt.” In fact, if \(\sigma^2_{\text{avg}}\) is large, Eq. (30) fails and LASSO recovery is not covered. This is a correct result as stated, but the headline phrasing should be narrowed to “heterogeneity affects LASSO only through \(\sigma_{\text{avg}}\) in the tuning/noise feasibility conditions, not in the sample-size threshold.”
+- **The Conclusion claims the informed information-theoretic threshold is "sharp," but Remark 3.3 explicitly states necessity is unproven.** The Conclusion (§5) states: "the informed information-theoretic threshold and the LASSO threshold are sharp." Yet Remark 3.3 says: "Establishing full necessity in the heterogeneous setting remains an interesting direction for future work." This is an internal contradiction. Since the informed condition (16) is sufficient but not proven necessary, calling it "sharp" is inaccurate. This matters because the paper's central narrative — the "fundamental difference" between bounded agnostic γ ≤ 2 and unbounded informed γ → ∞ — depends on both conditions being tight. If the agnostic condition is loose (which the paper acknowledges) and the informed condition's necessity is unproven, the contrast could partly reflect different levels of looseness rather than a genuine structural difference in the underlying problems.
+
+- **The agnostic γ ≤ 2 bound is a property of the relaxed sufficient condition, not a proven property of the recovery problem.** The paper acknowledges in Remark 3.2 that the sufficient condition (9) arises from a relaxation of the cubic equation (37) in the Chernoff bound, and is "not expected to be information-theoretically sharp." The true agnostic Price of Quality could be larger than 2; the relaxed bound simply cannot detect it. While the abstract and §1.2.1 include the qualifier "for this sufficient condition to hold," the Conclusion (§5) drops it: "one high-quality sample is never worth more than two low-quality samples." This inconsistent framing presents a property of a loose bound as if it were a fundamental finding about the problem. The paper would be significantly strengthened by either tightening the bound or consistently and prominently qualifying the claim throughout.
 
 ### Minor
-- **The definitions of \(\mathrm{SNR}_1,\mathrm{SNR}_2\) appear incorrect as written.**  
-  Eq. (143) defines \(\mathrm{SNR}_1\) using \(\mathbb{E}\|y_i-x_i^T\beta^*\|^2\), but \(y_i-x_i^T\beta^*=Z_i\), so the numerator equals the denominator up to indexing, making the ratio \(\approx 1\), yet the paper sets it equal to \(s/\sigma_1^2\). This looks like a definitional slip (perhaps intending \(\mathbb{E}\|x_i^T\beta^*\|^2\) in the numerator). Since the regime discussions in Sec. 2/3 rely on these SNR notions, it should be corrected for conceptual clarity.
+
+- **Theorem 3 requires n₁, n₂ = ω(s), excluding the practically relevant fixed-n₁ regime.** In mixed-quality data applications, one typically has a fixed small number n₁ = O(1) of expert labels combined with many low-quality labels. The current result does not cover this case, which is the most practically important setting.
+
+- **The LASSO "striking robustness" framing in the abstract slightly overstates the finding.** While the sample-count threshold n_ALG is genuinely independent of the noise split, Proposition 4.1 shows recovery also requires σ²_avg = o(n/((1+s/ρ²)log(p−s))), which constrains how much high-variance data can be added. The paper acknowledges this, but the abstract's "striking robustness" language could mislead readers into thinking low-quality data is freely substitutable without any noise-level constraint.
 
 ### Trivial
 None.
 
 ## Nice-to-Haves
-- Empirically validate whether the agnostic “\(\gamma<2\)” behavior (after fixing Eq. (12)) is an artifact of the relaxed bound/decoder by plotting recovery contours over \((n_1,n_2)\) for the agnostic decoder (Eq. (8)), the informed MLE (Eq. (15)), and LASSO (Eq. (24)) across SNR regimes.
+
+- **Numerical verification of the sufficiency gap.** A figure comparing the sufficient condition (9) against the numerically optimized Chernoff bound (solving equation 37) for representative parameter regimes would directly quantify the looseness that undermines the agnostic Price of Quality claims.
+
+- **Simulation of the LASSO phase transition under heterogeneity.** Empirical recovery probability as a function of n for different (n₁, n₂) splits at fixed total n would make the "robustness" claim concrete and visually compelling.
+
+- **Establishing necessity for the informed condition (Theorem 2).** The informed MLE setting is the natural place to establish tight IT results since the Chernoff exponent can be optimized in closed form (§3.2 proof sketch). Proving necessity would convert a suggestive sufficient condition into a genuine threshold.
 
 ## Removed Points
-These points are flagged to be removed, treat them with caution.
-- Requests for “missing appendix/proofs/refs” or style/formatting issues — the extraction explicitly omits appendices and has parser artifacts; these are not paper flaws.
-- “Unfair comparison” between Theorem 1 and Theorem 2 because one is “more optimized” — the substantive issue is instead captured above as an *overclaim/tightness* problem; the paper itself already acknowledges non-tightness for Theorem 1 (Remark 3.2) and non-necessity for Theorem 2 (Remark 3.3).
+
+*These points are flagged to be removed, treat them with caution.*
+
+- **Omidiran & Wainwright sufficiency-only criticism:** The harsh critic claimed the paper does not mention that Omidiran & Wainwright (2008) only establishes sufficiency. In fact, the Conclusion explicitly states: "although this was shown only for the sufficient condition, with no corresponding result on necessity." This criticism is factually wrong.
+
+- **Parser artifacts (σ₄², etc.):** These are PDF extraction artifacts, not author errors.
+
+- **Edge case when σ₁ ≈ σ₂:** The harsh critic notes the Price of Quality is "least meaningful" when noise levels are close. This is trivially obvious and not a weakness — the concept is designed for the regime where σ₁ ≪ σ₂.
+
+- **SNR regime specification for n_INF and n_ALG in §1.1.1:** These are standard results from Reeves et al. (2019) and Wainwright (2009). The paper discusses SNR dependence immediately after in the same section. Minor presentation issue at best.
+
+- **Demand for experiments as a core weakness:** This is a theory paper; experiments would strengthen it but are not required by community standards for this type of contribution.
+
+- **Missing related works claims:** Cannot verify without external sources; removed per rules.
+
+- **Strength finder's "striking contrast" strength conflicts with verified Major weakness about sufficient-only conditions:** The claimed "fundamental dichotomy" between bounded agnostic γ and unbounded informed γ is weakened by the fact that the agnostic bound is sufficient-only and potentially loose. Downgrading this strength — the contrast is suggestive but not proven to be fundamental.
 
 ## Novel Insights
-A key conceptual risk is that the paper’s narrative contrasts “bounded PoQ (agnostic IT)” vs “unbounded PoQ (informed IT)” vs “robust algorithmic threshold,” but the *only* part that is both (i) clearly correct as stated and (ii) relatively close to a classical sharp phenomenon is the LASSO phase transition extension (Theorem 3 + Prop. 4.1). In contrast, the IT “bounded PoQ” half currently mixes a likely formula error (Eq. (12) vs Eq. (9)) with an explicitly relaxed Chernoff analysis (Remark 3.2), making it much less solid than the algorithmic contribution; restructuring the paper to foreground the LASSO heteroscedastic extension and to downgrade the agnostic-PoQ claim to “for this decoder/bound” would better align claims with support.
+
+The paper's most insightful observation is that the LASSO's insensitivity to noise heterogeneity (Price of Quality = 1 at the sample-count level) coexists with a genuine noise-level constraint (Proposition 4.1), creating a subtler picture than "quality doesn't matter algorithmically": quality doesn't affect *how many* samples you need, but it does affect *how noisy* those samples can be on average before recovery becomes impossible. This dual structure — sample-count independence coupled with noise-averaging dependence — is more nuanced than the paper's "striking robustness" framing suggests, and is itself a contribution worth emphasizing more precisely.
 
 ## Suggestions
-- **Fix and re-derive PoQ in the agnostic setting starting directly from Eq. (9)** (define \(\alpha_1,\alpha_2\) from (9), then \(\gamma=\alpha_1/\alpha_2\)), and regenerate Eqs. (13)–(14) accordingly; update the Abstract/Sec. 1.2.1/Conclusion to match the corrected statement.
-- Reframe the “bounded PoQ” claim as *procedure/bound-dependent* unless you add a genuine agnostic lower bound or restrict the agnostic class and prove boundedness within that class.
-- Correct the SNR\(_1\)/SNR\(_2\) definitions (Eq. (143)) so the regime language matches the formulas used in Sec. 3.
+
+- Fix the internal contradiction: either establish necessity for the informed condition (making the "sharp" claim accurate) or revise the Conclusion to clearly distinguish which thresholds are sharp (LASSO) from which are sufficient-only (both IT conditions).
+- Consistently qualify the agnostic γ ≤ 2 claim throughout, including in the Conclusion, or provide a numerical comparison showing the gap between the relaxed and optimized Chernoff bounds is small enough that the qualitative conclusion (γ bounded vs. γ unbounded) is robust.
+- Discuss the fixed-n₁ regime limitation explicitly and consider whether partial results (e.g., for n₁ = s·polylog(p)) are achievable with current techniques.
 
 ## Score and Decision
-**Calibration anchors considered (path; avg human score; comparison):**
-- High: `/home/wg25r/review_agent/human_reviews_2026/Q3yLIIkt7z.md` (7.0) — strong, coherent theory with claims tightly matched to results; the current paper is weaker due to a central formula inconsistency and overclaiming.
-- High: `/home/wg25r/review_agent/human_reviews_2026/8KcjEygedc.md` (7.5) — clear quantitative claims and scaling laws; again stronger in internal consistency than this submission.
-- Medium: `/home/wg25r/review_agent/human_reviews_2026/zXu7faqHCj.md` (4.67) — a borderline theory/CS paper with conceptual issues; this paper is in a similar band given the severity of the Eq. (12) problem, despite having a strong LASSO component.
-- Medium: `/home/wg25r/review_agent/human_reviews_2026/f07Kf4pD0f.md` (4.5) — overclaim/incompleteness flagged; analogous to the overinterpretation of sufficient conditions here.
-- Low: `/home/wg25r/review_agent/human_reviews_2026/SkmkGKEZ1U.md` (0.5) — fundamentally non-rigorous; this submission is far stronger than that, with substantial correct technical development (especially Thm. 3), so it should not be in the very-low range.
 
-**Overall assessment:** Original question is important and the LASSO heteroscedastic extension appears valuable and technically nontrivial. However, the paper’s *headline* PoQ takeaway in the agnostic IT setting is currently not reliable because the stated PoQ formula (Eq. (12)) does not match the sufficient condition (Eq. (9)), and the “fundamental difference” framing is too strong given the explicit non-tightness/decoder dependence (Remark 3.2). This combination is substantial enough to argue for rejection unless corrected.
+**Calibration anchors used:**
 
-MY FINAL SCORE: <pineapple>4.5</pineapple>  
+| Paper | Path | Avg Score | Comparison |
+|-------|------|-----------|------------|
+| Scaling Laws and Spectra of Shallow NNs | Q3yLIIkt7z | 7.00 | High anchor: precise phase diagram, complete characterization — our paper's LASSO result is comparable in quality but the IT results are sufficient-only and the framing overclaims |
+| Computational Bottlenecks for Diffusions | rAjHUNXybH | 7.33 | High anchor: sharp algorithmic barriers instantiated on concrete problems — stronger than our paper because both IT and algorithmic results are tight |
+| Identifiability of Sparse Linear ODEs | BYBKqpZteT | 6.00 | Medium anchor: sharp threshold but limited assumptions — similar profile to our paper (good theory result, practical limitations) but our paper has the additional framing issue |
+| Noisy Zeroth-Order Hard-Thresholding | E5NwyihhEc | 5.00 | Medium anchor: valid but unsurprising theoretical contribution — our paper has a stronger contribution (Theorem 3) but also overclaims more |
+| Graph-guided Sparse Learning | IMQyjIxVew | 4.67 | Medium-low anchor: valid technical contribution but unclear formulation value — our paper is clearly stronger |
+| Gradient Flow Convergence | b36drMoKir | 0.50 | Low anchor: hidden assumption trivializes the result — our paper is far above this; Theorem 3 is a genuine contribution |
+| Large Weights / Layer Collapse | TW5DEgtacg | 2.00 | Low anchor: sufficient conditions too strong, overclaimed — our paper's overclaim is less severe; Theorem 3 is solid |
+
+The paper sits between the medium-scoring anchors. It is clearly above papers like E5NwyihhEc (5.00) and IMQyjIxVew (4.67) because Theorem 3 is a genuine, non-trivial contribution with complete (necessary and sufficient) characterization. However, it falls below BYBKqpZteT (6.00) because the overclaimed framing in the Conclusion and the internal contradiction on sharpness are significant issues for a theory paper whose narrative depends on comparing tightness across settings. The LASSO result alone would merit ~6, but the misleading framing of the IT results as "fundamental" when they are sufficient-only, combined with the Conclusion's incorrect sharpness claim, brings the score down.
+
+MY FINAL SCORE: <pineapple>5.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>
