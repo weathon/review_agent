@@ -1,5 +1,6 @@
 # Sparse Attention Adaptation for Long Reasoning
 
+- Avg Score: 5.20
 - Decision: Accept (Poster)
 - Scores: 4, 6, 8, 6, 2
 

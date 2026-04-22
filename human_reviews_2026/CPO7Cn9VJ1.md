@@ -1,5 +1,6 @@
 # EAPO: Enhancing Policy Optimization with On-Demand Expert Assistance
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 6, 2
 

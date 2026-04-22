@@ -1,5 +1,6 @@
 # SAGE: Spatial-visual Adaptive Graph Exploration for Efficient Visual Place Recognition
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 2, 4, 6
 

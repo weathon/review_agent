@@ -1,5 +1,6 @@
 # OPRIDE: Efficient Offline Preference-based Reinforcement Learning via In-Dataset Exploration
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 6
 

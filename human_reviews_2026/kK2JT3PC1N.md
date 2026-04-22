@@ -1,5 +1,6 @@
 # Search or Think? Rethinking Iterative RAG from An Entropy Perspective
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

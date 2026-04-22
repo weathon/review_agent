@@ -1,5 +1,6 @@
 # FixingGS: Enhancing 3D Gaussian Splatting via Training-Free Score Distillation
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 4
 

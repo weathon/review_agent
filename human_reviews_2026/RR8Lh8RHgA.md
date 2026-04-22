@@ -1,5 +1,6 @@
 # RACE Attention: A Strictly Linear-Time Attention for Long-Sequence Training
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 2
 

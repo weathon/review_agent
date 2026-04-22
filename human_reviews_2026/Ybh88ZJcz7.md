@@ -1,5 +1,6 @@
 # Face-Feature Tuning: Post-hoc Calibration for Fair and Accurate Deepfake Detection
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 2, 6
 

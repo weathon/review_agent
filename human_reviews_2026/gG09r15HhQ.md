@@ -1,5 +1,6 @@
 # Elastic Optimal Transport: Theory, Application, and Empirical Evaluation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 4
 

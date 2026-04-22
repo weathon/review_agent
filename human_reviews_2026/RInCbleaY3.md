@@ -1,5 +1,6 @@
 # Cortical-SSM: A Deep State Space Model for EEG and ECoG Motor Imagery Decoding
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 6, 4
 

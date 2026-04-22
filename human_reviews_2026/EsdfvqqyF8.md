@@ -1,5 +1,6 @@
 # Learning to Incentivize on the Fly: Leader-Follower Games with Policy Recommendation
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 2, 2, 6
 

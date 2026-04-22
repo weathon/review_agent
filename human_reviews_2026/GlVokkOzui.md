@@ -1,5 +1,6 @@
 # Post-Processing Approach for Distributive Fairness in Multi-Class Federated Learning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

@@ -1,5 +1,6 @@
 # OptSHAP: Explaining Dimensionality Reduction-based Models for Tabular Data via Optimization
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 4
 

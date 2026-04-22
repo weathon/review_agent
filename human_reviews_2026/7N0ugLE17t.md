@@ -1,5 +1,6 @@
 # Continuous-Time Value Iteration for Multi-Agent Reinforcement Learning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 10, 2
 

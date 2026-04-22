@@ -1,5 +1,6 @@
 # Expert-Integrated Active Learning for Optimizing LLM Agents
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2
 

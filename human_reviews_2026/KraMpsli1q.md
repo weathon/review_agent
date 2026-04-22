@@ -1,5 +1,6 @@
 # NeUQI: Near-Optimal Uniform Quantization Parameter Initialization
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 2, 4, 6
 

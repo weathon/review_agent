@@ -1,5 +1,6 @@
 # ZeroTuning: Unlocking the Initial Token's Power to Enhance Large Language Models Without Training
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 4
 

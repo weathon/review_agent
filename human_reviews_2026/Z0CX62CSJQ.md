@@ -1,5 +1,6 @@
 # Scaling Knowledge Editing in LLMs to 100,000 Facts with Neural KV Database
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 8, 6
 

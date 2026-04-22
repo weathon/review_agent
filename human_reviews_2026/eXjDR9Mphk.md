@@ -1,5 +1,6 @@
 # Beyond Correctness: Evaluating Subjective Writing Preferences Across Cultures
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 2, 6
 

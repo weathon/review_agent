@@ -1,5 +1,6 @@
 # Detecting Generated Images via Machine Unlearning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 2, 8
 

@@ -1,5 +1,6 @@
 # DefensiveKV: Taming the Fragility of KV Cache Eviction in LLM Inference
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 4, 6, 6, 6, 6
 

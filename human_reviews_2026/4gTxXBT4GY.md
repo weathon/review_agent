@@ -1,5 +1,6 @@
 # Neurosymbolic Language Reasoning as Satisfiability Modulo Theory
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 2, 2, 6
 

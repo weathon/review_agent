@@ -1,5 +1,6 @@
 # Planner-R1: Reward Shaping Enables Efficient Agentic RL with Smaller LLMs
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

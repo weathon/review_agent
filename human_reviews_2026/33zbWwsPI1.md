@@ -1,5 +1,6 @@
 # BrainMIND: Interpret Fine-grained Spatial Mapping of Brain Activity to Multi-semantic Concepts
 
+- Avg Score: 1.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 0, 0
 

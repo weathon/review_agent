@@ -1,5 +1,6 @@
 # A Comprehensive Benchmark for RNA 3D Structure-Function Modeling
 
+- Avg Score: 2.50
 - Decision: Reject
 - Scores: 2, 2, 2, 4
 

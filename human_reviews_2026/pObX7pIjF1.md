@@ -1,5 +1,6 @@
 # HieraQuery: Bridging Multimodal Understanding and High-Quality Generation through Multi-Scale Query Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

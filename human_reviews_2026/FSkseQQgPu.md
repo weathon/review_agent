@@ -1,5 +1,6 @@
 # Radio Frequency Ray Tracing via Stochastic Geometry
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

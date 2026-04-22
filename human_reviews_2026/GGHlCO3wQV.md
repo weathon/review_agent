@@ -1,5 +1,6 @@
 # DEMO:Diffusion-based Evolutionary Optimization for 3D Multi-Objective Molecular Generation
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 4, 2
 

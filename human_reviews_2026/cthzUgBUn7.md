@@ -1,5 +1,6 @@
 # Text2Interact: High-Fidelity and Diverse Text-to-Two-Person Interaction Generation
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 6, 6, 4
 

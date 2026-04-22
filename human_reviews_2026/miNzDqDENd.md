@@ -1,5 +1,6 @@
 # Guided Speculative Inference for Efficient Test-Time Alignment of LLMs
 
+- Avg Score: 4.00
 - Decision: Accept (Poster)
 - Scores: 4, 2, 6
 

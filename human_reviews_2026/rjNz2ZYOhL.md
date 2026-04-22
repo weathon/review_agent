@@ -1,5 +1,6 @@
 # TABS: Strategic Game-Based Multi-Stage Reinforcement Learning Challenge
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 2, 4, 2
 

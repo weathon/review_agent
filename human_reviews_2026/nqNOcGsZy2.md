@@ -1,5 +1,6 @@
 # GRAPE: Let GPRO Supervise Query Rewriting by Ranking for Retrieval
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 2
 

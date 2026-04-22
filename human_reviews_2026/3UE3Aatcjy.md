@@ -1,5 +1,6 @@
 # HWC-Loco: A Hierarchical Whole-Body Control Approach to Robust Humanoid Locomotion
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 6
 

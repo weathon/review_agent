@@ -1,5 +1,6 @@
 # On Diffusion-based Multiplex Dynamic Attributed Network Generator
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 4, 2
 

@@ -1,5 +1,6 @@
 # Aligned Textual Scoring Rule
 
+- Avg Score: 0.50
 - Decision: Reject
 - Scores: 2, 0, 0, 0
 

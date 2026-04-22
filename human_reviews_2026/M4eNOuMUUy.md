@@ -1,5 +1,6 @@
 # Design of Ligand-Binding Proteins with Atomic Flow Matching
 
+- Avg Score: 5.20
 - Decision: Reject
 - Scores: 4, 6, 4, 4, 8
 

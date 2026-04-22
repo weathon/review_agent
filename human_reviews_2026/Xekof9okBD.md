@@ -1,5 +1,6 @@
 # Efficient Multivariate Temporal Point Process via Monotone Alternating Splines
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 8, 2, 4, 4
 

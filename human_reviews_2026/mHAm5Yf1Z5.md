@@ -1,5 +1,6 @@
 # Trust the Process? Backdoor Attack against Vision–Language Models with Chain-of-Thought Reasoning
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 8, 2, 2, 4
 

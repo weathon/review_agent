@@ -1,5 +1,6 @@
 # VARSHAP: A Variance-Based Solution to the Global Dependency Problem in Shapley Feature Attribution
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

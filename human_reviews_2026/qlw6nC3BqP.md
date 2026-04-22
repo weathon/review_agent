@@ -1,5 +1,6 @@
 # Beacon: Thwarting Backdoor Attacks in Cross-Domain Federated Fine-Tuning via Gradient Behavior Decoupling
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 6
 

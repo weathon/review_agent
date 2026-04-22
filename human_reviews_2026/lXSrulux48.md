@@ -1,5 +1,6 @@
 # Byzantine-Robust Federated Learning with Learnable Aggregation Weights
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 2, 8, 8
 

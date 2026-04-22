@@ -1,5 +1,6 @@
 # BotaCLIP: Contrastive Learning for Botany-Aware Representation of Earth Observation Data
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 0, 2, 4
 

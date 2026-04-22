@@ -1,5 +1,6 @@
 # EvoProto: Evolving Prototypes with Class Similarity for Weakly Incremental Segmentation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 4, 4, 4
 

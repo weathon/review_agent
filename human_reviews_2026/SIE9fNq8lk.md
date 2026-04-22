@@ -1,5 +1,6 @@
 # Text2Grad: Reinforcement Learning from Natural Language Feedback
 
+- Avg Score: 4.80
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 6, 4
 

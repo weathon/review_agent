@@ -1,5 +1,6 @@
 # Discrete Latent Features Ablate Adversarial Attack: A Robust Prompt Tuning Framework for VLMs
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 6, 6
 

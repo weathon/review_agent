@@ -1,5 +1,6 @@
 # CauKer: Classification Time Series Foundation Models Can Be Pretrained on Synthetic Data
 
+- Avg Score: 6.00
 - Decision: Accept (Oral)
 - Scores: 6, 6, 4, 8
 
@@ -34,7 +35,10 @@ The authors propose CAUKER, a synthetic data generation algorithm that leverages
 ### Weaknesses
 I would be happy to increase my score if the following concerns/points are addressed.
 
-- Zero-shot evaluation methodology: The study claims to evaluate TSFMs in a zero-shot setting, but the models are allowed to be pre-trained on the training set of the same dataset used for evaluation. This means the evaluation is not strictly zero-shot, as the train and test sets are likely in-distribution (Lines 122–124): “In practice, if we evaluate a given TSFM on a test set from a UCR (Dau et al., 2019) dataset, we ensure that the TSFM was not pre-trained on it, but we allow for the train set of this same dataset to be used for pre-training.” 
+- Zero-shot evaluation methodology:
+The study claims to evaluate TSFMs in a zero-shot setting, but the models are allowed to be pre-trained on the training set of the same dataset used for evaluation. This means the evaluation is not strictly zero-shot, as the train and test sets are likely in-distribution (Lines 122–124):
+“In practice, if we evaluate a given TSFM on a test set from a UCR (Dau et al., 2019) dataset, we ensure that the TSFM was not pre-trained on it, but we allow for the train set of this same dataset to be used for pre-training.”
+
 
 - Missing baseline comparisons: Results without synthetic data augmentation are not reported in Table 1. Including these and quantifying the lift from augmentation would be helpful.
 
@@ -42,7 +46,8 @@ I would be happy to increase my score if the following concerns/points are addre
 
 - No comparison with non-foundation model baselines (e.g., random forecasts, XGBoost, logistic regression).
 
-- Clarification on model pre-training: It is unclear whether the models are pre-trained from scratch on synthetic data or fine-tuned with synthetic data (using pre-trained models on real-world data). For example, the text states: “In practice, if we evaluate a given TSFM on a test set from a UCR (Dau et al., 2019) dataset, we ensure that the TSFM was not pre-trained on it, but we allow for the train set of this same dataset to be used for pre-training.”
+- Clarification on model pre-training: It is unclear whether the models are pre-trained from scratch on synthetic data or fine-tuned with synthetic data (using pre-trained models on real-world data). For example, the text states:
+“In practice, if we evaluate a given TSFM on a test set from a UCR (Dau et al., 2019) dataset, we ensure that the TSFM was not pre-trained on it, but we allow for the train set of this same dataset to be used for pre-training.”
 
 ### Questions
 1. Are the TSFMs pre-trained from scratch on synthetic data, or are they fine-tuned on synthetic data (using models already pre-training on real data)?

@@ -1,5 +1,6 @@
 # Iterative Refinement of Flow Policies in Probability Space for Online Reinforcement Learning
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 8, 4
 

@@ -1,5 +1,6 @@
 # CoRA: Boosting Time Series Foundation Models for Multivariate Forecasting through Correlation-aware Adapter
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 2, 8
 

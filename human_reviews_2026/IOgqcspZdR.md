@@ -1,5 +1,6 @@
 # CultureVLM: Characterizing and Improving Cultural Understanding of Vision-Language Models
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 6, 6, 4, 4
 

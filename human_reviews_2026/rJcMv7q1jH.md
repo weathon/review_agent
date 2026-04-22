@@ -1,5 +1,6 @@
 # Learning Communication between Language Models through Dense Vectors
 
+- Avg Score: 3.50
 - Decision: Reject
 - Scores: 4, 4, 4, 2
 
@@ -23,18 +24,23 @@ Communication between language models plays a crucial role in the inference proc
 This paper proposes LMNet, a graph-style architecture where multiple pre-trained LLMs are stripped of their embedding/de-embedding layers to form vertex transformers, which communicate via small trainable edge seq2seq modules carrying dense vector messages. The authors instantiate LMNet with shared vertex weights and end-to-end autoregressive training, then evaluate two settings: (i) “general intelligence” improvements using a 1.1B-parameter LMNet built from Qwen2.5-0.5B, trained on public data, and (ii) data-limited customization where edges are trained and compared to PEFT baselines like LoRA on MMLU, GSM8K, and E2E. Results show sizable gains over Prompt/SFT and competitive performance versus similarly sized monolithic LLMs.
 
 ### Strengths
-- Recasts inter-model communication as learned dense messaging rather than natural-language tokens, enabling end-to-end optimization across models and edges; the layer-wise fully connected topology + edge translators is interesting. The overall idea is conceptually novel. 
-- Method is well specified: vertex/edge definitions, aggregation by sum, and a training recipe that first optimizes edges, then all parameters. 
-- Evaluated on diverse benchmarks. 
+- Recasts inter-model communication as learned dense messaging rather than natural-language tokens, enabling end-to-end optimization across models and edges; the layer-wise fully connected topology + edge translators is interesting. The overall idea is conceptually novel.
+
+- Method is well specified: vertex/edge definitions, aggregation by sum, and a training recipe that first optimizes edges, then all parameters.
+
+- Evaluated on diverse benchmarks.
+
 - Provided case studies for de-embed intermediate states to probe what’s carried on the “wires”.
 
 ### Weaknesses
-- One set of experiments I believe is missing is that the performance comparison between different width and depth of the LMNet, the results will be more convincing if there is plot showing Num of vertexes v.s. Performance, and showing that the performance positively scales with the vertex network size. 
+- One set of experiments I believe is missing is that the performance comparison between different width and depth of the LMNet, the results will be more convincing if there is plot showing Num of vertexes v.s. Performance, and showing that the performance positively scales with the vertex network size.
+
 - One stated motivation (replace inefficient NL messages in multi-agent systems) doesn’t really match the implemented setup (single final decoder; interior modules pass only the prompt sequence). What they’ve actually built/benchmarked is much closer to stacked, cross-connected transformer blocks that exchange dense features before any token is produced, not agents sending complete messages to one another.
 
 ### Questions
 - Typo: line 172 missing a space between ‘single’ and ‘X’.
-- In Line 217-219: the author mention an alternative where each vertex could auto regressively generate multiple token embedding sequence, by didn’t specified how. In the normal LLMs, such decoding is controlled by the EOS token so the LLM knows when to stop the autoregressive process, I am curious how to do that without the decoding of EOS in the intermediate layers? 
+- In Line 217-219: the author mention an alternative where each vertex could auto regressively generate multiple token embedding sequence, by didn’t specified how. In the normal LLMs, such decoding is controlled by the EOS token so the LLM knows when to stop the autoregressive process, I am curious how to do that without the decoding of EOS in the intermediate layers?
+
 - A fair comparison shouldn’t only be about training compute; it should also hold test-time compute fixed. LMNet’s per-token inference effectively runs the vertex transformer N (i.e., number of vertexes in the net) times, so a base model given an equal test-time budget could use test-time scaling tricks to spend similar compute and might close some of the gap. The paper acknowledges LMNet increases inference latency per token roughly with layer depth L (sequential) even if same-layer vertices parallelize, but it doesn’t benchmark compute-matched inference baselines.
 
 ### Soundness

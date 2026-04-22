@@ -1,5 +1,6 @@
 # MTVCraft: Tokenizing 4D Motion for Arbitrary Character Animation
 
+- Avg Score: 7.33
 - Decision: Accept (Poster)
 - Scores: 8, 6, 8
 

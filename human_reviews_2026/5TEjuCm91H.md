@@ -1,5 +1,6 @@
 # Equipping LLMs with Self-Awareness for High-Stakes Tasks
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 8, 0, 4
 

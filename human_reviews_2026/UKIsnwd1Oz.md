@@ -1,5 +1,6 @@
 # CAD-Tokenizer: Towards Text-Based CAD Prototyping via Modality-Specific Tokenization
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 4, 4, 8, 2
 

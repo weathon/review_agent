@@ -1,5 +1,6 @@
 # Lunguage: A Benchmark for Structured and Sequential Chest X-ray Interpretation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 4, 6, 6
 

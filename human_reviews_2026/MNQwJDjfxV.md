@@ -1,5 +1,6 @@
 # Learn to Select Node in Branch and Bound with Causality Modeling
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

@@ -1,5 +1,6 @@
 # UnDREAM: Bridging Differentiable Rendering and Photorealistic Simulation for End-to-end Adversarial Attacks
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

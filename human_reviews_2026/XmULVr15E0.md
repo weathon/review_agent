@@ -1,5 +1,6 @@
 # MAVEN: A Mesh-Aware Volumetric Encoding Network for Simulating 3D Flexible Deformation
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 2, 6
 

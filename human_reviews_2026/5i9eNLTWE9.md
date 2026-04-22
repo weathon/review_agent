@@ -1,5 +1,6 @@
 # Towards Adaptive Symmetry Breaking in Vector Neuron Networks
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 6, 8, 2
 

@@ -1,5 +1,6 @@
 # Incomplete Data, Complete Dynamics: A Diffusion Approach
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 8
 

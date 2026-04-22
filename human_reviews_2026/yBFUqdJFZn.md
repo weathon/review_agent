@@ -1,5 +1,6 @@
 # ScaleCUA: Scaling Open-Source Computer Use Agents with Cross-Platform Data
 
+- Avg Score: 6.80
 - Decision: Accept (Oral)
 - Scores: 6, 10, 6, 6, 6
 

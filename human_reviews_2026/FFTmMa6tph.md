@@ -1,5 +1,6 @@
 # Cross-subject decoding of human neural data for speech Brain Computer Interfaces
 
+- Avg Score: 3.33
 - Decision: Reject
 - Scores: 2, 2, 6
 

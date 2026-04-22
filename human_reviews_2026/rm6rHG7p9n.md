@@ -1,5 +1,6 @@
 # GAUSS: Graph-Assisted Uncertainty Quantification using Structure and Semantics for Long-Form Generation in LLMs
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 4, 6, 4
 

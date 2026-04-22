@@ -1,5 +1,6 @@
 # Tensor Train Diffusion: A Fast Solver for High-Dimensional Sampling
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 6, 2
 

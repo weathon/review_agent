@@ -1,5 +1,6 @@
 # TrojanTools: Adaptive Indirect Prompt Injection on LLM Agents via Malicious Tool-Calling
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 6, 2
 

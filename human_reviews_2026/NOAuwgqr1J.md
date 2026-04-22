@@ -1,5 +1,6 @@
 # SimTrack3D: A Simple Sequential Motion Modeling for Efficient 3D Single Object Tracking
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2, 6
 

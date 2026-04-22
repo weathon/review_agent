@@ -1,5 +1,6 @@
 # Learning to Reason via Mixture-of-Thought for Logical Reasoning
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

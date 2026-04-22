@@ -1,5 +1,6 @@
 # Generalizable LLM Learning of Graph Synthetic Data with Post-training Alignment
 
+- Avg Score: 3.20
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 6, 4
 

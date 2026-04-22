@@ -1,5 +1,6 @@
 # Preference-Based Process Reward Model for Robust Mathematical Reasoning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

@@ -1,5 +1,6 @@
 # Scalable and Robust LLM Unlearning by Correcting Responses with Retrieved Exclusions
 
+- Avg Score: 2.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 2
 

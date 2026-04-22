@@ -1,5 +1,6 @@
 # House, G.P.T.: Diagnosing Pathological Chain-of-Thought in Reasoning Models
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 2, 2, 4
 

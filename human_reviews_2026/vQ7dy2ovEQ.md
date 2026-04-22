@@ -1,5 +1,6 @@
 # Position: Multi-Faceted Studies on Data Poisoning can Advance LLM Development
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

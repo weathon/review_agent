@@ -1,5 +1,6 @@
 # Decision-Focused Learning:  Learning to Rank Based on Sample Average Approximation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 2, 4, 6, 6
 

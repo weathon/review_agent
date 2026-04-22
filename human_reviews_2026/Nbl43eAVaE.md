@@ -1,5 +1,6 @@
 # MAGREF: Masked Guidance for Any-Reference Video Generation with Subject Disentanglement
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 8, 4, 6
 

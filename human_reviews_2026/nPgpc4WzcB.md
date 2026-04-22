@@ -1,5 +1,6 @@
 # EDEL: Error-Driven Ensemble Learning for Imbalanced Data Classification
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 

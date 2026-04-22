@@ -1,5 +1,6 @@
 # RoboPARA: Dual-Arm Robot Planning with Parallel Allocation and Recomposition Across Tasks
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 4
 

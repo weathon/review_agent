@@ -1,5 +1,6 @@
 # Holistic protean block for long-range DNA sequence modeling
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 2, 4, 6
 

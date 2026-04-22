@@ -1,5 +1,6 @@
 # Bi-LoRA: Efficient Sharpness-Aware Minimization for Fine-Tuning Large-Scale Models
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 8, 4
 

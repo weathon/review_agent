@@ -1,5 +1,6 @@
 # wd1:  Weighted Policy Optimization for Reasoning in Diffusion Language Models
 
+- Avg Score: 6.67
 - Decision: Accept (Poster)
 - Scores: 6, 6, 8
 

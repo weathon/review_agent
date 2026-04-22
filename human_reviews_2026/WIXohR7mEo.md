@@ -1,5 +1,6 @@
 # ACPBench Hard: Unrestrained Reasoning about Action, Change, and Planning
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 4, 8, 8, 4
 

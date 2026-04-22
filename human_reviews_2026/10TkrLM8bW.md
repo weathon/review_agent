@@ -1,5 +1,6 @@
 # The Hunger Game Debate: On the Emergence of Over-Competition in Multi-Agent Systems
 
+- Avg Score: 2.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 2
 

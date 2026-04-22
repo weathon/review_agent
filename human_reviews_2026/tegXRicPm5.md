@@ -1,5 +1,6 @@
 # $\textbf{SDPose}$: Exploiting Diffusion Priors for Out-of-Domain and Robust Pose Estimation
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 2, 8, 4
 

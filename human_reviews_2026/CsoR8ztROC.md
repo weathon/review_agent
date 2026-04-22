@@ -1,5 +1,6 @@
 # TimeRecipe: A Time-Series Forecasting Recipe via Benchmarking Module Level Effectiveness
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 8, 6, 2, 4
 

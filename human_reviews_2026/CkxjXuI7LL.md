@@ -1,5 +1,6 @@
 # OSS-Bench: Evaluating LLMs via the Realistic Open-Source Software Development Pipeline
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 2, 6
 

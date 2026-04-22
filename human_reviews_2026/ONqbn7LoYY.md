@@ -1,5 +1,6 @@
 # Accelerating Diffusion Model with Dynamic Alignment
 
+- Avg Score: 3.00
 - Decision: Reject
 - Scores: 4, 4, 2, 2
 

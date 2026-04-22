@@ -1,5 +1,6 @@
 # Learning to Think in Blocks: A Prior-Guided Reinforcement Learning Framework for RAG
 
+- Avg Score: 3.50
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 4, 4, 4
 

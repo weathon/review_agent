@@ -1,5 +1,6 @@
 # StepHint: Multi-level Stepwise Hints Enhance Reinforcement Learning to Reason
 
+- Avg Score: 3.60
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 4, 6, 2
 

@@ -1,5 +1,6 @@
 # X-Part: High-fidelity and Structure-coherent Shape Decomposition
 
+- Avg Score: 5.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 8, 4, 6
 

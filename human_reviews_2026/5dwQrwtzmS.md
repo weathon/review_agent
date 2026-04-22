@@ -1,5 +1,6 @@
 # Fatigue-Aware Learning to Defer via Constrained Optimisation
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 6, 6, 2
 

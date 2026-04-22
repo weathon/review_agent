@@ -1,5 +1,6 @@
 # Laplacian Analysis Meets Dynamics Modelling: Gaussian Splatting for 4D Scene Reconstruction
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

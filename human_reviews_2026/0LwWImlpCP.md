@@ -1,5 +1,6 @@
 # Electrostatics from Laplacian Eigenbasis for Neural Network Interatomic Potentials
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6, 6, 2
 

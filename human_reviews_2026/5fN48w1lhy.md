@@ -1,5 +1,6 @@
 # Debiased Front-Door Learners for Heterogeneous Effects
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 6, 4, 8
 

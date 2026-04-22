@@ -1,5 +1,6 @@
 # Proof-Augmented Retrieval and Reasoning: Supervising Language models for Knowledge Graph Completion with Link Predictors
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 6, 2, 4, 4
 

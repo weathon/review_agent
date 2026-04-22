@@ -1,5 +1,6 @@
 # Can SAEs reveal and mitigate racial biases of LLMs in healthcare?
 
+- Avg Score: 5.60
 - Decision: Accept (Poster)
 - Scores: 4, 4, 4, 8, 8
 

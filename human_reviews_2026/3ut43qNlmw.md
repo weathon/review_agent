@@ -1,5 +1,6 @@
 # GeoLoom: High-quality Geometric Diagram Generation from Textual Input
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 6, 6, 4, 2
 

@@ -1,5 +1,6 @@
 # STAGE: Stable and Generalizable GRPO for Autoregressive Image Generation
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

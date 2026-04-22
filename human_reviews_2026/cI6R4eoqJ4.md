@@ -1,5 +1,6 @@
 # Adversarial Visual Contrastive Decoding for Mitigating Hallucinations in Large Vision-Language Models
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 4, 6, 4
 

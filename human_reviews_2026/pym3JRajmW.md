@@ -1,5 +1,6 @@
 # LLM4EHR: Aligning Clinical Time Series with Medical Event Sequences via Large Language Models
 
+- Avg Score: 4.29
 - Decision: Reject
 - Scores: 8, 4, 6, 4, 2, 2, 4
 

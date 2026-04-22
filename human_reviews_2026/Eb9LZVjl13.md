@@ -1,5 +1,6 @@
 # RADAR and PFIM: Content-Prior Patch-Space Modulation for Efficient Vision Transformers
 
+- Avg Score: 2.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 2, 2, 2, 2
 

@@ -1,5 +1,6 @@
 # BenchHub: A Unified Benchmark Suite for Holistic and Customizable LLM Evaluation
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 8, 4, 4
 

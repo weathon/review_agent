@@ -1,5 +1,6 @@
 # PAC Reasoning: Controlling the Performance Loss for Efficient Reasoning
 
+- Avg Score: 4.50
 - Decision: Reject
 - Scores: 4, 6, 4, 4
 

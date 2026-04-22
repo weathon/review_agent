@@ -1,5 +1,6 @@
 # Orbital Transformers for Predicting Wavefunctions in Time-Dependent Density Functional Theory
 
+- Avg Score: 6.00
 - Decision: Accept (Poster)
 - Scores: 6, 6, 4, 8
 

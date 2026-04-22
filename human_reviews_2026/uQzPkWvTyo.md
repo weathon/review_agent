@@ -1,5 +1,6 @@
 # CauSciBench: A Comprehensive Benchmark on End-to-End Causal Inference for Scientific Research
 
+- Avg Score: 5.00
 - Decision: Reject
 - Scores: 4, 2, 8, 6
 

@@ -1,5 +1,6 @@
 # PFO: Optimizing binary Preference Alignment from a Probability Flow Perspective
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 6, 4
 

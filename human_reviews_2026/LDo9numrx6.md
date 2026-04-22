@@ -1,5 +1,6 @@
 # A Unified Total Variation Framework for Membrane Potential Perturbation Dynamic
 
+- Avg Score: 5.00
 - Decision: Accept (Poster)
 - Scores: 6, 4, 4, 6
 

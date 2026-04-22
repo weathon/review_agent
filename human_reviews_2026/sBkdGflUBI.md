@@ -1,5 +1,6 @@
 # Temporal Reasoning with Large Language Models Augmented by Evolving Knowledge Graphs
 
+- Avg Score: 5.50
 - Decision: Reject
 - Scores: 6, 6, 4, 6
 

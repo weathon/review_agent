@@ -1,5 +1,6 @@
 # How to Teach Label to Understand Decisions: A Decision-aware Label Distribution Learning Framework
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 4, 4, 4, 4
 

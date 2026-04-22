@@ -1,5 +1,6 @@
 # PAC-Bayesian Reinforcement Learning Trains Generalizable Policies
 
+- Avg Score: 4.67
 - Decision: Reject
 - Scores: 2, 6, 6
 

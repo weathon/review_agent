@@ -1,5 +1,6 @@
 # Geometry-Aware 6-DoF Grasp Detection in Complex Scenes
 
+- Avg Score: 4.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 4, 4
 

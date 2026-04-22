@@ -1,5 +1,6 @@
 # Dual-Space Smoothness for Robust and Balanced LLM Unlearning
 
+- Avg Score: 4.50
 - Decision: Accept (Poster)
 - Scores: 2, 4, 8, 4
 

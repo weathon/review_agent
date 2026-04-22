@@ -1,5 +1,6 @@
 # UniUGG: Unified 3D Understanding and Generation via Geometric-Semantic Encoding
 
+- Avg Score: 5.50
 - Decision: Accept (Poster)
 - Scores: 4, 8, 8, 2
 

@@ -1,5 +1,6 @@
 # Efficient Hyper-Parameter Search for LoRA via Language-aided Bayesian Optimization
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 2, 2, 4
 

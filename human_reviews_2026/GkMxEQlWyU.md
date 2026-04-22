@@ -1,5 +1,6 @@
 # Think Before You Accept: Semantic Reflective Verification for Faster Speculative Decoding
 
+- Avg Score: 4.67
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 6, 4
 

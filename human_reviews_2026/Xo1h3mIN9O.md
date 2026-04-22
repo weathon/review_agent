@@ -1,5 +1,6 @@
 # SceneMaker: Open-set 3D Scene Generation with Decoupled De-occlusion and Pose Estimation Model
 
+- Avg Score: 3.00
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 4, 4, 2, 2
 

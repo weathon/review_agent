@@ -1,5 +1,6 @@
 # Contextual Latent World Models for Offline Meta Reinforcement Learning
 
+- Avg Score: 4.00
 - Decision: Reject
 - Scores: 2, 4, 6
 
