@@ -395,6 +395,52 @@ def analyze_and_plot(path):
 
     accept_rate_pred = accept_rate_by_bin(pred, accept_label)
     accept_rate_human = accept_rate_by_bin(gt_avg, accept_label)
+
+    # Mean within-bin z-score (mean standardized deviation from bin mean).
+    # Bin by gt_avg in 1-point bins; within each bin, compute (t - mean)/std for
+    # every point, then average. Report both signed mean and mean absolute z.
+    def mean_within_bin_z(values, bin_by):
+        values = np.asarray(values, dtype=float)
+        bin_by = np.asarray(bin_by, dtype=float)
+        idx = np.digitize(bin_by, unit_bin_edges[1:-1])
+        signed = []
+        absolute = []
+        bin_rows = []
+        for i in range(len(unit_bin_labels)):
+            mask = idx == i
+            n = int(mask.sum())
+            if n < 2:
+                bin_rows.append((n, None, None, None, None))
+                continue
+            v = values[mask]
+            mu = float(v.mean())
+            sd = float(v.std(ddof=1))
+            if sd == 0:
+                bin_rows.append((n, mu, sd, 0.0, 0.0))
+                signed.append(0.0)
+                absolute.append(0.0)
+                continue
+            z = (v - mu) / sd
+            s_mean = float(z.mean())
+            a_mean = float(np.abs(z).mean())
+            signed.append(s_mean)
+            absolute.append(a_mean)
+            bin_rows.append((n, mu, sd, s_mean, a_mean))
+        overall_signed = float(np.mean(signed)) if signed else None
+        overall_abs = float(np.mean(absolute)) if absolute else None
+        return overall_signed, overall_abs, bin_rows
+
+    ai_z_signed, ai_z_abs, ai_z_rows = mean_within_bin_z(pred, gt_avg)
+    # Human: use individual reviewer scores, binned by that paper's gt_avg
+    human_scores_flat = []
+    human_binby_flat = []
+    for _, row in df.iterrows():
+        ga = float(row["gt_avg_score"])
+        for c in gt_score_cols:
+            if pd.notna(row[c]):
+                human_scores_flat.append(float(row[c]))
+                human_binby_flat.append(ga)
+    human_z_signed, human_z_abs, human_z_rows = mean_within_bin_z(human_scores_flat, human_binby_flat)
     valid_dec_mask = ~pred_dec.isin(["n/a", ""])
     dec_match = ((pred_dec == gt_dec) & valid_dec_mask).sum()
     dec_eval_mask = valid_dec_mask & pred_dec.isin(["accept", "reject"]) & gt_dec.isin(["accept", "reject"])
@@ -516,6 +562,23 @@ def analyze_and_plot(path):
         if pn == 0 and hn == 0:
             continue
         print(f"    {label:<8} {pn:>7d} {pr_str:>12}     {hn:>8d} {hr_str:>12}")
+    print(f"  {'─'*45}")
+    print(f"  Mean within-bin z-score (bin by gt_avg, 1-pt bins):")
+    print(f"    {'bin':<8} {'AI n':>5} {'AI |z|':>8} {'AI z':>8}     {'Hum n':>6} {'Hum |z|':>8} {'Hum z':>8}")
+    for i, label in enumerate(unit_bin_labels):
+        an, _, _, asz, aaz = ai_z_rows[i]
+        hn, _, _, hsz, haz = human_z_rows[i]
+        if an == 0 and hn == 0:
+            continue
+        aaz_s = f"{aaz:.3f}" if aaz is not None else "   -"
+        asz_s = f"{asz:+.3f}" if asz is not None else "   -"
+        haz_s = f"{haz:.3f}" if haz is not None else "   -"
+        hsz_s = f"{hsz:+.3f}" if hsz is not None else "   -"
+        print(f"    {label:<8} {an:>5d} {aaz_s:>8} {asz_s:>8}     {hn:>6d} {haz_s:>8} {hsz_s:>8}")
+    if ai_z_abs is not None:
+        print(f"    Mean across bins — AI:    |z|={ai_z_abs:.4f}  signed z={ai_z_signed:+.4f}")
+    if human_z_abs is not None:
+        print(f"    Mean across bins — Human: |z|={human_z_abs:.4f}  signed z={human_z_signed:+.4f}")
     print(f"  {'─'*45}")
     if valid_dec_mask.any():
         valid_decisions = int(valid_dec_mask.sum())

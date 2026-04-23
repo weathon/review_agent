@@ -18,16 +18,16 @@ Your calibration process:
    - If this paper has a novel framing but weak baselines, ask for reviews mentioning "novel framing" "missing baselines" and note those scores.
 
 3. Deliberate range anchoring: seek out both high-scoring and low-scoring papers to anchor the extremes of your scale. Retrieve multiple (ideally 2-4) papers per score range, not just one — a single anchor is too noisy to rely on. When you ask `calibration_search` for a band, state the numeric score range explicitly (e.g. "avg human score between 4 and 6") rather than leaving it as "low-scoring" or "weak", so the subagent can apply the score filter. Use these exact bands:
-   - High: avg human score > 7. Request papers in this band and read a few to see what made them strong.
-   - Medium: avg human score between 4 and 6, inclusive. These are your borderline anchors.
-   - Low: avg human score < 3. Request papers in this band and read a few to see what made them weak. "Low" here means genuinely poor, not just below-average — a paper averaging 5 is medium, not low.
-   - Compare the paper under review against all three bands. Every paper you review should be scored relative to at least one paper from each of the three bands, regardless of its topic. If nothing topically similar came back in the low band, still take whatever the subagent returned in the <3 band as your low anchor rather than skipping the band.
+   - High: avg human score >= 6. Request papers in this band and read a few to see what made them strong.
+   - Medium: avg human score around 5. These are your borderline anchors.
+   - Low: avg human score <= 4. Request papers in this band and read a few to see what made them weak. "Low" here means genuinely poor, not just below-average — a paper averaging 5 is medium, not low.
+   - Compare the paper under review against all three bands. Every paper you review should be scored relative to at least one paper from each of the three bands, regardless of its topic. If nothing topically similar came back in the low band, still take whatever the subagent returned in the <=4 band as your low anchor rather than skipping the band.
 
    Examples: if reviewing a paper about privacy attacks on face recognition:
-   - "Find papers on privacy attacks / face recognition with avg human score > 7. Return 3-5 paths with one-sentence summaries of what made them strong."
-   - "Find papers on privacy attacks / face recognition with avg human score < 3. Return 3-5 paths with one-sentence summaries of what made them weak."
-   - "Find face-recognition evaluation papers with avg human score > 7."
-   - "Find privacy-evaluation papers with avg human score < 3."
+   - "Find papers on privacy attacks / face recognition with avg human score >= 6. Return 3-5 paths with one-sentence summaries of what made them strong."
+   - "Find papers on privacy attacks / face recognition with avg human score <= 4. Return 3-5 paths with one-sentence summaries of what made them weak."
+   - "Find face-recognition evaluation papers with avg human score >= 6."
+   - "Find privacy-evaluation papers with avg human score <= 4."
 
    If no papers are found with the same topic, relax topic but keep the score band — it is better to have an off-topic low anchor than no low anchor at all.
 
@@ -41,7 +41,7 @@ Ordering matters: compare the paper to the retrieved anchors first, and let the 
 
 When reporting your score, briefly state which calibration papers you compared against and why the paper under review is above or below them.
 
-You can use read_file to read the returned anchor files for more detail. List every anchor paper you retrieved, not only the ones that ended up shaping your final score — papers you looked at and decided did not fit are still part of the reasoning and must be shown. For each anchor give the path, its avg human score, and one sentence on how it compares to the paper under review. The list must include at least one low-scoring paper (avg score <3), one medium-scoring paper, and one high-scoring paper (avg score >7).
+You can use read_file to read the returned anchor files for more detail. List every anchor paper you retrieved, not only the ones that ended up shaping your final score — papers you looked at and decided did not fit are still part of the reasoning and must be shown. For each anchor give the path, its avg human score, and one sentence on how it compares to the paper under review. The list must include at least one low-scoring paper (avg score <=4), one medium-scoring paper, and one high-scoring paper (avg score >=6).
 
 Let the score distribution follow the actual quality of the paper relative to the calibration examples.
 The samples could be concentrated in the middle, that does not mean you have to score it in the middle as well.
