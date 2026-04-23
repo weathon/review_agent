@@ -1,20 +1,20 @@
-Now I have sufficient calibration. Let me compose the final review.
+Now I have enough information to write my final review. Let me synthesize everything.
 
 ## Summary
 
-The paper proposes CoLR, a two-stage framework for link forecasting over temporal knowledge graphs. In the first stage, a Temporal Relation Structure Graph (TRSG) captures cohesion between relations, and a time-fusion search algorithm uses both temporal proximity and cohesion weights to extract logical paths; when no path connects subject and object, a Path Supplement Strategy (PSS) samples historical edges. In the second stage, a PLM (ALBERT) encodes textual descriptions of paths while a Time2Vec+GRU encoder processes timestamp sequences. The paper also contributes three new datasets: ACLED2023 (addressing PLM information leakage), ACLED-IND (inductive), and ICEWS14-FS (few-shot).
+CoLR proposes a two-stage framework for temporal knowledge graph reasoning that constructs a Temporal Relation Structure Graph (TRSG) capturing cohesion between relations, uses it to guide path search via a Time-Fusion Search Graph (TFSG), and encodes extracted paths with a PLM and time sequence encoder. A Path Supplement Strategy (PSS) provides historical context for entity pairs lacking connected multi-hop paths. The paper also introduces three new benchmark datasets addressing accuracy (ACLED2023), inductive (ACLED-IND), and few-shot (ICEWS14-FS) evaluation gaps.
 
 ## Strengths
 
-- **TRSG formalization is clean and novel** (Section 4, Theorem 1, Eq. 2): Building a relation-level graph with temporally-weighted cohesion edges, then using it to guide path search via P_time + P_coh (Eqs. 4-5), is a conceptually sound and original contribution that avoids exhaustive random walks of prior symbolic methods.
+- **Principled TRSG formalization**: The cohesion-based Temporal Relation Structure Graph extends static RSG to temporal graphs via Theorem 1 (Eq. 2), providing a clean closed-form computation. Figure 4 validates that the TRSG captures stable structural patterns—diagonal lines reveal repetitive events, and cohesion distributions are strikingly similar across the three ICEWS datasets despite different relation counts, supporting the transferability claim.
 
-- **New benchmark datasets address real evaluation gaps** (Section 6.1): ACLED2023 mitigates PLM information leakage by using 2023 events post-ALBERT's training cutoff; ACLED-IND enables entity-disjoint inductive evaluation while preserving graph connectivity; ICEWS14-FS enables few-shot testing. On ACLED2023, CoLR's improvement drops to 6.37% MRR over HGLS — more plausible than ICEWS improvements.
+- **New benchmark datasets addressing real gaps**: ACLED2023 uses 2023 events (post-PLM training cutoff) to mitigate information leakage; ACLED-IND uses geographic rather than random entity splits to preserve graph structural integrity; ICEWS14-FS creates a controlled few-shot setting. Each addresses a concrete, articulated deficiency in existing benchmarks (Section 6.1).
 
-- **Two-stage modular architecture** (Section 5): The separation of path extraction (Stage 1) from path encoding (Stage 2) is portable and could be paired with different encoders, as the paper claims.
+- **Effective handling of disconnected entity pairs**: The ablation (Table 3) confirms PSS addresses a real problem—removing it causes the largest performance drop (−12.49% MRR, −18.40% Hits@10), validating the paper's claim that prior methods suffer when no connected path exists between subject and object.
 
-- **Comprehensive ablation study** (Table 3): Each component contributes meaningfully — PSS (−12.49 MRR), TSE (−6.77), RP (−4.43), TRSG (−2.97) — confirming that all proposed modules are necessary.
+- **Comprehensive evaluation scope**: Seven datasets across transductive, inductive, and few-shot settings provide broad coverage. The cross-dataset transfer results (Table 2) show that CoLR's learned logical patterns generalize—e.g., trained on ICEWS14 and tested on ICEWS05-15 it achieves 78.69% MRR, exceeding the 76.82% when trained on ICEWS05-15 itself.
 
-- **Strong cross-dataset transfer** (Table 2): CoLR trained on ICEWS14 and tested on ICEWS05-15 achieves 78.69 MRR, actually higher than its transductive result on ICEWS05-15 (76.82), demonstrating relation-level logical rules generalize across datasets with different entity sets.
+- **Modular two-stage design**: The framework cleanly separates path extraction (Stage 1) from encoding/scoring (Stage 2), and the authors note it is portable to enhance prior logical reasoning methods (Section 1, Appendix A.2).
 
 ## Weaknesses
 
@@ -23,72 +23,73 @@ None.
 
 ### Major
 
-- **Baselines on new datasets use unoptimized hyperparameters, creating unfair comparison.** The paper explicitly states (Section 6.1): "For the proposed datasets, we conducted experiments for each baseline using their parameter settings on ICEWS14 and reported the results." While CoLR is tuned for each dataset, baselines run with ICEWS14 hyperparameters. On ACLED2023 — a fundamentally different dataset from a different source (ACLED vs. ICEWS) — this is particularly concerning, though the improvement margin is smaller there (6.37%). On ICEWS14-FS, the 18.08% gap is likely inflated by non-optimal baseline tuning. This doesn't invalidate the results (the gaps on YAGO are only 5.36% and on ACLED2023 6.37%), but the ICEWS14/18/05-15 numbers should be interpreted cautiously since those baseline numbers are taken from prior papers with possibly different filtering/evaluation protocols (CENET had to be re-run due to mismatch, suggesting others may also differ).
+- **Inconsistent evaluation protocol for baselines on standard datasets**: The paper states "the experimental results of all baselines on the existing benchmark datasets were taken from prior papers" (Section 6.1), and only CENET was reproduced under a specified time-filtering setting. Different prior papers use different filtering protocols (static vs. time-aware) and dataset splits, which can shift MRR by 5–15+ points in TKG reasoning. Without verifying that all baselines use the same protocol, the 21–30% MRR improvements on ICEWS datasets cannot be reliably interpreted. The more modest improvements on YAGO (5.36%) and ACLED2023 (6.37%) are more credible since they involve fewer protocol ambiguities.
 
-- **No PLM ablation isolates architectural contributions from pre-trained knowledge.** The ablation in Table 3 removes TRSG, TSE, PSS, and entity-level path encoding, but never replaces the PLM with a non-pretrained encoder. Since ALBERT encodes entity text like "Imran Khan; Make visit; China," its geopolitical pre-training knowledge gives CoLR an information advantage over entity-ID-based baselines. ACLED2023 partially addresses this (improvement drops to 6.37% vs. 21-30% on ICEWS), which actually supports the concern — a significant portion of the ICEWS gains likely comes from PLM pre-training knowledge. Without a PLM ablation, the relative contributions of TRSG/PSS/TSE vs. ALBERT's pre-existing knowledge remain unclear.
+- **Baselines on new datasets use untuned ICEWS14 hyperparameters**: For ACLED2023, ACLED-IND, and ICEWS14-FS, the paper reports "we conducted experiments for each baseline using their parameter settings on ICEWS14" (Section 6.1). Using hyperparameters optimized for one dataset on structurally different datasets without any tuning systematically disadvantages baselines. Combined with CoLR's 16–18% MRR gaps on ICEWS14-FS and ACLED2023, this raises fairness concerns that a reviewer would weigh against acceptance.
 
-- **Inductive evaluation (Table 2) does not test inductive reasoning as conventionally defined.** Table 2 shows cross-dataset transfer (train on ICEWS14, test on ICEWS18), not entity-disjoint reasoning within the same domain. While the paper argues this is a valid test of rule transferability and shows strong results, the standard inductive setting in TKG reasoning requires testing on unseen entities within the same knowledge domain. The paper introduces ACLED-IND for this purpose but presents only CoLR's own score (MRR 83.63) with no baseline comparisons in the main paper, deferring these to "Appendix C.4." The core claim about inductive superiority is therefore not established by the presented evidence in the main text.
+- **Contribution attribution is incomplete—the PLM's isolated contribution is unknown**: The ablation (Table 3) shows that removing the paper's main structural contribution (TRSG) reduces MRR by only 2.97% (75.72 → 72.93), while PSS contributes 12.49% and TSE contributes 6.77%. However, there is no PLM-only control (e.g., encoding just the query (s, r_q, o) with ALBERT without any structural path input). The CoLR_{-RP} variant (relation-only paths) still achieves 71.29 MRR—17 points above the next-best baseline (54.01)—despite removing entity names from paths. This gap could largely reflect ALBERT's pre-trained semantic knowledge of relation text rather than learned structural reasoning. Without isolating the PLM's contribution, the paper cannot definitively attribute performance to its proposed structural components versus PLM pre-training.
 
 ### Minor
 
-- **Cohesion may conflate frequency with logical dependency.** The TRSG cohesion matrix $\hat{\mathbf{R}}_{coh}^\omega$ is essentially a normalized co-occurrence count with temporal weighting. High-frequency relations (e.g., "Make statement," "Criticize") will show high cohesion simply because they appear often, not because they share logical dependencies. The paper acknowledges high-frequency "conjunction" relations (Section 6.4) but does not analyze whether cohesion captures information beyond raw frequency. A frequency-normalized variant or analysis would strengthen the claim.
+- **Framing mismatch: "coherent logical reasoning" vs. dominant PSS component**: The paper frames CoLR as performing multi-hop logical reasoning, but PSS—its largest performance contributor (12.49%)—provides single-edge historical context for disconnected entity pairs, not multi-hop logical paths. While the paper is transparent about PSS being a "supplement" (Section 5.1), the overall framing overemphasizes logical reasoning when the dominant mechanism is contextual enrichment. Understanding what fraction of test queries lack connected paths vs. use PSS would clarify the method's actual operating mode.
 
-- **PSS's dominance in the ablation raises questions about the "logical reasoning" framing.** PSS accounts for the largest performance drop (−12.49 MRR), yet it samples a single historical *disconnected* edge from the neighborhood of s or o — not a path connecting s to o. The paper should report what fraction of queries require PSS and how performance splits between PSS and connected-path cases, to clarify what proportion of the method's success comes from actual logical path reasoning vs. contextual supplementation.
+- **Table 2 labeled "Inductive results" but contains cross-dataset transfer**: The table header reads "Inductive results of CoLR on four datasets," but the text describes it as testing "cross-dataset application capabilities" (Section 6.2). Only the ACLED-IND column represents a genuine inductive setting (disjoint entity sets); the other columns show cross-dataset transfer (e.g., train ICEWS14, test ICEWS05-15). The label is misleading—these are different evaluation paradigms conflated under one heading.
 
-- **Equal weighting of P_time and P_coh** (Section 5.1): The combination $P_{next} = P_{time} + P_{coh}$ gives equal weight to temporal proximity and cohesion without justification. A sensitivity analysis or adaptive weighting would strengthen this design choice.
+- **Temporal scope of TRSG construction not explicitly specified**: The paper defines the ω time window for computing R_coh^ω (Section 4.2) but does not explicitly state whether the window slides over training-period subgraphs only or over the full TKG including test-period subgraphs during inference. Since the path search uses "historical subgraphs" (Section 5.1), the authors should clarify that TRSG weights are restricted to training data to rule out future information leakage.
 
 ### Trivial
 None.
 
 ## Nice-to-Haves
 
-- A PLM ablation (randomly initialized encoder, frozen PLM, no-PLM) would resolve the most important open question about where the performance gains originate.
-- Baseline comparisons on ACLED-IND in the main paper rather than deferred to appendix.
-- Standard entity-disjoint inductive splits on existing ICEWS datasets for conventional inductive evaluation.
-- Analysis of PSS usage frequency and per-category performance.
+- A PLM-only baseline (no TRSG, no PSS, no structured path search) that simply encodes (s, r_q) with ALBERT to score candidates. This would definitively separate structural contributions from PLM prior knowledge.
+- Analysis of what fraction of test queries have connected multi-hop paths vs. rely on PSS. Given PSS contributes 12.49% MRR, this breakdown is essential for interpreting the method's behavior.
+- Properly tuned baselines on new datasets, or at minimum a discussion of why ICEWS14 hyperparameters transfer reasonably.
 
 ## Removed Points
 
 These points are flagged to be removed, treat them with caution:
 
-- **"Baselines on existing datasets taken from prior papers without unified protocol"** — The harsh critic flags this as unfair, but taking baseline numbers from published work is standard practice, and the paper explicitly re-ran CENET when its protocol differed. While the concern about inconsistent filtering is legitimate in principle, there is no evidence other baselines used a fundamentally different protocol — only CENET was flagged. This is a minor concern, not a major one.
+- **"A 30% MRR improvement is not plausible under matched conditions"** (from Harsh Critic): This is speculation about what results *would* look like rather than a verified finding. The improvements on YAGO (5.36%) and ACLED2023 (6.37%) show the method works under more controlled conditions, but asserting that ICEWS improvements would collapse under matched conditions is unsubstantiated. The concern about inconsistent protocols is kept (Major), but the speculative conclusion is removed.
 
-- **"The improvement margins are implausibly large"** — While the 20-30% gaps on ICEWS datasets are unusually large by TKG standards, this alone does not prove unfairness. The YAGO gap is only 5.36%, and on ACLED2023 it is 6.37%. The margins vary substantially across datasets and could reflect genuine methodological advantages. The implausibility argument is inference rather than evidence.
+- **"PSS fabricates structural information"** (from Harsh Critic): The word "fabricates" implies dishonesty. PSS provides genuine historical context about entity neighborhoods—it's a single-edge contextual supplement, not fabricated data. The legitimate concern (kept as Minor) is that PSS is not "multi-hop logical reasoning," which is a framing issue, not fabrication.
 
-- **"ICEWS14 and ICEWS18 share a large fraction of entities"** — This claim from the harsh critic about cross-dataset inductive evaluation is stated without evidence. ICEWS14 covers 2014 and ICEWS18 covers 2015-2018; they share the same geopolitical entity vocabulary but likely have different entity sets depending on pre-processing. The paper's choice to evaluate cross-dataset transfer is a valid (if non-standard) evaluation of rule portability.
+- **"The max-over-paths scoring can inflate results especially when PSS provides fabricated paths"** (from Harsh Critic): Max-over-paths is a standard scoring strategy used in prior work (ALRE-IR, ILR-LR). The inflation concern is speculative without evidence that PSS-provided paths systematically bias toward correct answers.
 
-- **Strength claim: "Large empirical improvements" as a core strength** — This is weakened by the fairness concerns above. The improvements are real numbers but their interpretation is contested. Kept as supporting evidence in context but not listed as a standalone strength.
+- **"ACLED2023 only addresses fact memorization, not semantic knowledge leakage"** (from Harsh Critic): The paper explicitly acknowledges PLMs carry semantic knowledge (Section 6.1 and the ACLED2023 motivation). ACLED2023 addresses direct fact memorization, which is a concrete and testable concern. The semantic knowledge concern is a broader, harder-to-control issue that applies to any PLM-based method—it's a scope limitation, not a flaw in the ACLED2023 design.
 
-- **Criticism about missing missing appendix C.4** — The parser strips appendices. The appendix exists in the original submission; claiming it is "unavailable" is a parser artifact.
+- **"The path search uses P_next = P_time + P_coh additively with no learned weighting—this is a rigid heuristic"** (from Harsh Critic): Additive combination is a reasonable design choice; it's simple, interpretable, and works. Many successful methods use fixed combination weights. This is a design preference, not a weakness.
 
-- **Criticism about algorithm details being deferred to Appendix A.1** — Same parser issue; appendix exists in the original submission.
+- **"No comparison of search efficiency (time, number of paths found) against alternatives"** (from Harsh Critic): Search efficiency analysis would be nice but is not required for the paper's claims. The paper focuses on prediction accuracy, not computational efficiency.
 
-- **Formatting/style nitpicks** about unclear phrasing in Section 4.3, etc. — Removed as formatting nitpicks.
+- **"Replace PLM with randomly-initialized transformer"** (from Harsh Critic): This is an interesting experiment but goes beyond what's needed. A PLM-only baseline (without structural components) would be more informative and directly addresses the attribution concern.
+
+- **Generic strengths without specific citations** from Strength Finder: Dropped the generic "portable two-stage design" that didn't cite specific evidence beyond vague references; kept the substantiated version.
 
 ## Novel Insights
 
-The paper inadvertently reveals a fundamental tension in TKG logical reasoning: methods that claim to perform "logical reasoning over paths" may derive most of their performance from non-logical contextual cues (PSS contributes −12.49 MRR, vs. TRSG at −2.97). This suggests the field should more carefully distinguish between path-based logical reasoning and context-augmented reasoning, as the two serve different purposes and have different inductive properties. Additionally, the dramatic performance drop on ACLED2023 (6.37% improvement) vs. ICEWS (21-30%) provides rare empirical evidence for the degree to which PLM pre-training knowledge inflates TKG benchmark scores on temporally older datasets — useful data for the community.
+The ablation structure of CoLR reveals a pattern common to hybrid neural-symbolic methods: the most impactful component (PSS, 12.49%) operates as a fallback heuristic rather than the principled structural innovation (TRSG, 2.97%). This inversion between "primary contribution" and "primary performance driver" deserves attention in the community—it suggests that for sparse TKGs, the practical bottleneck is not *how to search better paths* but *what to do when no path exists*, and effective solutions may look more like contextual enrichment than multi-hop reasoning.
 
 ## Suggestions
 
-- Add a PLM ablation (at minimum: frozen PLM embeddings vs. randomly initialized encoder) to isolate architectural from pre-training contributions.
-- Re-tune at least the strongest baselines on the new datasets (ACLED2023, ICEWS14-FS) and report both tuned and untuned numbers.
-- Include ACLED-IND baseline comparisons in the main paper to substantiate inductive claims.
-- Report the fraction of queries requiring PSS and split performance by PSS vs. non-PSS cases.
+- Re-run baselines on the three new datasets with at least minimal hyperparameter tuning (e.g., a small grid search), or clearly note that baseline results are untuned and provide an upper bound comparison.
+- Add a PLM-only control condition: encode (s, r_q) text with ALBERT (no paths, no PSS, no TRSG) and score candidates via cosine similarity. This directly isolates the PLM's standalone contribution.
+- Report the fraction of test queries that use PSS vs. have connected multi-hop paths, to clarify whether the method primarily performs logical reasoning or contextual enrichment.
+- Relabel Table 2 as "Cross-dataset transfer and inductive results" to accurately represent the two different evaluation paradigms it contains.
 
 ## Score and Decision
 
-**Calibration anchors:**
+**Calibration anchors used:**
 
-- **High band (>7):** RoG (7.5, KG reasoning with LLMs, planning-retrieval framework, strong empirical + interpretable results); FIT (7.0, neural-symbolic reasoning on KGs); Deep TGC (7.33, temporal graph clustering). These papers had clean methodology, fair baselines, and sound experimental protocols.
+| Paper | Path | Avg Score | Comparison |
+|-------|------|-----------|------------|
+| RoG (KG reasoning with relation paths + LLM) | ZGNWW7xZ6Q | 7.5 | Stronger than CoLR: cleaner baselines, better contribution attribution, interpretable reasoning with faithful grounding |
+| INFER (Neural-symbolic TKG extrapolation) | ExHUtB2vnz | 5.5 | Comparable scope to CoLR (TKG reasoning, rule-based), similar limited novelty concerns, but fewer baseline fairness issues |
+| TKG-LM (TKG + LM integration) | T0hhkuv8I0 | 4.0 | Similar PLM+TKG integration idea, weaker evaluation and fewer contributions than CoLR |
+| RGMG (KG reasoning with RL) | d1zLRzhalF | 2.5 | Outdated baselines, limited novelty—CoLR has genuine structural innovations and new datasets that make it stronger |
+| NPLL (Neural probabilistic logic for KG) | EGxgZzDODh | 3.0 | Overclaimed results without proper analysis, similar to CoLR's attribution gap but more severe (near-plagiarism concerns) |
 
-- **Medium band (4-6):** INFER (5.5, neural-symbolic TKG reasoning — direct competitor, similar domain but accepted despite limited novelty and unclear motivation); TKG-LM (4.0, LM for TKG — flagged for overclaimed superiority and missing baselines); SimTeG (4.67, PLM for graph learning — rejected for limited novelty and being "just PLM fine-tuning"); GURRWHkPtx "LMs are Graph Learners" (5.5, rejected for overclaim and unfair comparison).
+CoLR sits between INFER (5.5) and TKG-LM (4.0). It has more substantial contributions than TKG-LM (TRSG formalization, three new datasets, comprehensive ablation) but shares INFER's concerns about limited novelty in its primary structural contribution and presentation issues. However, CoLR has a more serious baseline fairness problem than either, and its contribution attribution is less clear (TRSG = 2.97% vs PSS = 12.49% inverts the claimed importance). The paper is above the low-scoring anchors (RGMG at 2.5, NPLL at 3.0) due to genuine contributions in TRSG and new datasets, but below INFER (5.5) because the baseline fairness concerns are more damaging to the headline claims.
 
-- **Low band (<3):** RGMG (2.5, KG reasoning with RL — rejected for outdated baselines and limited novelty); Verbalized Graph (2.0, LLM for graph — rejected for weak evaluation and insufficient baselines).
-
-**Comparison:** CoLR is most comparable to INFER (5.5, accepted poster) — both are TKG extrapolation methods combining symbolic/structural reasoning with neural components. CoLR has stronger empirical results and more novel architectural ideas (TRSG, PSS) than INFER, but has more serious fairness concerns (untuned baselines on new datasets, no PLM ablation, inductive claims unsupported by main paper evidence). It is more substantive than TKG-LM (4.0) and SimTeG (4.67) — it has genuine architectural novelty beyond "just use PLM." However, the fairness/baseline issues and the lack of PLM ablation are more serious than the issues that pushed papers like "LMs are Graph Learners" (5.5) and SimTeG (4.67) into reject territory. The ACLED2023 result (6.37% improvement) suggests real methodological contribution once PLM leakage is controlled, which is more than the low-band papers can show. But on the legacy ICEWS datasets, the improvements are likely inflated, and the inductive claims are not properly supported. 
-
-I place this paper at 5.0 — above the clearly weak papers (2-3 range) but below the threshold where we can be confident the claimed improvements are fully attributable to the proposed method. It has real contributions (TRSG, PSS, new datasets, cross-dataset transfer results) but the evaluation has enough fairness gaps that the headline numbers cannot be taken at face value.
-
-MY FINAL SCORE: <pineapple>5.0</pineapple>
+MY FINAL SCORE: <pineapple>4.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

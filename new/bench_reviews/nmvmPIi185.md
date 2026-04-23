@@ -1,94 +1,97 @@
-Now I have thoroughly read the paper and the calibration anchors. Let me write the final review.
+Now I have all the information I need. Let me write the final consolidated review.
 
 ## Summary
 
-The paper introduces Neural Causal Graph (NCG), a classification framework that constructs a directed acyclic graph from WordNet's hypernym taxonomy, estimates edge weights using propensity score methods (PSM/DRL) to deconfound the shared input variable X, and performs multi-label classification with graph-based message passing. An intervention training method simulates do-operations during training by clamping prior concept logits, enabling test-time interaction where users can fix concept values and observe downstream effects. Experiments on a custom Bird dataset and ImageNet show improvements over multi-class, multi-label, and CBM baselines.
+The paper introduces Neural Causal Graph (NCG), a classification framework that constructs a directed graph from WordNet's hypernym/hyponym hierarchy, estimates edge weights using propensity score matching (PSM) and doubly robust learning (DRL), and uses this graph for structured multi-label concept reasoning with a novel intervention training method that enables test-time human interaction on prior concept nodes.
 
 ## Strengths
 
-- **Clean reformulation of hierarchical classification as multi-label task over a taxonomy (Section 3.2.2):** Converting single-label classification into multi-label classification by including all WordNet ancestor nodes is a straightforward but effective way to inject structural priors, and is clearly implemented.
+- **Intervention training is a genuine and useful contribution** (Section 3.3.4, Table 4): The method of randomly fixing concept logits to ground-truth values during training (at rate p=0.15) teaches the model to reason from both inferred and intervened-upon concepts. Table 4 shows consistent improvements: NCG (DRL)+ResNet50 drops from 93.42% with intervention training to 90.09% without it — a 3.33% gap that validates the mechanism's value.
 
-- **Thorough ablation of edge weight estimation methods (Table 3):** Comparing six weight variants (PSM, DRL, One, Random, Zero, Learn) provides solid evidence that the PSM/DRL estimated weights outperform alternatives, especially the "Learn" baseline which underperforms on ResNet50 — supporting the claim that naive gradient-based weight learning is insufficiently stable.
+- **Significant improvements on the Bird dataset** (Table 2): NCG (DRL) achieves 93.42% vs. 90.89% for Multi-class (p=0.0006) on Bird+ResNet50, and 94.49% vs. 93.33% on Bird+CLIP (p=0.0074). These are substantial, statistically significant gains over baselines.
 
-- **Systematic ablation of intervention training and learnable scaled weight (Table 4):** Showing that both components contribute, with intervention training providing ~2% improvement on its own, establishes that each design choice carries weight and is not redundant.
+- **Backbone-agnostic framework** (Table 2): Consistent improvements across both ResNet50 and CLIP demonstrate the framework is modular and not tied to a specific architecture.
 
-- **Test-time intervention is a genuinely useful capability (Figure 4):** The left panel of Figure 4 demonstrates that NCG with intervention training reaches ~95% top-1 accuracy on ImageNet as ground-truth prior concept labels are progressively provided — a form of interactive human-AI classification that goes beyond post-hoc interpretability.
+- **Thorough ablation of components** (Table 4): The ablation study cleanly isolates the contributions of intervention training and learnable scaled weight, showing each provides independent and combined benefits.
 
-- **Statistical rigor in reporting:** The paper consistently reports standard deviations across multiple runs and p-values from t-tests (Tables 2–4), which is above average for classification papers.
+- **The typology of three classification paradigms** (Figure 1): A clear conceptual distinction between independent classification, sample-relation graphs, and concept-relation graphs that provides useful framing for the field.
 
 ## Weaknesses
 
 ### Fatal
-
-None. The paper makes a real, working contribution; the issues are about framing and scope rather than fundamental invalidation.
+None.
 
 ### Major
 
-- **The "causal" framing is significantly overclaimed relative to what the graph structure actually provides.** The NCG is constructed from WordNet (Section 3.2.1, line 89), whose edges are hypernym (IS-A) taxonomic relationships — not causal relationships. "Animal" does not *cause* "Bird" in any Pearlian sense; it is a superordinate category. The paper treats these taxonomic edges as causal and applies do-calculus, backdoor adjustment, and ATE estimation to them. While one can argue that deconfounding X's shared influence on related concept nodes (Eq. 1–2) is a reasonable technique for estimating influence weights in a structured graph, calling these weights "average treatment effects" and this process "causal inference" stretches the terminology beyond its standard meaning. This does not invalidate the method — the weighting procedure may well produce useful edge parameters — but it inflates the perceived theoretical contribution. The paper's central claim of "integrating causal inference with neural networks" would be more accurately stated as "applying propensity-score-based deconfounding to estimate influence weights on a label taxonomy."
+- **Conflation of taxonomic subsumption with causal mechanism undermines the theoretical framework**: The entire theoretical apparatus — SCM, do-calculus, backdoor criterion, propensity scores, potential outcome models — is built on treating WordNet's hypernym/hyponym edges as causal relationships (Section 3.2.1: "We assume most real-world problems have underlying knowledge structures which can be used to form a causal graph"). But "animal → bird → robin" is a taxonomic subsumption ("a robin IS an animal and a bird"), not a causal mechanism where one variable's value physically determines another's. The do-operator semantics — intervening on "animal" to see its effect on "bird" — lacks a coherent real-world causal interpretation. The PSM and DRL estimations compute conditional associations adjusted for X, not genuine causal effects. This does not mean the method is wrong — message-passing along a semantic hierarchy with estimated edge weights can work perfectly well — but the paper's central claim of "integrating causal inference with neural networks" (Abstract, Section 1) is overstated. The contribution is better described as structured hierarchical reasoning with intervention capabilities, not causal inference.
 
-- **The "~95% top-1 accuracy on ImageNet" claim in the abstract is misleading.** The abstract states NCG "achieves nearly 95% top-1 accuracy on the ImageNet dataset by employing a test-time intervention method." A reader would reasonably interpret this as a comparable ImageNet accuracy result. In reality (Figure 4), this 95% figure requires progressively providing *ground-truth labels* for prior concept nodes at test time — an oracle experiment. The standard (no intervention) performance is ~84% with CLIP and ~74% with ResNet50 (Table 2). Presenting the oracle-assisted number as a headline result without this critical qualification in the abstract misrepresents the contribution.
+- **The "nearly 95% top-1 accuracy on ImageNet" claim in the abstract is misleading**: Section 4.5 achieves this figure by progressively providing ground-truth labels for increasing numbers of ancestor concept nodes (e.g., telling the model "this is an animal, a bird, a passerine..."). This is oracle-assisted prediction where hierarchical answer decomposition naturally concentrates probability mass on the correct leaf class. The abstract presents this as a standard accuracy result without qualifying that it requires ground-truth intervention information. A fair comparison would measure a standard classifier given equivalent oracle information (e.g., "the label is among these K classes"), which the paper does not provide. Without such a comparison, the 95% figure is uninterpretable and the claim of "powerful human-AI interaction" (Section 4.5) is unsupported at the claimed magnitude.
 
-- **Missing comparison to hierarchical classification baselines.** The paper positions NCG as a novel "classification paradigm" (Figure 1) yet only compares to Multi-class, Multi-label, and CBM — none of which exploit label hierarchy. Since NCG's graph comes from WordNet, the most natural comparison class is hierarchical deep classification methods (e.g., HD-CNN, hierarchical softmax, DAG-based label embedding) that also use WordNet or similar ontologies to impose structural priors. Without this comparison, it is impossible to determine whether NCG's gains come from the novel components (PSM/DRL weight estimation, intervention training) or simply from exploiting the label hierarchy — which is a well-studied technique. This gap directly undermines the paper's ability to establish its claimed contribution.
+- **No capacity-controlled experiments isolate whether gains come from graph structure or model capacity**: On ImageNet (Table 2), NCG's improvements over Multi-class are 0.67% (ResNet50) and 0.95% (CLIP). But NCG adds substantial capacity: 8-head concept logits, multi-layer perceptron update functions (Section 3.3.2/4.1), and learnable scaled weights. The Multi-label baseline (73.23% on ImageNet+ResNet50) uses the same multi-label formulation but without the extra multi-head/MLP capacity and gets only a 0.15% gain. Without a capacity-matched multi-label baseline (same heads, same MLPs, no graph), it is impossible to determine whether the ~0.5-1% improvement comes from the graph structure or from additional parameters.
 
 ### Minor
 
-- **ImageNet improvements are practically small:** ResNet50 goes from 73.08 → 73.75 (+0.67%), CLIP from 83.49 → 84.44 (+0.95%). While statistically significant, these small gains raise questions about the practical return on added architectural complexity (graph construction, multi-head reasoning, intervention training). The Bird dataset shows larger gains but is small and self-collected (11,700 train, 450 test, 9 posterior classes), making it a weaker basis for strong claims.
+- **Table 3's "Zero" weight result deserves more discussion**: Setting all edge weights to zero (no message passing) achieves 91.96% on Bird/ResNet50, outperforming One (91.07%) and Random (90.85%). While PSM (92.31%) and DRL (93.42%) clearly outperform Zero — so the harsh critic's claim that "Zero matches estimated weights" is incorrect — the fact that no-edge propagation is competitive with uniform or random edges suggests the multi-label formulation and concept proposer carry most of the baseline performance. The paper's observation that "wrong weights are worse than no weights" is consistent, but the authors should explicitly discuss that the graph structure provides incremental rather than transformative benefit.
 
-- **Figure 4 (right panel) shows DRL+CLIP accuracy *declining* with more interventions when intervention training is absent, and the explanation is inadequate.** The paper dismisses this as "anticipated" because the models "are capable of learning causal dynamics and performing interventions inherently" (line 290). But if correct interventions (ground-truth labels) degrade accuracy, this undermines rather than supports the claim of inherent causal reasoning. A better explanation would be that without intervention training, the model's concept representations become miscalibrated when clamped, which is precisely why intervention training is needed — but the paper's language overreaches.
+- **Propensity score sufficiency assumption is not discussed** (Section 3.2.3): Equation 2 applies the backdoor criterion to Figure 3(b), which requires that the propensity score L(X) blocks all backdoor paths from X to C'. The paper states this "can be effectively addressed" (line 111) without acknowledging that strong ignorability is an untestable assumption. While standard in POM literature, a brief acknowledgment of this assumption would strengthen the paper.
 
-- **No sensitivity analysis for intervention training hyperparameters.** The intervention rate p=0.15 and confidence value v=5 are stated as "empirically determined" (Section 3.3.4) without any analysis of how results change across different values. Given that these parameters directly affect the training distribution shift, a small sensitivity study would strengthen the work.
+- **Segment ordering in test-time intervention is not analyzed** (Section 4.5): Prior concepts are divided into 25 equal segments and intervened incrementally, but the ordering of segments (which concepts are in which segments) affects how quickly accuracy improves. The paper does not discuss whether ordering matters or report results with alternative orderings.
 
-- **The propensity score model L(X) is not specified in the main text.** Equation 2 depends on the propensity score L := L(X) satisfying the conditional independence required by the backdoor criterion in Figure 3(b). The paper defers implementation details to the appendix and does not discuss what L(X) is or validate the required assumptions, making it hard to assess whether the "unbiased" label is warranted.
+- **The exogenous variable U_Cj ~ N(0,1) is introduced without ablation or discussion** (Eq. 3): While consistent with the SCM framework (the structural function is deterministic given U_j, which is standard), the choice of N(0,1) and its impact on reasoning is not analyzed.
 
 ### Trivial
-
-- The exogenous variable U_Cj ~ N(0,1) in Eq. 3 is added as isotropic Gaussian noise without justification, but this is a minor modeling choice that could be easily clarified.
+None.
 
 ## Nice-to-Haves
 
-- **Comparison to at least one hierarchical classification baseline** (e.g., HD-CNN or label-embedding methods) to isolate the contribution of PSM/DRL weights and intervention training from the contribution of simply using the hierarchy.
-- **Noisy (non-oracle) interventions at test time** to establish practical utility beyond the idealized setting.
-- **Concrete intervention case studies** showing how fixing a specific prior concept (e.g., "is a water bird") changes posterior predictions — this would be the most compelling demonstration of "intervenable classification."
-- **Replace or soften causal language** where taxonomic/structural language would be more precise (e.g., "structural influence weights" rather than "average treatment effects," "label hierarchy" rather than "causal graph").
+- A capacity-matched multi-label baseline (same heads, MLPs, but no graph edges) to isolate the contribution of the graph structure itself.
+- A fair comparison for the 95% result: given a standard classifier the equivalent oracle information (e.g., restricting the label set to the K classes consistent with the intervened ancestors), report its accuracy for comparison.
+- Per-concept intervention analysis showing which specific prior concept interventions provide the most information gain, to demonstrate the interpretability value of the method.
 
 ## Removed Points
 
 These points are flagged to be removed, treat them with caution:
 
-- **"CBM already supports intervention so NCG doesn't add anything"**: The paper explicitly compares to CBM in Figure 4 and shows NCG benefits from intervention while CBM degrades (right panel). The difference is that NCG has explicit graph structure for propagating interventions, while CBM has a flat bottleneck. This critique ignores the paper's own evidence.
+- **"Structural functions are deterministic but U_Cj ~ N(0,1) is contradictory"**: This is incorrect. In the standard SCM framework (Pearl, 2000), structural functions ARE deterministic given the exogenous variables; the randomness comes from P(U), the distribution over exogenous variables. The paper's Eq. 3 is consistent with this: f_Cj(Pa(C_j), U_j) is a deterministic function, while U_j ~ N(0,1). This is not contradictory.
 
-- **"The paper claims to release code/data but this can't be verified"**: Per the hard rules, if the paper cites a GitHub repository, we treat it as existing.
+- **"Intervention training is just supervised masking, not simulation of do-calculus"**: These are not mutually exclusive. The do-operator in Pearl's framework replaces a structural equation with a fixed value. Setting concept logits to ±5 based on ground truth IS a valid implementation of this — it replaces the normal structural equation with an intervened value. Calling it "supervised masking" is a reductive description that misses the theoretical motivation.
 
-- **"C ⊥ X | L assumption cannot be verified, so Equation 2 is incorrect"**: This is the standard unconfoundedness/ignorability assumption required in all propensity score methods; it is always assumed, never fully verifiable. Flagging it as unique to this paper is misleading; it is a standard caveat.
+- **"Zero edges perform comparably to estimated causal weights"**: This is factually incorrect for the paper's main methods. On Bird/ResNet50: Zero (91.96%) vs PSM (92.31%) vs DRL (93.42%). DRL outperforms Zero by 1.46%, and PSM by 0.35%. The critic compared Zero to Learn (91.87%), which is not the paper's proposed method. The paper's main methods clearly outperform Zero.
 
-- **"Existing models lack interactive interventions" misrepresents the landscape**: While CBM supports intervention, the paper's claim is about a *new paradigm* (graph-based, not bottleneck-based), which is a different structural approach. The distinction is reasonable.
+- **Missing appendix, missing proofs in appendix**: The parser strips these sections; they exist in the original submission.
 
-- **"Bird dataset is small and self-collected" as a fatal flaw**: This is a valid concern but the paper also validates on ImageNet with full-scale experiments. The Bird dataset's size is a minor limitation, not a fatal one.
+- **Reproducibility concerns about undisclosed hyperparameters**: Minor hyperparameter choices (p=0.15, v=5) are stated in the paper. Large artifacts like training logs are impractical to include.
 
-- **Formatting nitpicks and minor notation issues**: Removed per hard rules.
+- **Missing related works**: Cannot verify existence of external references; this falls under the no-external-sources rule.
+
+- **Formatting/style nitpicks and typo complaints**: These are parser artifacts, not author errors.
 
 ## Novel Insights
 
-The paper's most interesting empirical finding is that PSM/DRL estimated weights consistently outperform learned-from-scratch weights (Table 3, "Learn" variant), particularly on ResNet50 where Learn actually underperforms. This suggests that the propensity-score-based deconfounding provides a better initialization than gradient-based optimization for graph edge weights — possibly because the graph structure creates a difficult optimization landscape. This finding is underappreciated in the paper and could have been the basis for a stronger, more focused contribution about why and when deconfounded weight estimation helps in structured classification.
+The paper inadvertently demonstrates an important lesson about the gap between causal language and causal validity in ML: while message-passing along a WordNet-derived hierarchy with PSM/DRL-estimated edge weights produces genuine empirical benefits, these benefits do not require the relationships to be "causal" in the Pearl/Rubin sense. The method's real value is as a structured hierarchical classification framework with intervention capabilities — the causal framing adds theoretical motivation but the empirical gains would likely persist (and be easier to interpret) if the contribution were framed in terms of structured reasoning rather than causal inference.
 
 ## Suggestions
 
-- Add at least one hierarchical classification baseline (e.g., DAG-based label embedding or HD-CNN) to isolate the contribution of the NCG-specific components.
-- Qualify the 95% ImageNet claim in the abstract as "with ground-truth concept interventions" or similar wording.
-- Consider reframing the contribution more honestly: rather than "integrating causal inference," present it as "hierarchical classification with deconfounded edge weight estimation and intervention-capable training" — this accurately describes the contribution without the semantic overreach.
-- Add a brief sensitivity analysis for intervention training hyperparameters (p, v) to strengthen the empirical contribution.
+- Reframe the contribution around structured semantic reasoning with intervention capabilities rather than causal inference. This is more honest and still potentially valuable. The intervention training and test-time interaction mechanism are genuinely useful regardless of whether the edges are called "causal" or "semantic."
+- Qualify the "nearly 95%" claim in the abstract by stating it requires ground-truth concept interventions, or replace it with the standard ImageNet accuracy (73.75%/84.44%) as the primary headline.
+- Add a capacity-matched baseline to isolate the graph structure's contribution from the additional model capacity.
 
 ## Score and Decision
 
-**Calibration anchors referenced:**
-- `/home/wg25r/review_agent/human_reviews/mb9oOA3rD9.md` (avg 4.50, Withdrawn): Misused causal terminology for pairwise classification tasks; this paper similarly stretches causal language for taxonomic structures but has stronger empirical backing.
-- `/home/wg25r/review_agent/human_reviews/OatZMyMuIo.md` (avg 4.00, Reject): Overclaimed causal invariance with technical issues in the SCM framework; this paper has similar overclaiming but a working system.
-- `/home/wg25r/review_agent/human_reviews/Zju6U5CiM7.md` (avg 4.50, Withdrawn): Questioned whether model truly performs causal discovery; analogous concern here.
-- `/home/wg25r/review_agent/human_reviews/9ljHiYuRHl.md` (avg 4.25, Withdrawn): Misused "anti-causal" terminology; similar linguistic overreach concern.
-- `/home/wg25r/review_agent/human_reviews/I4e82CIDxv.md` (avg 8.0, Accept Oral): Sparse Feature Circuits with genuine causal intervention and editing; this paper falls well below this standard.
-- `/home/wg25r/review_agent/human_reviews/4P76wCt9N5.md` (avg 3.0, Reject): DAG-based generative regression with weak methodology and overclaimed gains; this paper is somewhat better as it has a working system with ablations, but shares overclaiming tendencies.
+**Calibration anchors compared:**
 
-This paper sits in the same band as the overclaimed-causal-terminology papers (4.0–4.5 range). It has a real, working method with thorough ablations and genuine (if small) empirical improvements, which puts it above the truly weak papers at 2–3. However, the misleading 95% accuracy claim and the overclaimed causal framing are significant issues that inflate the perceived contribution. Compared to the 4.0–4.5 anchors, this paper is comparable — it has similar issues with causal overclaiming but arguably more empirical substance. Score: 4.0.
+| Anchor Paper | Avg Score | Comparison |
+|---|---|---|
+| Sparse Feature Circuits (I4e82CIDxv) | 8.0 | Far above: clean causal claims, strong empirical evidence, no misleading framing |
+| Concept Bottleneck pLM (Yt9CFhOOFe) | 6.6 | Above: solid CBM with intervention, honest framing, larger scale |
+| WordNet Hypernymy Evaluation (ONhwvkaIe6) | 6.0 | Above: uses WordNet hierarchy honestly as evaluation tool, not as causal graph |
+| SIG: Self-Interpretable GNN (j0KjevdhkH) | 5.0 | Roughly comparable: causal framing questioned by reviewers, similar scope of contribution |
+| Boosting CBMs Hierarchical (Q9Z0c1Rb5i) | 5.0 | Roughly comparable: hierarchical CBM with intervention, questionable definitions |
+| Towards Causal Foundation Model (TgeVptDYAt) | 6.0 | Slightly above: overclaimed causal framing but cleaner methodology |
+| IRIS Causal Discovery (zgM66fu0wv) | 2.5 | Below: NCG actually works empirically unlike IRIS whose causal methodology is fundamentally flawed |
+| Bayesian Tree-Dependent Factorization (gwNQuVXEEV) | 2.5 | Below: NCG has real empirical results unlike BTF |
 
-MY FINAL SCORE: <pineapple>4.0</pineapple>
+The NCG paper sits in the 4.5–5.5 range. It is worse than the 6+ papers because of the misleading causal framing and the unqualified 95% claim. It is better than the 2.5 papers because the method actually works and produces real, significant improvements (especially on Bird). It is comparable to SIG and SupCBM (both scored 5.0) which also had questioned causal framings and significant methodological gaps. The misleading headline result pushes it slightly below these comparables.
+
+MY FINAL SCORE: <pineapple>4.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

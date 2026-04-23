@@ -1,25 +1,18 @@
-Now I have sufficient calibration data. Let me synthesize my final review.
-
-Key calibration anchors:
-- **High-scoring (>7)**: Consensus Game (7.5, spotlight) — game-theoretic LLM framework with strong theoretical grounding and broad evaluation; EvoMAC (7.0, poster) — self-evolving multi-agent collaboration with solid experiments; Inverse Attention Agents (4.75, poster) — ToM-based multi-agent with attention
-- **Medium (4-6)**: BNE-Q (5.5, reject) — multi-agent reasoning via Bayesian NE, rejected for missing baselines and overclaimed results; RoundTable (4.75, reject) — multi-agent collaboration via voting, rejected for limited novelty and missing baselines; LLM social psychology collaboration (5.0, reject) — overclaimed insights, limited experimental rigor
-- **Low (<3)**: LLMs as Rational Players (3.0, reject) — fundamentally flawed evaluation methodology; LLM game-theoretic evaluation (3.4, reject) — questionable evaluation methodology, bad metrics
-
-The paper under review shares characteristics with the medium-low band: missing critical baselines (random matching), circularity concerns in FTM, and overclaimed cognitive insights. However, it also has Pass@1 improvements as independent evidence, evaluation across 5 models, and multiple tasks. This places it roughly in the 4-5 range.
-
 ## Summary
 
-The paper investigates how Theory of Mind (ToM) capabilities affect cooperative trends in LLM-based multi-agent systems, finding that higher-ToM (2-level) agents do not consistently outperform lower-ToM (1-level) agents in cooperation metrics. To address this, the authors propose a stable coalition matching mechanism based on belief-action alignment, demonstrating improvements in both cooperative trend (FTM) and task performance (Pass@1) across iterative programming, debate, and reasoning tasks.
+The paper investigates the relationship between Theory of Mind (ToM) levels and cooperative trends in LLM-based multi-agent systems, finding that higher-level ToM agents do not necessarily exhibit better cooperative trends. It proposes a stable coalition matching mechanism that leverages belief-action alignment (derived from ToM reasoning) to form coalitions, along with an adaptation for specialized agent abilities, demonstrating improved cooperative trends and task performance across programming, debate, and reasoning tasks.
 
 ## Strengths
 
-- **Counterintuitive finding that higher ToM does not guarantee better cooperation**: Table 1 shows that across 5 LLM backbones and 2 benchmarks, 1-ToM agents consistently achieve higher FTM than 2-ToM agents (e.g., GPT-3.5 on HUMANEVAL: 62.5 vs. 50.0 at R=1). This challenges a common assumption and opens a meaningful research direction.
+- **Interesting and novel research question**: The finding that higher-order ToM reasoning may not straightforwardly improve cooperation in LLM agents is genuinely counterintuitive and worth investigating. This challenges the common assumption that more cognitive capability always leads to better collaboration (Section 3, Table 1).
 
-- **Task performance improvements over MetaGPT baseline**: Table 3 shows that 2-ToM with stable matching achieves 90.0% Pass@1 on HUMANEVAL (vs. MetaGPT's 85.4%) and 90.4% on MBPP (vs. 86.5%), providing independent evidence that the mechanism improves downstream task outcomes beyond the cooperative-trend metric.
+- **Clean recursive ToM formulation**: Equation (1) provides a well-defined recursive belief function for k-level ToM, giving a principled formal framework that could be reused in future multi-agent LLM work (Section 4.1).
 
-- **Theoretical formulation connecting ToM-based belief-action alignment to stable matching**: Equation (2) and Algorithm 1 provide a principled mechanism that connects cognitive modeling (ToM-derived beliefs) to coalition formation via preference ordering—this is a reasonable architectural contribution distinct from prior work that does not incorporate cognitive state-derived preferences.
+- **Multi-model evaluation**: Testing across five different LLM backbones (GPT-3.5, GLM-4, Llama-3-70B, Gemini-1.5-flash, Claude-3-sonnet) provides breadth and some evidence of generality (Section 6.1).
 
-- **Evaluation across 5 LLM backbones and multiple tasks**: Tables 1-5 cover gpt-3.5-turbo, GLM-4, Llama-3-70b, Gemini-1.5-flash, and Claude-3-sonnet across iterative programming, debate, and reasoning tasks, demonstrating that findings are not model-specific.
+- **Matching mechanism shows promising empirical trends**: Table 2 demonstrates that stable matching improves FTM scores for both 1-ToM and 2-ToM agents, with 2-ToM agents surpassing 1-ToM by round 5 in several models (e.g., GLM-4: 91.0 vs 84.0; Claude-3-sonnet: 95.45 vs 91.07) (Section 6.3).
+
+- **Task performance improvements over baseline**: Table 3 shows 2-ToM with matching achieves 90.0% Pass@1 on HUMANEVAL and 90.4% on MBPP, outperforming MetaGPT (85.4%, 86.5%), confirming that cooperative trend improvements translate to task performance (Section 6.3).
 
 ## Weaknesses
 
@@ -28,65 +21,75 @@ None.
 
 ### Major
 
-- **FTM metric has a quasi-circular relationship with the matching mechanism**: The matching algorithm (Eq. 2, Algorithm 1 Line 7) selects coalition members based on $B_i(S)$—the average belief-action alignment—while FTM (Section 6.2) also measures belief-action alignment. Claiming that matching "fosters cooperation" because FTM increases is therefore partly tautological: the algorithm selects agents with high alignment, and the metric confirms high alignment. The Pass@1 results in Table 3 partially address this by providing an independent performance metric, but the paper's primary claim about "fostering cooperation" rests heavily on FTM, which makes the evidence circular at its core. This does not fully invalidate the paper—Pass@1 provides an independent signal—but the claim needs significant qualification.
+- **Sign error in the specialized ability adaptation (Section 5.2)**: The base preference ordering defines lower B_i(S) as preferred (S₁ ≻_i S₂ ⟺ B_i(S₁) < B_i(S₂), line 123). The adaptation adds a positive term: B'_i(S) = B_i(S) + λ·(1/|S|)Σα_j, where "higher values of α_i indicate greater specialized ability" (line 173). Since lower B' is preferred (line 177), adding positive α_j *penalizes* coalitions with more capable agents—the exact opposite of the paper's claim that "the stable matching algorithm will prioritize agents with higher specialized abilities" (line 185). This is not a notation issue; the entire section's logic depends on the sign being correct. The convergence/stability proofs in Appendix G referenced for this adaptation would also need re-derivation. Since λ=1 is the default evaluation parameter, if this adaptation is used in the experiments, the results may not reflect what the paper claims they do.
 
-- **Missing random-matching or skill-only baseline**: The paper compares "with matching" against MetaGPT (fixed 1 PM + 4 engineers) and "without matching," but does not include a random-reshuffling baseline or a baseline that selects teams based on task-relevant skills alone (without belief alignment). Without this control, it is impossible to determine whether the improvements are attributable to the belief-alignment component specifically or merely to the trivial benefit of allowing team reconfiguration. Since belief-alignment-based matching is the paper's central contribution, this is a critical gap.
+- **The FTM metric conflates belief prediction accuracy with cooperative behavior**: The paper explicitly defines "cooperative trends as the tendency of agents to exhibit accurate predictions about their teammates' actions" (line 27), but the paper's own motivation (citing Ridinger & McBride, 2017) acknowledges that ToM alone is insufficient and that "agents may also need to be willing to positively reciprocate and cooperate with others" (line 29). A perfectly selfish agent could predict teammates' actions perfectly and still act against the team's interest. FTM measures epistemic alignment, not cooperative disposition. This conflation means the paper's headline narrative ("higher ToM → worse cooperation, matching fixes it") is built on a metric that does not measure cooperation as commonly understood. The paper should either redefine the metric to capture actual cooperative behavior or substantially reframe its claims.
+
+- **"With matching" improvements confound coalition selection with the ToM-based mechanism**: The "without matching" baseline forces all agents to work together; "with matching" selects a preferred subset. Any improvement could be due to simple teammate selection (filtering out poorly-matched agents) rather than the ToM-based belief alignment mechanism specifically. No ablation tests a non-ToM-based matching strategy (e.g., random matching, similarity-based matching without ToM beliefs, or matching based on past task performance). Without this, the paper cannot attribute improvements to the ToM mechanism rather than to coalition selection in general (Section 6.3, Tables 2–3).
 
 ### Minor
 
-- **No validation that prompt-based k-level ToM produces genuine recursive reasoning**: The paper implements ToM via LLM prompting (Section 4.1) but does not verify that 2-ToM agents actually perform second-order recursive belief attribution vs. simply generating superficially different outputs. If the observed "higher-ToM = worse cooperation" effect is an artifact of degraded output quality from more complex prompts, the cognitive interpretation collapses. This is partially mitigated by the qualitative debate example in Section 6.4, which shows interpretable behavioral differences, but a systematic validation (e.g., perturbing 1-ToM beliefs and checking whether 2-ToM outputs change accordingly) would strengthen the claim significantly.
+- **Table 1 motivating finding is not uniformly supported by the data**: The table title claims "Low ToM agents show Higher cooperative trends," but several cells show the opposite: HUMANEVAL with Gemini-1.5-flash at R=1 (2-ToM: 80.56 > 1-ToM: 75.0); MBPP with GLM-4 at R=5 (2-ToM: 86.3 > 1-ToM: 85.2); MBPP with Llama-3-70B at R=1 (2-ToM: 81.7 > 1-ToM: 81.3); MBPP with Claude-3-sonnet at R=5 (2-ToM: 54.4 > 1-ToM: 48.6). While the majority of cells support the claim, the universal assertion in the table title is an overstatement given these counterexamples.
 
-- **Small sample sizes and absent variance reporting**: The debate case study (Section 6.4) uses only 11 trials, and no confidence intervals or standard deviations are reported for any experiment. Given the known variability of LLM outputs, the claimed differences (e.g., 65.45% vs. 67.27% debate win rates) are well within noise.
+- **Self-evaluated alignment scores may introduce systematic bias**: The alignment measure φ(bᵢᵏ(aⱼ) − âⱼ) is computed by prompting the agent to self-evaluate (line 127). LLM self-evaluation is known to be unreliable and potentially systematically biased. More critically, the self-evaluation prompt complexity differs between 1-ToM and 2-ToM agents, making it plausible that FTM differences could partially reflect prompt-induced self-evaluation bias rather than genuine differences in predictive accuracy. No external/ground-truth alignment measure validates the FTM findings.
 
-- **ε and λ parameters not specified**: The tolerance parameter ε is central to Algorithm 1 and the FTM definition, and λ controls the belief-alignment vs. specialized-ability tradeoff in Section 5.2, but their specific values are not reported in the main text (deferred to the stripped appendix). This affects reproducibility and understanding of how selective the matching is.
+- **No variance or significance tests reported**: All results are presented as point estimates with no standard deviations or confidence intervals. This is especially concerning for the debate experiment with N=11 repetitions, where win rates of 65.45% vs. 61.82% vs. 67.27% are not distinguishable at this sample size (Section 6.4, Table 4).
 
-- **The "higher-ToM = worse cooperation" finding is overstated relative to the evidence**: Table 1 shows mixed results—e.g., on MBPP with gpt-3.5-turbo, 1-ToM and 2-ToM tie at R=5 (both 35.8), and on Gemini MBPP the effect is modest (65.74 vs. 60.58). The categorical claim in the paper's framing ("low ToM agents show higher cooperative trends") is an overstatement of noisy differences with no significance testing.
+- **Algorithm 1 underspecifies the stable matching computation**: Line 8 says "Update stable coalition S based on preference orders" without specifying the algorithm. Standard Gale-Shapley applies to two-sided matching; the mechanism for computing stable coalitions from one-sided preferences is not detailed in the main text (Section 5.1).
 
 ### Trivial
 None.
 
 ## Nice-to-Haves
 
-- A random-matching baseline (even simple random reshuffling) would dramatically strengthen the attribution of improvements to belief alignment specifically.
-- Ablation study isolating the contribution of specialized-ability matching ($\lambda$ variation) from belief-alignment matching—currently Table 3 doesn't disentangle these.
-- Reporting ε values, λ values, and alignment score distributions to help readers understand how selective the matching mechanism is in practice.
+- An ablation with a non-ToM matching baseline (e.g., random coalition formation or past-performance-based matching) to isolate the contribution of the ToM-based belief alignment mechanism.
+- An external validation of FTM scores using objective similarity measures (e.g., embedding similarity between predicted and actual action text) to complement self-evaluation.
+- Variance and statistical significance across multiple runs, especially for the debate experiment.
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution:
+*These points are flagged to be removed, treat them with caution.*
 
-- **Table 1 vs. Table 2 value discrepancy (51.7 vs. 51.75)**: The harsh critic claims this "raises reproducibility concerns." These are clearly rounding differences (the same quantity reported to different decimal precision), not evidence of different experimental runs. This is a trivial formatting artifact, not a real issue.
+- **"0-level ToM is not really ToM"**: The critic argues that what the paper calls 0-ToM (just recording history) is not ToM and that the numbering is misleading. While the observation is valid that 0-ToM here corresponds to no mental state attribution, the paper follows existing literature conventions (De Weerd et al., 2015; Li et al., 2023c cited in line 81) for its level numbering. This is a terminology preference, not a substantive error. **Removed as a terminology nitpick that doesn't affect the paper's substance.**
 
-- **Unfair comparison with ChatEval and DyLAN in Table 5**: The harsh critic questions whether ChatEval and DyLAN use the same team sizes, ToM implementation, and LLM backbones. This is a standard comparison against published baselines—the asymmetry (if anything) would favor the baselines by giving them the same ToM treatment, which would make the comparison more conservative for the authors' method. Per the hard rules, this criticism is removed.
+- **"NP-hardness claim vs. trivial experimental setting"**: The critic notes that with N=4 agents, the matching problem is trivially just pairing, yet the paper claims NP-hardness in limitations. The NP-hardness claim is about the general problem, not the experimental setting. The experimental setting is a proof-of-concept demonstration. **Removed as scope creep — the limitation discussion about general complexity is valid even if the experimental setting is small.**
 
-- **Missing appendix proofs and references**: The appendix was stripped by the parser; these sections exist in the original submission. Criticisms about "missing proofs in Appendix G" or "referenced but stripped" appendices are parser artifacts.
+- **"The ChatEval w. ToM and DyLAN w. ToM baselines are non-standard"**: The critic argues these are not standard configurations. The paper describes them in Section 6.5 as existing frameworks with ToM capabilities integrated. **Removed — this is a concern about not-yet-released configurations, which per rules we treat as existing if cited.**
 
-- **"The adaptation adding α_i is essentially unevaluated"**: The paper does report results with the specialized ability adaptation in Table 3 (where matching includes both components), and the formulation is clearly presented in Section 5.2. While a λ-sensitivity analysis would be nice, saying it's "unevaluated" overstates the case.
+- **"The 'human-like' claim is unsupported"**: The critic says the "human-like" claim in the abstract rests only on a single citation. The paper references Ridinger & McBride (2017) to ground the cognitive insight, and the claim is about the *potential* to create human-like strategies, not that the current system is validated as human-like. **Removed as an over-interpretation of a motivational claim.**
 
-- **Formatting nitpicks ("Moreover, Moreover" double word)**: This is a trivial typo, not a substantive issue.
+- **"Missing related works"**: The critic implies missing references. **Removed per hard rules — we cannot confirm existence of uncited works.**
+
+- **"Overthinking explanation is post-hoc and untested"**: The paper offers "overthinking" as an intuitive explanation for the empirical finding, not as a proven mechanism. The qualitative case study in Section 6.4 provides some supporting evidence. While a formal test would strengthen this, the current treatment is reasonable as a discussion point. **Weakened to minor — the explanation is speculative but acknowledged as intuitive rather than proven.**
+
+- **Strength finder's claim about "1-ToM agents consistently achieve higher FTM scores than 2-ToM agents across all five LLM models"**: This is factually incorrect — Table 1 shows counterexamples as documented above. **Removed as conflicting with verified weakness about Table 1 inconsistencies.**
+
+- **Strength finder's claim about "adaptation for specialized abilities increases practical applicability"**: Given the sign error in this very adaptation, this strength is unreliable. **Removed because it conflicts with a verified Major weakness.**
 
 ## Novel Insights
 
-The most interesting observation that emerges from analyzing this paper beyond its own claims is that the FTM metric's quasi-circularity reveals a broader challenge in multi-agent LLM research: when the mechanism and the evaluation both rely on LLM self-assessment (the alignment is computed via prompting the LLM to evaluate its own belief-action alignment), there is a risk that the system is optimizing for LLM self-consistency rather than genuine cooperative behavior. The Pass@1 results partially rescue the paper from this circularity, but future work should aim for evaluation metrics that are entirely external to the mechanism being optimized.
+The paper's most interesting observation — that LLM agents with higher-order recursive reasoning (2-ToM) may actually perform worse at predicting teammates' actions than simpler 1-ToM agents — resonates with known phenomena in game theory where higher-order reasoning can lead to "over-thinking" and departures from equilibrium. However, the evidence for this is mixed across models/benchmarks and the metric used (self-evaluated belief prediction) may not capture genuine cooperative dynamics. The idea that a stable matching mechanism can recover the value of higher-order reasoning by selecting compatible teammates is promising, but the current work cannot cleanly separate the benefit of teammate selection from the benefit of ToM-based alignment specifically.
 
 ## Suggestions
 
-- Add a random-matching baseline (select coalitions at random from the pool, same team size, same number of rounds) to isolate belief-alignment's contribution from the general benefit of team selection.
-- Report ε, λ values, alignment score distributions, and confidence intervals/variance for key results.
-- Qualify the claim about "fostering cooperation" by noting that FTM measures belief-action alignment (the same quantity the mechanism optimizes), and rely more heavily on Pass@1 and debate win rates as independent evidence.
-- Validate the ToM implementation by testing whether 2-ToM beliefs change when 1-ToM inputs are perturbed, separating genuine recursive reasoning from prompt-length artifacts.
+- Fix the sign error in Section 5.2: the adaptation should subtract the ability term (B'_i(S) = B_i(S) − λ · (1/|S|)Σα_j) or equivalently reverse the preference direction for the ability component. Verify whether experiments used the erroneous sign and re-run if so.
+- Add at least one non-ToM matching baseline (e.g., random coalition selection) to demonstrate that the improvements are attributable to the ToM-based belief alignment and not merely to any team selection procedure.
+- Consider renaming FTM or adding a separate metric that captures actual cooperative behavior (e.g., task performance improvement attributable to coordination, or willingness to defer/adjust actions based on teammates), to avoid conflating prediction accuracy with cooperation.
+- Report standard deviations across multiple runs and, where sample sizes are small (e.g., debate N=11), include confidence intervals or significance tests.
 
 ## Score and Decision
 
-**Calibration anchors:**
-- Consensus Game (7.5, spotlight): Game-theoretic LLM framework with strong theoretical foundation, thorough experiments, and independent metrics. This paper is significantly weaker—it lacks independent metrics for its primary claim and missing baselines.
-- BNE-Q (5.5, reject): Multi-agent reasoning via Bayesian NE; rejected despite theoretical contributions for missing baselines and overclaimed results. Similar pattern to this paper.
-- RoundTable (4.75, reject): Multi-agent collaboration via voting; rejected for limited novelty and missing critical baselines. Very similar weakness profile—missing controls weakens the central claim.
-- LLM Social Psychology Collaboration (5.0, reject): Overclaimed insights, limited experimental rigor. Close parallel to this paper.
-- LLMs as Rational Players (3.0, reject): Fundamentally flawed evaluation methodology. This paper is better—it has Pass@1 as an independent metric and broader evaluation.
-- Inverse Attention Agents (4.75, accept poster): ToM-based multi-agent with empirical validation, accepted despite limited environments. This paper has similar ToM concerns but weaker experimental controls.
+**Calibration anchors compared:**
 
-The paper shares the medium-low weakness profile of papers scoring 4-5: circular primary metric, missing critical baseline, overclaimed cognitive insights. Its Pass@1 improvements and multi-model evaluation push it slightly above the weakest anchors, but the quasi-circularity of the main evaluation and the missing random-matching baseline fundamentally weaken the evidence for the central claim. Score: 4.5.
+| Paper | Avg Score | Decision | Comparison |
+|-------|-----------|----------|------------|
+| st77ShxP1K (Conformity in LLM multi-agent) | 7.5 | Accept (Oral) | This paper is substantially weaker: less rigorous benchmarking, no ablation study, sign error in formulation |
+| otW0TJOUYF (ToM for multi-agent tasks) | 6.75 | Accept (Poster) | This paper has a cleaner ToM module with ablations; our paper lacks comparable experimental rigor |
+| cfL8zApofK (LLM negotiation game) | 4.75 | Reject | Comparable: limited novelty, variance issues, single-model concerns; our paper tests more models but has the sign error |
+| ueqTjOcuLc (Social psychology LLM collaboration) | 5.0 | Reject | Comparable: variance issues, conceptual framing concerns; our paper has more models but the FTM metric conflation is worse |
+| 5nldnvvHfw (Sign error in optimization) | 2.5 | Reject | Our paper's sign error is in an extension, not the core theorem, so less severe |
 
-MY FINAL SCORE: <pineapple>4.5</pineapple>
+This paper sits between the medium-scoring rejected papers (4.75–5.0) and the low-scoring math-error papers (2.5). The sign error in Section 5.2 is less severe than those in the 2.5-scored papers (which had errors in core theorems), but the combination of the sign error, the FTM metric conflation, missing ablations, and inconsistent motivating data places it solidly below acceptance. It has more substance than the weakest papers but the cumulative weaknesses undermine confidence in the central claims. I place it slightly below the medium rejected papers because of the sign error and metric conflation, which go beyond the typical "overclaimed results" pattern of the 4.75–5.0 papers.
+
+MY FINAL SCORE: <pineapple>4.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

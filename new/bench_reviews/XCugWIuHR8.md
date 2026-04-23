@@ -1,109 +1,92 @@
-Now I have a thorough understanding of the paper and the calibration anchors. Let me synthesize the final review.
+Now I have a thorough understanding of the paper and the calibration anchors. Let me write the final review.
 
 ## Summary
 
-This paper introduces Convex Distillation, a method that compresses deep neural networks by replacing non-convex blocks with convex gated-ReLU alternatives, trained via activation matching without requiring labels or post-compression fine-tuning. The approach leverages convex reformulation theory (Pilanci & Ergen, Sahiner et al.) to construct student blocks where Convolutional layer 1 produces boolean gating masks and Convolutional layer 2 generates the main output, enabling specialized convex solvers like RFISTA for faster convergence.
+The paper introduces Convex Distillation, a knowledge distillation method that replaces non-convex blocks in a trained DNN with convex-gated equivalents trained via activation matching on unlabeled data. The student block S_convex uses a GReLU architecture (CNN_2(z) ⊙ 1(CNN_1(z) > 0)) whose optimization landscape is claimed to inherit convexity guarantees, enabling the use of specialized convex solvers and achieving faster convergence. The method requires no post-compression fine-tuning or labels.
 
 ## Strengths
 
-- **Convex distillation outperforms non-convex in high-compression and low-data regimes**: Figure 3a shows S_convex substantially outperforms S_non-convex on SVHN at low filter counts; Figure 3b shows the gap is even larger with only 100 training samples/class on CIFAR10; Figure 6 demonstrates clear advantages with as few as 1–25 samples/class. These results directly validate the core claim that convex architectures are more effective when resources are scarce.
+- **Novel integration of convex neural network reformulations with knowledge distillation**: The idea of using GReLU convex equivalences for model compression is genuinely novel. Prior distillation work has not leveraged this line of research, and the activation-matching objective (Equations 5–6) is a natural fit for the convex framework.
 
-- **Label-free compression without fine-tuning**: The activation matching objective (Eq. 6) depends only on intermediate activations, not labels. Figures 3 and 4 show that after swapping in the distilled block with all other layers frozen, the model achieves comparable performance to the original without any fine-tuning—e.g., Figure 4 shows ~10× compression on CIFAR10 with no significant accuracy drop.
+- **Convex student outperforms non-convex in data-scarce / high-compression regimes**: Figures 3a and 3b show S_convex significantly outperforming S_non-convex on SVHN at low filter counts and on CIFAR10 with only 100 samples/class. Figure 6 extends this to 1–25 samples/class, demonstrating a clear advantage when resources are most constrained.
 
-- **Convex solvers converge significantly faster**: Figure 5 shows RFISTA and Approximate Cone Decomposition reach target accuracy 1–2 orders of magnitude faster than Adam-based non-convex training on a TinyImageNet binary classification task, with error bars over 10 seeds.
+- **Order-of-magnitude faster convergence with specialized convex solvers**: Figure 5 shows RFISTA and Approximate Cone Decomposition reaching target accuracy 1–2 orders of magnitude faster than Adam on a TinyImageNet binary classification task, directly supporting the practical benefit of convexity.
 
-- **Systematic experiments across compression rates and data regimes**: The paper varies filter counts (Figure 3a), training samples per class (Figures 3b, 6, 7), block combinations (Figure 4), and solver types (Figure 5), providing a thorough empirical characterization.
-
-- **Polishing technique addresses one-vs-all limitation**: Section 4.3 and Figure 2 describe recomputing W₂ with group elastic constraints, which the paper identifies as a genuine bottleneck of existing convex solvers for multi-class problems.
+- **Label-free compression without post-compression fine-tuning**: The activation-matching objective depends only on intermediate activations, and Figure 4 confirms that swapping the distilled block into the model yields test accuracy directly with no fine-tuning—achieving ~10× compression of Blocks 3&4 on CIFAR10 with no significant accuracy drop.
 
 ## Weaknesses
 
 ### Fatal
-None.
+None
 
 ### Major
 
-- **The claim that CNN₁ "does not contribute any effective parameter to the model size" (line 159) is problematic for compression ratio reporting**. CNN₁ computes the gating mask 𝟙(CNN₁(z) > 0) at inference time—its weights must be stored and its forward pass computed for every new input. The paper itself states "(i) 𝟙(CNN₁(z) > 0) is a boolean mask that masks out the corresponding entries in the outputs of CNN₂(z)," which means CNN₁ *is* part of the deployed model. While it's true that no gradient backpropagates through the indicator to CNN₁ during training, this does not make CNN₁ parameter-free at inference. The paper does note "Alternatively, we can mask out CNN₂(z) using fixed boolean masks," which would genuinely eliminate these parameters, but the main experiments appear to use learned CNN₁ masks. The compression ratios in Table 1 (Block 4 sparsity 0.156, overall 0.394) and x-axes of Figures 3–4 count only CNN₂ and CNN₃ parameters, potentially overstating the compression achieved. This matters because the paper's central claim is "efficient compression," and honest parameter accounting would reduce the reported compression factors. The paper should report the actual inference-time parameter count including CNN₁ alongside the current numbers, or demonstrate that fixed random masks achieve comparable performance (which they partially suggest but do not evaluate).
+- **Figure 7 directly contradicts the paper's central claim, and the paper misrepresents the data**: The paper states "convex optimization based distillation performs at least as good as with Adam-based non-convex block distillation" (Section 5.3, line 349) and reiterates in the conclusion that "distillation via convex architectures performs at least as good as prevalent non-convex distillation methods." However, Figure 7's data clearly shows non-convex (orange) outperforming convex (blue) by 5–7 percentage points across all training sample sizes. The paper acknowledges the gap but dismisses it with untested speculation: "We believe that here convex distillation approach would outperform non-convex distillation if S comprised of CNN layers instead of linear layers." A core experiment that falsifies the paper's thesis cannot be handwaved away with belief. This is not a minor caveat—it means the "at least as good" claim is false for the polishing experiments that represent the paper's most controlled setup.
 
-- **Figure 7 contradicts the text's claim that convex distillation performs "at least as good" as non-convex**. The text states: "Figure 7 shows that even for relaxed resource constraints, convex optimization based distillation performs at least as good as with Adam-based non-convex block distillation." However, the figure clearly shows Non-Convex Acc (~82–88%) consistently exceeds Convex Acc (~75–85%) across the entire range of training samples per class, with a gap of 5–7 points at low samples and ~3 points at 100 samples/class. This is the paper's most complete experiment using the SCNN+Adel+Polish pipeline for multi-class CIFAR10, and it shows the convex method *losing*, not matching or winning. The conclusion (line 374) repeats this overclaim: "distillation via convex architectures performs at least as good as prevalent non-convex distillation methods." The paper should acknowledge this underperformance and discuss when convex distillation falls short rather than misrepresenting the data.
+- **Misleading parameter counting inflates compression claims**: The paper states that CNN_1 "does not contribute any effective parameter to the model size" because no gradient flows to it (Section 4.1, line 159). But CNN_1's weights must be stored and computed at inference time to generate the boolean mask. The compression ratios in Table 1 and Figures 3–4 are computed excluding CNN_1's parameters. For model compression—where storage and FLOPs matter—frozen weights still occupy memory. The paper acknowledges an alternative ("we can mask out CNN_2(z) using fixed boolean masks") but does not clarify which approach is used in the main experiments. If CNN_1 is used, the headline "~10× compression" ratios are inflated; if fixed masks are used, this should be stated explicitly. Either way, the current presentation is misleading about the true model footprint.
+
+- **Significant gap between theoretical convexity guarantees and the experimental architecture**: Theorems 1–3 apply to 2-layer fully-connected GReLU MLPs with specific regularizers. The main experiments (Section 5.1) use a 3-layer CNN architecture (Equation 8) optimized with Adam. The paper bridges this gap with a single citation: "In Sahiner et al., it is shown that the above architecture corresponds to the Burer-Monteiro factorization... and all local minima are globally optimal." However, (a) Burer-Monteiro factorizations are non-convex problems with favorable properties under specific conditions (e.g., sufficient rank), which the paper does not verify; (b) calling the architecture "convex" is technically inaccurate—it has no spurious local minima under certain conditions, which is a weaker property. This distinction matters because the paper's narrative (Abstract, Introduction) attributes performance gains to "the favorable optimization landscape of convex models," but the optimization landscape of the actual architecture may not satisfy the conditions needed for the cited guarantee.
 
 ### Minor
 
-- **Speed advantages of convex solvers demonstrated only for MLPs, not the CNN architecture used in main experiments**: Sections 5.2–5.3 use SCNN, which "only solves the training of 2-layer MLPs" (line 349). The headline compression results in Section 5.1 use CNN-based blocks trained with Adam—the same optimizer as the non-convex baseline. Whether comparable speedups are achievable for CNN-based convex distillation remains undemonstrated. The paper acknowledges this limitation but it nonetheless limits the practical significance of the convergence claims.
+- **Ambiguity about gate initialization**: The paper does not specify how CNN_1's weights are initialized in the main experiments—whether random, derived from the teacher, or data-dependent. This matters because the boolean mask determines the gating pattern, and different initializations could yield different optimization landscapes, which is the very property the paper relies on.
 
-- **Convexity of CNN blocks cited by reference rather than formally established for the specific architecture**: Theorems 1–3 cover two-layer FC networks; the extension to the CNN-based student (Eq. 8) relies on Sahiner et al. with a brief remark ("In Sahiner et al., it is shown that the above architecture corresponds to the Burer-Monteiro factorization," line 159). The paper does not explicitly state which conditions on convolutional filter sizes, strides, and padding ensure the block optimization (Eq. 6) is convex. Since Sahiner et al. is cited and provides Theorem 3.3, this is a presentation gap rather than a fundamental omission, but it would be much stronger with explicit conditions stated.
-
-- **No comparison against standard KD baselines (Hinton et al. soft-target KD, FitNets with fine-tuning)**: The paper compares only against a non-convex version of its own activation-matching method and magnitude-based pruning. Standard KD methods that do use fine-tuning serve as natural reference upper bounds. Since the paper's distinctive contribution is label-free compression, including a KD-with-fine-tuning baseline would help contextualize how much performance is sacrificed for the label-free property.
-
-- **Statistical significance not reported for small accuracy differences**: Table 2 reports differences of 0.42% (frozen) and 0.05% (trainable) without error bars. The Figure 7 results also lack confidence intervals across what appears to be a single regularization path. For the Visual Wake Words experiment, these differences are well within random variance.
-
-- **"Compress-Top-5% Accuracy" metric in Figure 7 is unexplained**: This may indicate checkpoint selection among the top 5% of runs, which would make comparison to the "Full Accuracy @ 800kIters = 83.5728" baseline inconsistently computed. The paper should clarify this metric.
+- **Convex solver experiments limited to 2-layer MLPs**: The SCNN-based experiments (Sections 5.2–5.3) only use 2-layer MLP student architectures because SCNN does not handle deeper or CNN-based models. This limits the generality of the convergence-speed claims and leaves the interaction between CNN-based convexity and solver efficiency unexplored.
 
 ### Trivial
-None.
+None
 
 ## Nice-to-Haves
 
-- Demonstrate the method on a realistic-scale model (e.g., full ResNet-50 on ImageNet) to validate scalability claims. Current experiments use small datasets and relatively shallow architectures.
-- Analyze gate quality: compare learned CNN₁ gating patterns to fixed random/projected gates—this would reveal whether CNN₁ is a bottleneck and whether cheaper gating mechanisms suffice.
-- Analyze when and why convex distillation underperforms (as in Figure 7): understanding the failure mode (e.g., limited expressivity of fixed gates, one-vs-all decomposition suboptimality) would strengthen the paper.
+- An ablation comparing S_convex optimized with Adam vs. a convex solver on the same CNN architecture would help isolate whether gains come from the architecture's optimization landscape or from the solver. This is partially addressed by the split between Sections 5.1 (Adam on CNNs) and 5.2 (convex solvers on MLPs), but the two dimensions are never crossed.
+
+- Reporting total stored parameters (including CNN_1) and FLOPs alongside the current learnable-parameter counts would make the compression claims more honest and allow readers to assess the true model footprint.
+
+- Error analysis explaining why convex distillation underperforms in Figure 7's polishing setup would either suggest concrete fixes or reveal fundamental limitations, both of which would strengthen the paper.
 
 ## Removed Points
 
 These points are flagged to be removed, treat them with caution:
 
-- **"Inflated compression ratios due to uncounted CNN₁ parameters" as a *fundamental* misrepresentation**: The harsh critic frames this as deliberate misrepresentation, but the paper does provide *some* justification and an alternative (fixed boolean masks). The concern about parameter counting is valid and kept above as a Major weakness, but the framing as "fundamental misrepresentation" is overly strong. The paper's argument that CNN₁ produces a boolean mask and that "no gradient is back-propagated" is actually an argument about the *training* picture, not about inference; the distinction between training-effective parameters and inference-relevant parameters is nuanced and doesn't imply bad faith.
+- **"Missing appendix / polishing math deferred"**: The polishing procedure's mathematical setup is cited as being in Appendix A.2. Per the rules, missing appendix content is a parser artifact—the original submission includes it.
 
-- **Framing of "first work that marries non-convex DNNs with convex architectures" as overstated novelty**: The harsh critic notes that frozen feature extractors with simpler heads (transfer learning, linear probes) follow a similar pattern. While this is true at a high level, the specific application of gated ReLU convex reformulations to distillation is a novel connection. This is an overclaiming issue but not a structural flaw—moved to a minor framing concern rather than a separate weakness.
+- **"Only magnitude-based pruning baseline"**: Requesting more competitive pruning methods (structured pruning, lottery tickets) is a generic "add more baselines" demand. The paper already compares against three baselines (convex, non-convex, pruning) which is reasonable for the scope.
 
-- **Missing appendix/proof concerns**: Removed per rules—appendices are stripped by the parser and exist in the original submission.
+- **"SCNN vs. Adam is an unfair comparison of specialized vs. general solver"**: The paper's point IS that convexity enables the use of specialized solvers—that's part of the claimed advantage. Comparing a specialized convex solver against a general-purpose optimizer is fair because it demonstrates the practical benefit of having a convex formulation.
 
-- **Reproducibility concerns about hyperparameters**: Removed per rules—these are standard nitpicks about implementation details.
+- **"Test on modern architectures (ResNet50, EfficientNet, transformers)"**: This is scope creep. The paper demonstrates the concept on ResNet18 across multiple datasets; scaling to larger models is a natural next step, not a requirement for acceptance.
 
-- **Demand for ImageNet-scale experiments as a major weakness**: This is a nice-to-have, not a core flaw for this type of method paper. The paper demonstrates the approach on multiple standard datasets (SVHN, CIFAR10, TinyImageNet, Visual Wake Words), which is adequate for a first demonstration.
+- **"VWW 0.5% margin is within noise"**: The paper correctly characterizes this as showing "promise" rather than a strong result, and the frozen-backbone result (0.52% gap) is more meaningful. This is a minor observation, not a major flaw.
 
-- **Comparison to standard KD as a major weakness**: Downgraded to minor. The paper's primary contribution is the convex formulation and its advantages in specific regimes (low-data, high-compression). Standard KD with fine-tuning operates in a fundamentally different setting (requires labels), so while comparison would be informative, its absence is not a critical flaw given the paper's stated scope of label-free compression.
+- **"Missing confidence intervals / standard deviations for large-scale experiments"**: Single-run evaluation is standard practice in this setting. Requesting confidence intervals for all experiments is a nice-to-have, not a core flaw.
 
 ## Novel Insights
 
-The paper reveals an interesting asymmetry in convex distillation: convexity's advantage manifests strongly in high-compression and data-scarce regimes (Figures 3, 6), but diminishes or reverses when data is abundant (Figure 7). This suggests the practical value of convex architectures lies not in being universally superior, but in providing a structured optimization landscape that is most beneficial when the problem is hardest (few samples, tight parameter budgets). The community should note that the one-vs-all decomposition for vector outputs (Section 4.3) appears to be a key bottleneck—when information sharing across output dimensions is limited (as in SCNN), convex methods underperform even non-convex Adam-trained models. The "polishing" technique partially addresses this but doesn't close the gap, suggesting that developing proper multi-output convex solvers is critical for this line of work.
+The paper's most revealing finding is that convex distillation's advantage is regime-dependent: it shines in the data-scarce, high-compression regime (Figures 3a, 3b, 6) but falters when resources are more abundant (Figure 7). This suggests the convex reformulation's benefit is primarily in constraining the optimization landscape when there is insufficient data to guide non-convex optimization away from bad local minima—not as a universally superior alternative. The paper's framing as "at least as good" obscures this more nuanced and potentially more interesting story.
 
 ## Suggestions
 
-- Report full inference-time parameter counts broken down by CNN₁, CNN₂, and CNN₃ in Table 1 and along the x-axes of Figures 3–4. Also report results using fixed boolean masks (which the paper mentions as an alternative but doesn't evaluate) to show whether CNN₁ can be eliminated at inference.
-- Correct the textual claim about Figure 7 to acknowledge that the convex method underperforms in this multi-class setting, and discuss the role of the one-vs-all decomposition as a likely cause.
-- Add a standard KD baseline (e.g., Hinton et al. soft-target KD with fine-tuning) to contextualize the performance tradeoff of being label-free.
+- Re-frame the contribution around the regime-dependent advantage: convex distillation is superior when data/compute is scarce, and comparable (though not superior) when resources are abundant. This is a more honest and arguably more useful claim.
 
-## Calibration Summary
+- Report total inference-time parameters (including CNN_1) and FLOPs for all models in Tables and Figures, or explicitly state that fixed boolean masks (not CNN_1) are used in experiments.
 
-| Anchor Paper | Path | Avg Score | Comparison |
-|---|---|---|---|
-| Loss Landscape via Convex Duality | `/home/wg25r/review_agent/human_reviews/4xWQS2z77v.md` | 8.0 | High anchor: rigorous theory for convex NN reformulation with clean proofs. Our paper has less rigorous theory and overclaimed empirical results, clearly below this. |
-| Deep Weight Factorization | `/home/wg25r/review_agent/human_reviews/vNdOHr7mn5.md` | 7.0 | High anchor: extends shallow to deep factorization with theoretical equivalence. Our paper has similar theory-to-practice bridging but weaker empirical consistency. |
-| KD Teacher Calibration | `/home/wg25r/review_agent/human_reviews/TQWXWtJSda.md` | 5.67 | Medium anchor: KD compression paper with theory and experiments, accepted strengths but also weaknesses. Our paper has more novel theory but also more serious overclaims. |
-| Convex SDP for Adversarial Training | `/home/wg25r/review_agent/human_reviews/hrLKzCETcf.md` | 4.0 | Medium-low anchor: convex NN reformulation with limited practical applicability and small-scale experiments. Our paper has similar limitations but also adds misrepresentation of key results. |
-| Convex Score Matching | `/home/wg25r/review_agent/human_reviews/UqY0SEe5pC.md` | 4.75 | Medium-low anchor: convex reformulation that reviewers found overclaimed for simple data. Our paper has more diverse experiments but also a clearer misrepresentation of results (Figure 7). |
-| ELR-Diffusion | `/home/wg25r/review_agent/human_reviews/edx7LTufJF.md` | 2.5 | Low anchor: compression paper with inconsistent parameter counting. Our paper has a similar issue but less severe, and with genuine contributions in other experiments. |
-| KD Entropy Perspective | `/home/wg25r/review_agent/human_reviews/QAq5JTFJmp.md` | 3.0 | Low anchor: KD paper with minor contributions. Our paper has stronger contributions. |
-| Figure contradicts text (various) | `etUJR2xBYa.md`, `5fRlsiNDZR.md` | 3.5-4.2 | Medium-low anchors: papers where figures contradicted text claims scored 3.5-4.2. Our paper has this issue (Figure 7) but also genuine strengths, placing it above these. |
+- For Figure 7, either (a) test the speculation about CNN-based students, or (b) remove the "at least as good" claim and honestly discuss the polishing result as a limitation of the one-vs-all approach that future work should address.
 
-The paper falls between the medium-low anchors (4.0-5.0 range, where overclaimed convex reformulations and figure-text contradictions land) and medium anchors (5.5-6.0 range, where KD papers with valid contributions but notable weaknesses land). The genuine strengths in the low-data regime and label-free compression are real, but the two major weaknesses—problematic parameter counting that inflates compression claims, and misrepresentation of Figure 7 results—prevent it from reaching the medium range. It sits around 4.5: a paper with real contributions but significant overclaims that undermine its own central narrative.
+## Score and Decision
 
----
+**Calibration anchors used:**
 
-## Score and Decision Rationale
+| Paper | Path | Avg Score | Comparison |
+|-------|------|-----------|------------|
+| Loss Landscape via Convex Duality | 4xWQS2z77v.md | 8.0 | Rigorous theory with clean experiments; far above this paper |
+| KD with Risk Bounds | 1xzqz73hvL.md | 7.0 | Strong theoretical KD work; above this paper |
+| Soft Convex Quantization | V9C0cuEWbR.md | 4.5 | Convex optimization for quantization with some weaknesses; similar level |
+| Teacher Calibration in KD | TQWXWtJSda.md | 5.67 | Interesting KD idea with limited novelty; slightly above this paper due to cleaner evidence |
+| CVX-DPO | EVZnnhtMNX.md | 3.0 | Convex NN reformulation for DPO with unclear method and weak validation; this paper is better (clearer method, more experiments) |
+| ELR-Diffusion | edx7LTufJF.md | 2.5 | Overclaimed compression with questionable comparisons; this paper is better (more genuine novelty) |
+| Energy Landscape Optimization | OcTUquFXfx.md | 2.6 | Cherry-picked experiments and overclaimed generalizability; this paper is somewhat better |
 
-**Originality**: The application of convex NN reformulations to knowledge distillation is novel and bridges two literatures that rarely interact. However, the convexity claims for the CNN architecture are largely by reference rather than established.
+This paper sits between the low-scoring and medium-scoring anchors. It has more novelty and more substantial experiments than the CVX-DPO (3.0) and ELR-Diffusion (2.5) papers, but the contradictory evidence in Figure 7 and the misleading parameter counting are significant problems that the SCQ paper (4.5) does not share. The Teacher Calibration paper (5.67) has cleaner evidence despite less novelty. The paper's core claim ("at least as good") is falsified by its own data, which is a serious issue. However, the positive results in the low-data regime are genuine and the idea is novel. A score of 4.0 reflects a paper with a promising idea that is undermined by overclaiming and inconsistent evidence.
 
-**Importance**: The research question—whether convex architectures can match non-convex ones when leveraging rich features—is interesting and practically relevant for edge deployment, though the answer turns out to be "only sometimes."
-
-**Claim support**: Major claims about "at least as good" performance are contradicted by the paper's own data (Figure 7), and compression ratios are inflated by not counting inference-required parameters. This is a significant credibility problem.
-
-**Experimental soundness**: Experiments are systematic across regimes but limited in scale (small datasets, shallow architectures). The Figure 7 misrepresentation and missing standard KD baselines are gaps.
-
-**Clarity**: Generally well-written with clear motivation, but the Figure 7 claim is inaccurate and the "Compress-Top-5% Accuracy" metric is unexplained.
-
-**Community value**: The method has a genuine niche in data-scarce, high-compression settings for edge deployment, which is useful.
-
-MY FINAL SCORE: <pineapple>4.5</pineapple>
+MY FINAL SCORE: <pineapple>4.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

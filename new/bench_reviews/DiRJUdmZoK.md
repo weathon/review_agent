@@ -1,38 +1,20 @@
-Now I have a thorough understanding of the paper. Let me finalize my analysis and write the review.
-
-Key issues to verify and rank:
-
-1. **Circularity of v-MLLM evaluation**: This is a real and significant concern. v-MLLM is trained on VIM-formatted data and evaluated on VIM benchmarks. No baseline is given VIM-format training for comparison. However, it's not fully circular — v-MLLM is evaluated on VIM-Bench which uses different images/questions than training data, and it's also evaluated on TEM to test retention. The real question is: would LLaVA-1.5 trained on VIM data achieve similar results? This is a legitimate major weakness — the paper doesn't disentangle "VIM data exposure" from "V-MLLM innovation."
-
-2. **Misattribution to "instruction following"**: The paper frames the failure as instruction-following, but Table 5 (Mix results) clearly shows that when told "Answer the question in the image," models recover substantial performance. This means the primary failure is instruction RECOGNITION (OCR), not instruction FOLLOWING. This is a valid and important criticism that the paper partially acknowledges but underemphasizes.
-
-3. **TEM performance degradation**: v-MLLM does lose some TEM performance vs LLaVA-1.5 (e.g., 56.09 vs 58.41 on OKVQA, 29.9 vs 30.5 on MM-Vet, 43.38 vs 45.36 on TextVQA for 7B). This is real and the "robust" claim is slightly overclaimed.
-
-4. **Evaluation artifacts**: The near-zero scores likely include format-compliance failures. Valid concern but partially addressed by Section 3.2.
-
-5. **Small sample sizes**: Figure 4 (21 examples) and Figure 5 (30 samples) are indeed small.
-
-6. **Training data overlap**: D_V is derived from D_R — same images/questions in different formats. Mixture training does double the effective weight. This is a valid confound that isn't discussed.
-
-7. **Vicuna marked "NA" in Figure 1**: Vicuna is text-only; it's not applicable to VIM. Marking as "NA" is actually correct, not misleading. REMOVE this criticism.
-
-8. **Llama 2 > GPT-4 discussion deferred**: The paper does mention this and defers it. This is a concern about discussion completeness, not a fatal flaw.
-
-9. **No variance statistics**: Valid but minor — common in the field.
-
-10. **Pix2Struct comparison misleading**: The distinction between V-MLLM and Pix2Struct is reasonable — V-MLLM trains once on general VIM data while Pix2Struct fine-tunes per task. Not really misleading.
-
-Let me now write the review.
+Now I have all the information needed. Let me write the consolidated final review.
 
 ## Summary
-The paper introduces Visual Modality Instruction (VIM), a new evaluation paradigm where textual instructions are rendered into the image pixel space rather than provided as separate text input. The authors adapt VIM to eight existing benchmarks (VIM-Bench) and reveal a dramatic performance collapse in open-source MLLMs (e.g., LLaVA-1.5-7b: 58.41→0.00 on OKVQA) while proprietary models (GPT-4V, Gemini) remain relatively robust. To address this gap, they train v-MLLM by converting existing instruction-tuning data into VIM format, achieving strong VIM performance while retaining TEM capability.
+
+The paper introduces Visual Modality Instruction (VIM), a setting where text instructions are rendered into the image pixel space, requiring MLLMs to recognize and follow instructions purely through visual input. VIM is adapted to 8 existing benchmarks to form VIM-Bench. The paper reveals a severe performance disparity for open-source MLLMs between standard text-modality instruction (TEM) and VIM settings (e.g., LLaVA-1.5-7b drops from 58.41→0.0 on OKVQA), while proprietary models remain relatively robust. To address this, the paper trains v-MLLM on VIM-formatted instruction data, which substantially closes the gap while maintaining TEM performance.
 
 ## Strengths
-- **Novel and striking evaluation finding**: Table 3 documents a systematic, catastrophic TEM→VIM performance collapse across all open-source MLLMs on all eight benchmarks. The consistency and magnitude of this failure (e.g., LLaVA-1.5-13b: 61.27→0.38 on OKVQA, InstructBLIP: 47.46→0.07) makes a compelling case that this is a fundamental—not niche—deficiency.
-- **Informative two-step ablation isolating OCR from instruction following**: Table 5 (Mix instruction ablation) is a clean experiment showing that adding "Answer the question in the image" recovers substantial performance (e.g., Qwen-VL-Chat on OKVQA: 0.01→30.75, InstructBLIP: 0.07→25.44). Figure 5 further decomposes this into word match vs. semantic match, showing open-source models detect tokens but fail to parse meaning.
-- **Comprehensive benchmark coverage**: Adapting VIM across 8 benchmarks spanning knowledge QA, spatial reasoning, math, charts, OCR, accessibility, and college-level subjects demonstrates the generality of the finding rather than targeting a single task type.
-- **Orthogonal benchmark adaptation**: VIM requires minimal changes to existing benchmarks (rendering text at the bottom of images), making it straightforward for future work to adopt.
-- **The observation about LLM language priors**: The fact that Llama 2 and GPT-4 (without image access) achieve non-trivial TEM scores (e.g., Llama 2: 16.21 on OKVQA) highlights that current TEM benchmarks may conflate language priors with genuine multimodal understanding.
+
+- **Reveals a striking, previously unexposed vulnerability in open-source MLLMs.** Table 3 shows dramatic collapses: LLaVA-1.5-7b drops from 58.41→0.0 (OKVQA), 1851.5→2.9 (MME), 30.5→11.0 (MM-Vet), while proprietary models like GPT-4V remain relatively stable (67.7→63.5 MM-Vet). This is a compelling and practically important finding, especially for applications like web agents and form understanding.
+
+- **Clean diagnostic decomposition of failure modes.** The word-match vs. semantic-match analysis (Figure 5) reveals that LLaVA-1.5-7B achieves 29/30 word matches but only 7/30 semantic matches, while GPT-4V achieves 29/30 on both — showing the failure is not purely OCR but involves higher-level semantic reconstruction. The Mix Instruction ablation (Table 5) further decomposes the VIM failure into recognition and following components, providing actionable insight.
+
+- **V-MLLM effectively closes the gap without sacrificing TEM performance.** v-MLLM-7B achieves 52.10 on OKVQA under VIM (vs. 0.0 for LLaVA-1.5-7b) while maintaining competitive TEM scores (56.09 vs. 58.41). The VIM data conversion is simple and scalable — reformatting 846k samples from LVIS-Instruct4V (Section 2.2.1).
+
+- **VIM is straightforwardly applicable to any existing benchmark.** The paper demonstrates this across 8 diverse benchmarks spanning knowledge, math, charts, OCR, and general reasoning, and the adaptation procedure is minimally invasive (Section 2.1.2).
+
+- **Interesting finding about language priors in current benchmarks.** Table 3 shows that pure LLMs (without image access) achieve non-trivial TEM scores — Llama2 scores 1609.5 on MME and 16.21 on OKVQA, outperforming GPT-4 on 6/8 tasks. This raises important questions about the validity of current MLLM evaluation.
 
 ## Weaknesses
 
@@ -40,54 +22,62 @@ The paper introduces Visual Modality Instruction (VIM), a new evaluation paradig
 None.
 
 ### Major
-- **v-MLLM's contribution is not clearly distinguished from VIM-format data exposure**: v-MLLM is trained on VIM-formatted versions of the same instruction-tuning data it is evaluated on, while baselines (LLaVA-1.5, InstructBLIP, Qwen-VL-Chat) receive no VIM-format training. Without training LLaVA-1.5 on the same VIM corpus D_V and comparing performance, it is impossible to determine whether v-MLLM's strong VIM results come from any methodological innovation or simply from format-specific exposure. This is a confound that undermines the claim that v-MLLM is a "generalizable model capable of robust instruction following" (abstract). The paper needs this controlled comparison to validate its model contribution.
 
-- **The framing overstates "instruction following" when the primary bottleneck is text recognition (OCR)**: The paper's title and framing emphasize instruction *following*, but the evidence consistently shows the dominant failure is instruction *recognition*. Table 5 is the strongest evidence: providing "Answer the question in the image" (Mix setting) boosts InstructBLIP from 0.07→25.44 on OKVQA, Qwen-VL-Chat from 0.01→30.75, and LLaVA-1.5 from 0.00→14.28. These models CAN follow the instruction once told to—they simply cannot READ it from the image. Figure 5 corroborates this: LLaVA-7B achieves 29/30 word matches but only 7/30 semantic matches, confirming the bottleneck is visual text comprehension. The paper partially acknowledges this in Section 4.2 ("these open-source MLLMs rely more on their LLM backbones for instruction following"), but the abstract, title, and contribution statements continue to frame this as an instruction-following problem. This misattribution inflates the novelty of the contribution—addressing an OCR gap is less novel than addressing an instruction-following gap.
+- **Overclaimed generalizability of v-MLLM.** The abstract describes v-MLLM as "a generalizable model that is capable to conduct robust instruction following." However, v-MLLM is trained on LVIS-Instruct4V data reformatted into a specific VIM format (text rendered at the bottom of images in a consistent font) and evaluated on VIM-Bench data using the identical rendering format. There is no evidence that v-MLLM generalizes to naturally occurring text-in-image scenarios — web pages with multi-column layouts, forms, UI screenshots, or even text in different fonts/sizes/positions. The "generalizable" claim (Abstract) and "robust visual instruction following capabilities" claim (Section 6) are unsupported beyond the training format. This is a significant overclaim that inflates the paper's contribution.
+
+- **VIM measures a combination of text recognition, semantic reconstruction, AND instruction following, but the paper frames it primarily as instruction following.** The paper's title, framing, and core claims consistently emphasize "instruction following." However, the paper's own data shows that text recognition and semantic reconstruction are major components of the VIM challenge: Figure 5 shows LLaVA gets 29/30 word matches but only 7/30 semantic matches, and Table 5 shows that simply adding "Answer the question in the image" as a text prompt (Mix Instruction) recovers +14 to +31 points for open-source models on OKVQA/VizWiz. While the remaining gap from Mix to TEM (e.g., 14.28→58.41 for LLaVA-1.5 OKVQA) shows it's not *purely* OCR, the paper underweights how much of the VIM challenge is about reading and reconstructing text vs. actually following instructions. A more honest framing would position VIM as probing the full pipeline from visual text recognition to instruction comprehension.
 
 ### Minor
-- **v-MLLM trades off some TEM performance for VIM performance, contradicting the "robust in both settings" claim**: Table 3 shows v-MLLM-7B underperforms LLaVA-1.5-7B on TEM across most benchmarks (56.09 vs. 58.41 on OKVQA, 29.9 vs. 30.5 on MM-Vet, 43.38 vs. 45.36 on TextVQA, 25.7 vs. 25.1 on MathVista is the only win). The 13B model shows similar patterns (59.37 vs. 61.27 on OKVQA). The claimed "robust" performance in both settings is slightly overstated—v-MLLM retains acceptable TEM performance but does not match the original LLaVA-1.5 baseline.
 
-- **Training data overlap confound**: D_V is derived from D_R (same images, same questions, same answers—just rendered into VIM format). Mixture training (D = {D_R, D_V}) thus doubles the effective weight of training examples, as the model sees each question twice in different formats. This confound is not discussed and may partly explain v-MLLM's effectiveness.
+- **Anomalous results where VIM is *easier* than TEM go unexplained.** In Table 3, GPT-4V's OKVQA score *increases* from 22.28 (TEM) to 28.32 (VIM), and VizWiz increases from 17.59 to 22.18. GPT-4O shows similar patterns (OKVQA: 36.20→37.42). These cases where VIM is easier challenge the framing of VIM as universally more challenging and may indicate that removing language priors actually helps on some benchmarks. The paper should acknowledge and discuss these anomalies.
 
-- **Small sample sizes in preliminary analyses**: The instruction location experiment (Figure 4) uses only 21 examples from MM-Vet, and the instruction recognition analysis (Figure 5) uses only 30 samples from VQAv2. These are too small to support the strong conclusions drawn (e.g., "GPT-4V can recognize the embedded instructions nearly perfectly").
+- **Small sample sizes for key ablation analyses.** The instruction recognition analysis (Section 4.1, Figure 5) uses only 30 samples from VQA_v2, and the design choice exploration (Figure 4) uses 21 examples from MM-Vet (footnote 3). While these are presented as diagnostic/illustrative, the word-match vs. semantic-match distinction (7/30 vs. 20/30 vs. 29/30) is used to support a key claim about the nature of the VIM failure. These sample sizes cannot support the weight of the conclusions drawn.
 
-- **No error categorization separating OCR failure from reasoning failure**: The paper does not classify VIM failures into (a) OCR failure—model cannot read the instruction, (b) instruction-following failure—model reads instruction but answers incorrectly, (c) format failure—model produces right content but wrong format. Without this decomposition, the headline disparity numbers are hard to interpret precisely.
+- **Figure 2 caption overclaims v-MLLM alignment with diagonal.** The caption states v-MLLM's data points "consistently align closely to the diagonal line." However, v-MLLM-7B shows substantial drops on MathVista (25.7→7.2, a 72% relative drop), MMMU (34.0→22.0, 35% drop), and ChartQA (16.72→12.24, 27% drop) — these are far from diagonal. The claim should be qualified.
+
+- **GPT-4V shows decreased performance in Mix Instruction on some tasks.** Table 5 shows GPT-4V drops on MM-Vet (63.5→54.4) and OKVQA (28.32→27.70) when adding the text prompt. This suggests prompt-sensitivity confounds that the paper does not discuss.
 
 ### Trivial
-- The discussion of Llama 2 outperforming GPT-4 on six of eight TEM tasks is deferred to an appendix, but this deserves more prominent discussion since it raises questions about what existing TEM benchmarks actually measure.
+None.
 
 ## Nice-to-Haves
-- An oracle-OCR experiment: feeding ground-truth text instructions back to open-source MLLMs as text (simulating perfect OCR) to cleanly quantify how much of the VIM gap is OCR-driven vs. reasoning-driven.
-- Analysis of why proprietary models handle VIM so much better—whether due to larger/more diverse pretraining data, better vision encoders, higher resolution inputs, or architectural differences.
-- Experiments on the interaction between image resolution and VIM performance (the paper notes "image resolution is also key" in Section 2.1.2 but provides no empirical investigation).
-- Multi-seed training runs and variance statistics, as the paper notes training is "often unstable" (Section 4.3) but reports only single numbers.
+
+- Evaluation of v-MLLM on naturally occurring text-in-image data (web screenshots, document images, UI screenshots) would strengthen the generalizability claim significantly.
+- A control experiment with OCR preprocessing (extract text from image via OCR, then feed to MLLM as text) would cleanly decompose how much of the VIM challenge is text recognition vs. instruction following.
+- Larger sample sizes with confidence intervals for the instruction recognition ablation would make the diagnostic claims more rigorous.
 
 ## Removed Points
+
 These points are flagged to be removed, treat them with caution:
 
-- **"LLaVA-1.5 and Vicuna marked NA in VIM setting is misleading"**: Vicuna is a text-only LLM—marking it as "NA" in a visual-only input setting is factually correct, not misleading. It is definitionally inapplicable, and the paper correctly identifies this.
-- **"Data availability/reproducibility concerns about LVIS-Instruct4V or other cited resources"**: If the paper cites it, it exists per the rules.
-- **"Pix2Struct comparison is misleading because V-MLLM is functionally similar to task-specific fine-tuning"**: The distinction the paper draws is valid—V-MLLM trains once on general VIM data and evaluates zero-shot on all benchmarks, while Pix2Struct fine-tunes per downstream task. These are genuinely different evaluation protocols.
-- **"Missing variance across training runs"**: While desirable, multi-seed results are not standard practice in this field for model contributions of this scale. Moved to nice-to-have.
-- **"Missing related works"**: Cannot verify existence of specific missing citations.
-- **Formatting/style nitpicks**: Removed per rules.
+- **Critic claim: "VIM is fundamentally an OCR stress test wrapped in instruction-following language."** This overstates the case. The Mix Instruction data actually shows a large remaining gap from Mix to TEM (e.g., 14.28→58.41 for LLaVA-1.5 OKVQA), and the word-match vs. semantic-match analysis shows that even when models CAN extract words (29/30), they fail to reconstruct semantic meaning (7/30). This indicates the failure goes beyond OCR into higher-level text understanding. The correct characterization is that VIM tests a pipeline from text recognition → semantic reconstruction → instruction following, and the paper overemphasizes only the last step.
+
+- **Critic claim that v-MLLM TEM performance being slightly below LLaVA-1.5 needs highlighting as a weakness.** The differences are small (e.g., OKVQA: 56.09 vs. 58.41) and the paper reasonably calls this "comparable." This is not a substantive weakness.
+
+- **Critic demand for Pix2Struct-style pretraining comparison.** This is outside the paper's stated scope and would require a fundamentally different experimental setup.
+
+- **Critic claim that the VIM setting's lack of text prompt is a "confound."** The paper explicitly defines three settings (TEM, Mix, VIM) and explains the design (Section 2.1.3). The absence of a text prompt is the *point* of VIM, not a confound — it's testing whether models can follow instructions presented only visually. The Mix Instruction ablation explicitly addresses this concern.
+
+- **Critic claim about missing statistical significance for training strategy ablation (Table 7).** This is a minor point; single-run evaluation is the norm in this space, and the differences observed are small enough that the "no significant difference" conclusion is reasonable.
 
 ## Novel Insights
-The paper's most intellectually valuable finding is not the v-MLLM model but the structural insight it reveals about MLLM evaluation: current TEM-based benchmarks allow significant performance from language priors alone (Llama 2 without images outperforms GPT-4 on 6/8 tasks), while VIM forces genuine visual comprehension. However, the paper's own ablation (Table 5) paradoxically undermines its framing—showing that VIM difficulty is largely an OCR problem rather than a reasoning problem—suggesting that the most impactful future direction may not be training models on VIM format but improving visual text recognition as a prerequisite capability.
+
+The word-match vs. semantic-match distinction (Figure 5) reveals an underappreciated finding: open-source MLLMs can extract individual words from rendered text (29/30) but fail dramatically at reconstructing the full semantic meaning (7/30 for LLaVA-1.5-7B). This suggests the bottleneck is not at the character/word level (traditional OCR) but at a compositional understanding level — the models see the trees but miss the forest. Meanwhile, GPT-4V's near-perfect performance on both metrics (29/30 on both) suggests that proprietary models have developed a fundamentally different capability for semantic text reconstruction from visual input. This distinction between word-level and semantic-level visual text understanding deserves deeper investigation and has implications beyond the VIM setting.
 
 ## Suggestions
-- Run LLaVA-1.5 (or any open-source baseline) with the same VIM training data D_V and compare against v-MLLM. This single experiment would clarify whether the model contribution is real or simply an artifact of data exposure.
-- Reframe the paper's contribution to accurately position VIM as probing visual text recognition + instruction following, with the recognition bottleneck being the dominant factor. The abstract and title should reflect this more nuanced characterization.
-- Conduct a systematic error categorization on a large sample of VIM failures (at minimum 200 examples across benchmarks) separating OCR failures from reasoning failures.
+
+- Reframe the paper's claims to honestly represent VIM as testing the full pipeline from visual text recognition → semantic reconstruction → instruction comprehension, rather than framing it purely as "instruction following." This would make the contribution more precise and the claims better supported.
+- Replace "generalizable" in the abstract with more measured language, or add experiments testing v-MLLM on naturally occurring text-in-image data (web screenshots, document images) to support the generalizability claim.
+- Add a brief discussion of why GPT-4V/GPT-4O sometimes perform better under VIM than TEM on benchmarks like OKVQA and VizWiz, acknowledging this as a potentially interesting finding about language prior interference.
 
 ## Score and Decision
 
-Calibration anchors:
-- **High-scoring (>7)**: KiVA (7.0, Poster) — benchmark revealing LMM failure at basic visual analogical reasoning with structured three-stage failure analysis; MMIE (8.0, Oral) — large-scale interleaved multimodal benchmark; VLB (7.5, Oral) — dynamic multimodal evaluation revealing LVLM limitations; MIA-Bench (6.0, Poster) — instruction-following benchmark with training data and fine-tuning.
-- **Medium-scoring (4-6)**: MMICL (5.6, Poster) — converts existing datasets to new intereaved format and trains model, with circularity concerns; MMMT-IF (4.0, Reject) — multimodal instruction-following benchmark; PolyMATH (5.5, Reject); MCTBench (3.0, Reject) — text-rich visual scene cognition benchmark.
-- **Low-scoring (<3)**: TADIS (3.75, Withdrawn) — model learns from format rather than mapping, overclaimed generalization; Vision-free Baseline (2.33) — showing catastrophic multimodal underperformance; Data contamination/circularity papers (2-3.75).
+Calibration anchors used:
+- **High band (>7):** MMIE (8.0, large-scale interleaved benchmark with 20K curated queries and automated scoring), VLB/Dynamic Multimodal Evaluation (7.5, dynamic evaluation protocol), ChartMimic (7.0, chart-to-code benchmark with 4800 curated triplets) — all have substantially more novel benchmark construction methodology.
+- **Medium band (4-6):** MIA-Bench (6.0, instruction following benchmark with 400 curated pairs), ASCII art text perception (5.67, benchmarking visual text understanding), MTVQA (5.0, multilingual text-centric VQA), reformatted-existing-dataset papers (5.0-5.67) — these are the most comparable. The current paper is roughly similar to MIA-Bench in contribution level but weaker due to overclaiming; it's stronger than MTVQA in diagnostic depth.
+- **Low band (<3):** MCIL benchmark (2.33, merely splitting existing datasets), MIMOSA (2.6, overclaimed comparable accuracy) — clearly weaker than the current paper.
 
-This paper is most similar to KiVA (7.0) in its structure: revealing a fundamental blind spot in LMMs via a novel evaluation paradigm with structured failure analysis. However, it has a more significant weakness than KiVA: the model contribution (v-MLLM) has an uncontrolled confound with data exposure, and the framing misattributes the failure mode. It is stronger than MCTBench (3.0) and TADIS (3.75) because the core evaluation finding (Table 3) is genuinely striking, well-documented across 8 benchmarks and 11 models, and the ablation (Table 5, Figure 5) provides genuine analytical insight. It is weaker than MMICL (5.6) because MMICL, despite similar circularity concerns, had a clearer model contribution (multi-modal in-context learning architecture vs. simple data format conversion). It is more novel than MIA-Bench (6.0) because MIA-Bench is a straightforward instruction-following benchmark while VIM reveals a deeper structural insight about evaluation paradigms.
+The paper identifies a real and important problem with solid diagnostic analysis, but the contributions (reformatting existing benchmarks, retraining on same-format data) are relatively incremental, and the generalizability claims are unsupported. This places it in the lower-to-middle medium band, below MIA-Bench (6.0) which creates genuinely new curated evaluation data, but above the rejected text-in-image papers (5.0-5.67) given its stronger diagnostic decomposition and v-MLLM contribution.
 
 MY FINAL SCORE: <pineapple>5.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

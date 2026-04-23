@@ -1,43 +1,24 @@
-Now I have sufficient information. Let me synthesize my final review.
-
-Key findings from my verification:
-
-1. **RetNet connection**: The harsh reviewer is right — the SRA mechanism (Eq. 2) is essentially RetNet's Retention with data-dependent decay replacing fixed decay. The paper never mentions RetNet. The figure caption even says "Selective Recurrent Retention" — note the word "Retention." The core recurrence S_n = γ_n S_{n-1} + K_n^T V_n, O_n = Q_n S_n is identical. The paper does cite TimelyGPT (Song et al., 2024a), which itself builds on RetNet-like mechanisms. This is a significant omission that undermines the novelty claim.
-
-2. **Time-specific inference circularity**: The paper says "To forecast a target time point (x_{n'}, t_{n'}), TrajGPT utilizes both the target timestep t_{n'} and the last observation (x_n, t_n) to predict the corresponding observation x_{n'}." Then it says S_{n'} = D_{Δ} S_n + K_{n'}^T V_n, O_{n'} = Q_{n'} S_{n'}. Per Eq. 1, K_{n'} = X_{n'} W_K e^{-iθt_{n'}}, and V_{n'} = X_{n'} W_V. If X_{n'} is the embedding of x_{n'} (the unknown target), this is circular. However, looking more carefully at the text, it says "TrajGPT utilizes both the target timestep t_{n'} and the last observation (x_n, t_n)." It's possible that Q_{n'}, K_{n'} are computed using the RoPE at the target timestep but with the embedding from the last observation. The paper is genuinely ambiguous here. This is a valid criticism.
-
-3. **ODE interpretation**: The harsh reviewer is largely correct. The paper derives A from the already-designed recurrence (Eq 5: A = ln(Λ_t)/Δ), which is a reverse engineering step. This doesn't guide architecture design. However, the ODE connection does enable the time-specific inference practical benefit, which is empirically validated (6.2% improvement). So the ODE framing, while not constructively derived, does lead to a useful inference strategy.
-
-4. **Pre-training asymmetry**: The paper states: "For other models without an established pre-training paradigm, we employed a masking-based method by randomly masking 40% of timesteps with zeros." This is indeed asymmetric — TrajGPT gets its natural pre-training objective (next-token prediction), while encoder-only baselines are forced into a masking paradigm. However, the paper does note that "BiTimelyGPT and PatchTST are encoder-only models that require fine-tuning for forecasting tasks, while other Transformer models with decoders can forecast without additional fine-tuning." The paper also says non-Transformer models were "trained from scratch." The "zero-shot" results compare pre-trained decoders vs. encoder-only models forced into masking. But under full fine-tuning, TrajGPT is often not the best (e.g., BiTimelyGPT and PatchTST outperform on some tasks). This asymmetry is a valid concern but somewhat mitigated by the fine-tuning results.
-
-5. **"Zero-shot" framing**: The "zero-shot" evaluation means the model is pre-trained and then evaluated with frozen representations — no task-specific fine-tuning. This is standard in representation learning literature. However, the pre-training and evaluation use the same data distribution (PopHR), so this isn't cross-domain zero-shot transfer. The paper is somewhat misleading in its framing but this is common practice in representation learning papers.
-
-Let me now assign a score. Comparing to my anchors:
-- High anchors (score >7): ACSSM (8.0), MOTOR (7.5) — these have genuine theoretical novelty and/or massive empirical validation
-- Medium anchors (4-6): TimelyGPT (5.5), GLA (5.8), RetNet variants (4.75) — moderate novelty with limitations
-- Low anchors (<3): xJ5CF1aOOX (2.5, slight modification of existing method), EfficientSkip (2.5, minor variant of MoD)
-
-This paper is better than the low anchors — it has substantial empirical work, tackles an important problem, and shows consistent improvements. But it has significant novelty concerns (SRA ≈ RetNet + data-dependent decay, unacknowledged) and the ODE contribution is overstated. It's comparable to TimelyGPT (5.5) but with more experiments and the genuine practical contribution of time-specific inference. However, the RetNet omission is more serious than TimelyGPT's novelty issues since TimelyGPT at least cited its predecessors.
-
-I'd place this around 4.5-5.0. The RetNet omission is a significant problem, and the pre-training asymmetry concerns me. But the time-specific inference is a genuine practical contribution, and the experimental breadth is good.
-
-Let me settle on 4.5.</think>Now I have thoroughly read the paper and all calibration anchors. Let me compose the final review.
+Now I have enough information to write the meta-review. Let me synthesize everything.---
 
 ## Summary
 
-TrajGPT proposes a Transformer architecture for irregularly-sampled clinical time series that introduces a Selective Recurrent Attention (SRA) mechanism with data-dependent decay, interprets the architecture as discretized ODEs to enable time-specific inference (predicting at arbitrary target timesteps without autoregressive decoding), and demonstrates strong "zero-shot" performance across forecasting, drug usage prediction, and phenotype classification on PopHR and eICU datasets.
+TrajGPT introduces a Selective Recurrent Attention (SRA) mechanism with data-dependent decay for irregularly-sampled time-series pre-training, interprets the model as a system of discretized ODEs, and leverages this connection to enable time-specific inference that directly predicts arbitrary target timesteps. The model is evaluated on two large-scale healthcare EHR datasets (PopHR, 489K patients; eICU, 139K patients) across forecasting, drug prediction, and phenotype classification, demonstrating competitive zero-shot and few-shot performance against 17+ baselines.
+
+---
 
 ## Strengths
 
-- **Time-specific inference is a genuine and practical contribution.** By leveraging the ODE interpretation to evolve the hidden state by an arbitrary $\Delta$ and skip autoregressive decoding, TrajGPT achieves a 6.2 percentage point improvement over its own autoregressive inference on top-10 recall (71.7% vs 65.5%, Table 3), and this advantage grows with forecast window size (Section 5.2, Fig. 6). This is a clean, empirically validated benefit that addresses a real need in clinical forecasting.
+- **Time-specific inference provides a clear, measurable benefit**: The ablation (Table 3) shows time-specific inference outperforms auto-regressive inference by 6.2% (71.7% vs. 65.5% top-10 recall), which is the single largest componentwise gain in the study. This is the paper's most substantive technical contribution — the ODE interpretation is not just cosmetic, it directly enables a practically useful inference procedure.
 
-- **Comprehensive empirical evaluation across multiple tasks and baselines.** The paper evaluates on two healthcare datasets (PopHR with 489K patients, eICU with 139K patients) across forecasting, classification, and sepsis detection, against 18 baselines including domain-specific irregular time-series models (Table 1, Table 2). TrajGPT achieves best or second-best results across most tasks and settings.
+- **Strong zero-shot performance across all tasks**: TrajGPT achieves the best zero-shot result on all tasks evaluated — 67.2% (insulin), 72.8% (CHF) on PopHR (Table 1), and 45.1% (sepsis) on eICU (Table 2) — outperforming all baselines including models specifically designed for irregular time series. Zero-shot capability is meaningful in low-resource clinical settings.
 
-- **Strong zero-shot classification results.** TrajGPT achieves the best zero-shot AUPRC for insulin usage (67.2%), CHF classification (72.8%), and sepsis detection (45.1%), outperforming all baselines including TimelyGPT and BiTimelyGPT (Tables 1, 2). The qualitative UMAP visualizations (Fig. 3) corroborate that learned representations capture clinically meaningful structure.
+- **Comprehensive evaluation breadth**: Experiments span two real-world EHR datasets with distinct characteristics (longitudinal population claims vs. ICU records), three learning regimes (zero-shot, few-shot, fine-tuning), and multiple task types with 17+ baselines. This is substantially broader than comparable work such as TimelyGPT.
 
-- **Efficient computational properties.** The SRA mechanism achieves $O(N)$ training and $O(1)$ per-step time-specific inference (Section 3.3), which is practically meaningful for long clinical sequences.
+- **Clinically coherent trajectory visualizations**: Figure 4 case studies show plausible disease progression dynamics (e.g., chronic IHD, hypothyroidism, and obesity preceding diabetes onset at ages 59–62), demonstrating that the learned representations capture medically meaningful comorbidity structure.
 
-- **Clinically interpretable trajectory analysis (Section 5.3).** The case studies demonstrate that TrajGPT can interpolate/extrapolate disease risk trajectories and attribute risk growth to clinically relevant comorbidities (e.g., chronic IHD, hypothyroidism, obesity correlating with diabetes risk spikes, Fig. 4).
+- **Efficient architecture**: O(N) training and O(1) inference complexity (Section 3.3) provides practical advantages for large EHR sequences over ContiFormer (ODE-based, quadratic) and standard Transformers.
+
+---
 
 ## Weaknesses
 
@@ -46,70 +27,93 @@ None.
 
 ### Major
 
-- **The SRA mechanism is a data-dependent variant of RetNet's Retention, and this connection is unacknowledged.** The core recurrence $S_n = \gamma_n S_{n-1} + K_n^T V_n$, $O_n = Q_n S_n$ (Eq. 2) is structurally identical to RetNet's Retention mechanism (Sun et al., 2023). The only difference is that RetNet uses a fixed decay $\gamma$ while TrajGPT makes it data-dependent via $\gamma_n = \text{Sigmoid}(X_n w_\gamma^T)^{1/\tau}$. Notably, even the paper's own figure caption reads "Selective Recurrent **Retention**" (Fig. 1b), yet RetNet is never cited or discussed anywhere in the paper. The parallel form (Eq. 3) and the recurrent/parallel duality are also directly inherited from RetNet. Presenting SRA as a "novel" mechanism without acknowledging this lineage misleads readers about the actual contribution. Making RetNet's decay data-dependent is a reasonable design choice, but the novelty is incremental, and the omission prevents readers from understanding what is actually new versus inherited.
+- **Asymmetric pre-training weakens baseline comparisons**: TrajGPT uses its natural next-token prediction pre-training. For other Transformer models without an established pre-training paradigm (Informer, Autoformer, FEDformer, PatchTST, TimesNet, ContiFormer), the paper applies a zero-masking procedure (Section 4.4: "randomly masking 40% of timesteps with zeros"). Zero-masking with zeros is a weaker self-supervised objective than next-token prediction: it provides no gradient signal from non-masked positions, does not optimize a natural sequence likelihood, and is not used as those models' intended training paradigm. This asymmetry most seriously affects encoder-style models (Informer family, PatchTST, ContiFormer), handicapping their representations before the downstream evaluation even begins. Comparison to TimelyGPT and PrimeNet — which use their own established objectives — is fairer, but the paper never distinguishes which baselines have equalized pre-training and which do not. As presented, it is impossible to determine whether TrajGPT's gains over the Informer family reflect architectural quality or pre-training objective quality.
 
-- **The time-specific inference formula has a specification gap regarding $K_{n'}$ and $V_{n'}$.** Section 3.2 states that to predict $(x_{n'}, t_{n'})$, the model computes $S_{n'} = D_\Delta S_n + K_{n'}^\top V_n$ and $O_{n'} = Q_{n'} S_{n'}$. Per Eq. 1, $K_{n'} = X_{n'} W_K e^{-i\theta t_{n'}}$ and $V_{n'} = X_{n'} W_V$, where $X_{n'}$ is the embedding of $x_{n'}$ — the very observation being predicted. The paper never clarifies how $K_{n'}$ and $V_{n'}$ are obtained. If they reuse $X_n$ (the last known observation), the mechanism reduces to evolving the hidden state by time $\Delta$ and querying it, which is straightforward state extrapolation. If they somehow require $X_{n'}$, the formula is circular. This ambiguity directly affects the paper's main procedural novelty claim.
+- **Most headline margins fall within overlapping standard errors**: Inspecting Table 1, TrajGPT at K=5 (57.4±3.2) is *lower* than TimelyGPT (58.2±3.7) — a directional reversal of the headline claim. At K=10, TrajGPT (71.7±2.6) leads TimelyGPT (70.3±3.1) by 1.4 points with overlapping intervals. At K=15, TrajGPT (84.1±2.4) beats MTand (83.7±1.9) by 0.4 points and HeTVAE (83.2±3.2) by 0.9 points — all within overlapping confidence bands. For CHF full fine-tuning, **mTAND (85.4±2.5) outperforms TrajGPT (83.9±2.0)**; the paper dismisses this by appealing to scalability rather than performance. In Table 2, MTand full fine-tuning (52.5±2.1) outperforms TrajGPT (51.3±2.4). No formal significance tests are reported. Given bootstrap standard errors of ±2–4%, the paper's claims of "superior performance" and "excels" are not supported for the majority of comparisons. The most defensible advantage is in zero-shot settings, which is the paper's strongest story.
 
-- **The ODE interpretation is post-hoc rather than constructive, and the claim of a "theoretical contribution" is overstated.** Eq. 5 defines $A = \ln(\Lambda_t)/\Delta$ from the already-designed recurrence — this is reverse engineering, not a constructive derivation from ODE principles. Any recurrent model with multiplicative decay can be similarly "interpreted" as a ZOH discretization of some ODE by defining $A$ accordingly. The ODE framing provides no architectural constraints or design guidance beyond what the recurrence already encodes. The practical benefit (time-specific inference through state evolution) is real, but it is a consequence of having a continuous hidden state with exponential decay — a property shared by GRU-D, ODE-RNN, Mamba, and many others. Framing this as "interpreting TrajGPT as discretized ODEs" inflates a mathematical observation into a theoretical contribution.
+- **SRA's novelty relative to existing linear attention mechanisms is limited and underarticulated**: The SRA parallel form — O = (QK^T ⊙ D)V with D_nm = b_n/b_m — is the standard cumulative-product decay structure shared by multiple existing linear recurrent attention architectures. The recurrent form with data-dependent gating γ_n is structurally analogous to Mamba's selectivity mechanism, which the paper includes as a baseline without clearly articulating what SRA adds beyond applying a similar mechanism to healthcare time series with irregular timestamps and ODE interpretation. The ablation shows that the data-dependent decay (vs. fixed decay) yields only 1.4% improvement (71.7% vs. 70.3%), which is within noise. The genuine novelty lies in the ODE-motivated time-specific inference, not in the SRA mechanism itself. The paper should be clearer about this.
 
 ### Minor
 
-- **Pre-training asymmetry in the zero-shot comparison.** TrajGPT is pre-trained with next-token prediction (its natural objective), while encoder-only models (PatchTST, BiTimelyGPT) are pre-trained with a generic masking method that "randomly masks 40% of timesteps with zeros" (Section 4.4). This forces baselines into a suboptimal pre-training paradigm. The paper acknowledges the distinction ("BiTimelyGPT and PatchTST are encoder-only models that require fine-tuning"), but the headline zero-shot results still conflate the benefit of SRA with the benefit of a matching pre-training objective. Notably, under full fine-tuning, TrajGPT often does not achieve the best results (BiTimelyGPT and PatchTST outperform on some tasks), which suggests the zero-shot gap partly reflects the pre-training advantage.
+- **Zero-shot classification methodology is unspecified**: The paper reports zero-shot AUPRC for insulin prediction and CHF classification (Table 1) and shows UMAP visualizations (Section 5.1), but never states the actual decision rule used to map sequence embeddings to binary labels. Is it nearest-centroid in embedding space? Cosine similarity to a disease token embedding? A score threshold on token probability? Without this, the zero-shot results cannot be reproduced.
 
-- **The "zero-shot" framing is misleading about the transfer setting.** TrajGPT is pre-trained on PopHR and evaluated on PopHR with sequence truncation — this is in-domain evaluation without task-specific fine-tuning, not cross-domain zero-shot transfer. The paper's language ("zero-shot performance across multiple tasks") obscures this distinction.
+- **Incomplete ablation table**: Table 3 contains a literal "?" for the "TrajGPT (without Pre-training)" row in the auto-regressive inference column. A question mark in a results table is unexplained and suggests either an unfinished experiment or suppressed result. Without this entry, the contribution of pre-training to auto-regressive performance cannot be assessed.
 
-- **Limited ablation for data-dependent decay.** The ablation in Table 3 removes decay gating entirely (fixed $\gamma$), which removes all context-dependence. This doesn't isolate whether the specific Sigmoid parameterization matters versus, e.g., Mamba-style or RetNet-style data-dependent gating. A more targeted ablation would clarify the actual contribution of the chosen parameterization over simpler alternatives.
+- **Cherry-picked case studies**: The trajectory analysis in Section 5.3 reports top-10 recall of 90.1% (diabetes) and 84.7% (CHF) for two specific patients — substantially above the population-level recall of 71.7%. No description of patient selection criteria is provided, raising the possibility of favorable selection. Population-level recall distributions or randomly sampled examples would be more informative.
 
-- **Qualitative trajectory claims lack systematic evaluation.** Section 5.3 provides two cherry-picked case studies showing clinically plausible patterns, but no systematic evaluation of trajectory quality (e.g., calibration of predicted risk, agreement with clinical timelines across a held-out cohort). The claim that "TrajGPT forecasts unseen diseases based on the history of clinically relevant phenotypes" rests on these two examples alone.
+- **Temperature hyperparameter τ=20 is unjustified**: The choice of τ=20 in γ_n = Sigmoid(·)^(1/20) compresses the decay toward 1 regardless of input, which partially undermines the "selective forgetting" motivation. No ablation or justification is provided for this value.
 
 ### Trivial
-None.
+
+- **Causal language about comorbidity is unsupported**: Section 5.3 states "TrajGPT successfully forecasts diabetes onset by identifying related metabolic and circulatory symptoms," which implies causal inference. A next-token prediction model identifies statistical associations, not causal pathways; this language should be softened.
+
+---
 
 ## Nice-to-Haves
 
-- Comparison against RetNet (with data-dependent decay) as a direct baseline to isolate SRA's contribution beyond the Retention mechanism.
-- A pre-training parity experiment where each model uses its natural pre-training objective, or TrajGPT is also evaluated with masking pre-training.
-- Classification-task ablations (Table 3 only covers forecasting).
-- Empirical validation of the claimed decay behavior ($\gamma_n$ higher for chronic diseases, lower for acute conditions).
+- **Out-of-distribution evaluation**: Pre-training on PopHR and evaluating on eICU (or vice versa) would directly test the "generalizable representations" claim. Currently both datasets are independent in-domain experiments. The paper acknowledges this limitation and lists it as future work, but it would substantially strengthen the submission.
+
+- **Formal significance tests**: Given standard errors of ±2–4%, paired bootstrap or permutation tests on the forecasting recall would clarify which comparisons are statistically meaningful.
+
+- **Ablation comparing fair pre-training objectives**: Adding one experiment where TimelyGPT is pre-trained with next-token prediction (as it is designed for) and compared directly to TrajGPT would isolate whether the SRA architecture adds value beyond the pre-training paradigm.
+
+- **Continuous/multivariate time series evaluation**: The paper focuses exclusively on discrete diagnosis codes. Extending to ICU vital signs (continuous measurements) would broaden the applicability claim and is already identified as future work.
+
+---
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution:
+*These points are flagged to be removed; treat them with caution.*
 
-- **O(1) inference claim is "misleading"** (from Harsh Critic): The paper states $O(1)$ is for "predicting a single target timestep after the entire input sequence has been processed," and the text at Section 3.3 is clear that this is per-step inference cost. This is standard terminology for recurrent models and the paper's comparison context is clear. Weakened to trivial at most; actually the paper is transparent about what it means.
+- **"SRA is identical to RetNet"** (Harsh Critic): The reviewer claims SRA's parallel form is the retention mechanism from "RetNet (Sun et al., 2023)" which the paper did not cite. Removed per the rule against citing missing related works that cannot be independently verified.
 
-- **Temperature $\tau = 20$ lacks justification** (from Harsh Critic): This is a hyperparameter choice. Requesting sensitivity analysis for every hyperparameter is a minor/nice-to-have concern at best, not a substantive weakness.
+- **"ODE connection is just standard SSM derivation"** (Harsh Critic): The paper explicitly provides a proof in Appendix C and derivation in Appendix D. The appendices are stripped by the parser but exist in the original submission. Removed per the rule against criticizing absent appendix content.
 
-- **Notation ambiguity in $K_n^{hT}$** (from Harsh Critic): This is a formatting/presentation nitpick. The convention is standard (transpose of the $h$-th head's key vector).
+- **"GPT-2 ablation (—) for time-specific inference is unjustified"** (Harsh Critic): Removed as a misunderstanding. GPT-2 lacks the recurrent state structure required for time-specific ODE-based extrapolation; the "—" is architecturally justified, not an omission.
 
-- **Missing related work** (from Harsh Critic pointing to RetNet omission): This specific omission (RetNet) is substantive and is kept as a Major weakness above. Generic "missing related works" concerns are removed per rules.
+- **"Cross-entropy loss inconsistency for zero-masking baselines"** (Harsh Critic): The paper states "All Transformer models performed 20 epochs of pre-training with cross-entropy loss" — while the baselines use zero-masking reconstruction, cross-entropy is applicable as a reconstruction objective. This is a minor presentation ambiguity, not a factual error, and the underlying pre-training asymmetry concern is already captured under Major weaknesses.
 
-- **UMAP visualizations provide "limited insight"** (from Harsh Critic): UMAP plots are standard qualitative analysis. While they don't constitute rigorous evaluation, they serve their intended purpose of qualitative illustration. This isn't a weakness per se.
+- **Reproducibility concerns about hyperparameters and training logs**: Removed per the rule on trivial implementation details.
+
+---
 
 ## Novel Insights
 
-The most insightful observation across these reviews is the tension between what the paper genuinely contributes — time-specific inference as a practical mechanism that avoids autoregressive error accumulation — and how it frames its contributions. The SRA mechanism and ODE interpretation serve primarily as scaffolding that enables the practically useful inference strategy, but the paper claims novelty at the mechanism level (SRA ≈ RetNet + data-dependent decay) and theory level (post-hoc ODE interpretation) rather than at the inference level where the genuine value lies. Reframing the contribution around time-specific inference, with SRA acknowledged as a RetNet variant designed to support it, would more honestly represent the paper's actual advances.
+The most genuinely novel contribution of this paper is the combination of ODE-motivated time-specific inference with GPT-style pre-training on EHR sequences. The 6.2% ablation gap between time-specific and auto-regressive inference (71.7% vs. 65.5%, Table 3) demonstrates that directly conditioning on the actual target timestep — rather than stepping autogressively at regular intervals — provides a meaningful advantage specific to irregularly-sampled medical data. This is a practical design insight that extends beyond this paper: models with recurrent hidden states parameterized by continuous time can, in principle, skip to any target horizon in O(1) inference steps, a property that is particularly valuable in clinical settings where follow-up visits occur at irregular and clinically meaningful intervals. The paper's connection of linear recurrent attention to neural ODEs under ZOH discretization provides a principled theoretical grounding for this inference strategy, even if the SRA mechanism itself is architecturally similar to existing linear attention approaches.
+
+---
 
 ## Suggestions
 
-- Cite and directly compare against RetNet. Even a single row in the comparison table with RetNet (using data-dependent decay) would clarify the incremental contribution versus the inherited architecture.
-- Explicitly clarify time-specific inference: state how $K_{n'}$ and $V_{n'}$ are computed when $x_{n'}$ is unknown (most likely they reuse $X_n$ with RoPE at $t_{n'}$). If the mechanism is simply "evolve state by $\Delta$ and query," name it transparently.
-- Reframe the contribution narrative: the ODE connection enables time-specific inference (genuine contribution), but the SRA mechanism itself should be presented as building on RetNet's Retention with data-dependent decay rather than as wholly novel.
+1. **Equalize pre-training across baselines**: At minimum, provide one experiment comparing TrajGPT vs. TimelyGPT where both use their natural pre-training objective, and separately report results for the encoder models that received zero-masking. This would clarify whether TrajGPT's edge is architectural or pre-training-related.
+2. **Report significance tests**: Add paired bootstrap p-values for the primary forecasting comparisons in Tables 1 and 2.
+3. **Specify zero-shot classification rule**: State precisely how sequence embeddings are mapped to binary labels for the zero-shot tasks.
+4. **Replace the "?" in Table 3**: Either complete or explain the missing ablation entry for "TrajGPT (without Pre-training) + auto-regressive."
+5. **Provide population-level trajectory statistics**: Supplement the two case studies in Section 5.3 with a distribution of per-patient top-10 recall across the test set, or show randomly sampled patient trajectories.
+
+---
 
 ## Score and Decision
 
-### Calibration Anchors
+**Calibration anchors used:**
 
-| Anchor Paper | Avg Score | Comparison |
-|---|---|---|
-| ACSSM (8zJRon6k5v) — ODE-based state space model for irregular time series, healthcare + climate, with genuine theoretical novelty via stochastic optimal control | 8.0 | TrajGPT is clearly below this: ACSSM derives its architecture from first principles, while TrajGPT's ODE connection is post-hoc and its SRA mechanism is a RetNet variant |
-| MOTOR (NialiwI2V6) — Foundation model for clinical TTE prediction, 55M patients, 19 tasks, rigorous zero-shot evaluation across sites | 7.5 | TrajGPT is below this: MOTOR has genuine scale, cross-site transfer, and a novel pre-training task, whereas TrajGPT's "zero-shot" is in-domain and its pre-training is standard next-token prediction |
-| TimelyGPT (2sCcTMWPc2) — Recurrent attention with time decay for long time series, EHR evaluation | 5.5 | TrajGPT is comparable or slightly above: both build on RetNet-style architectures, but TrajGPT adds data-dependent decay and time-specific inference with stronger empirical results and more baselines. However, TrajGPT has a worse novelty problem by not citing RetNet at all. |
-| RetNet (UU9Icwbhin) — Introduces Retention mechanism itself | 4.75 | TrajGPT is above this baseline: RetNet is the seed architecture, TrajGPT adds meaningful extensions (data-dependent decay, time-specific inference) and domain-specific evaluation |
-| xJ5CF1aOOX — Minor modification of existing method with unclear novelty | 2.5 | TrajGPT is clearly above this: despite novelty concerns, TrajGPT has substantial empirical work, a genuine practical contribution (time-specific inference), and comprehensive evaluation |
-| EfficientSkip (7DY2DFDT0T) — Minor variant of MoD with limited novelty | 2.5 | TrajGPT is clearly above: more substantial empirical contribution and the time-specific inference is a more meaningful advance than changing skipping granularity |
+| Paper | Path | Avg Human Score | Comparison |
+|---|---|---|---|
+| TimelyGPT (close predecessor) | `/human_reviews/2sCcTMWPc2.md` | 5.5, Reject | TrajGPT extends TimelyGPT with time-specific inference and data-dependent decay; structurally similar but with broader eval and one genuine technical addition (time-specific inference) |
+| MOTOR (EHR foundation model) | `/human_reviews/NialiwI2V6.md` | 7.5, Accept Spotlight | Much stronger novelty (first survival foundation model), larger scale, public release; TrajGPT is notably weaker |
+| Context Clues (EHR evaluation) | `/human_reviews/zg3ec1TdAP.md` | 7.0, Accept Poster | Primarily evaluation work, praised for systematic benchmarking; TrajGPT has more methodological content but weaker statistical rigor |
+| XTSFormer (irregular clinical events) | `/human_reviews/mH3yfzIPsL.md` | 5.0, Reject | Similar problem setting, comparable level of incremental contribution |
+| qU1GtrDDst (weak novelty paper) | `/human_reviews/qU1GtrDDst.md` | 1.8, Reject | Much weaker; TrajGPT clearly above this anchor |
 
-TrajGPT sits above the low anchors (2.5) due to its substantial empirical work and genuine time-specific inference contribution, but below the high anchors (7.5-8.0) due to overclaimed novelty and the unacknowledged RetNet connection. It is comparable to TimelyGPT (5.5), but the unacknowledged RetNet relationship is a more serious novelty issue than TimelyGPT faced. The pre-training asymmetry also weakens the headline results. I place this slightly below TimelyGPT.
+**Reasoning**: TrajGPT is clearly above the low anchor (1.8) and slightly above XTSFormer (5.0). Its most direct comparator is TimelyGPT (5.5, Reject), which it genuinely extends with time-specific inference, better zero-shot performance, and broader experimental coverage. However, TrajGPT shares TimelyGPT's core weaknesses: incremental architecture, asymmetric pre-training comparisons, and margins within statistical noise. MOTOR (7.5) represents a paper with clear novelty claims well-supported by experiments — TrajGPT does not reach this bar. The paper's strengths (time-specific inference, strong zero-shot, broad evaluation) place it above TimelyGPT, but the two major methodological issues (asymmetric pre-training, statistical significance) prevent a confident accept. I place it at **5.0** — above the borderline for TimelyGPT but below the bar set by stronger EHR foundation work.
 
-MY FINAL SCORE: <pineapple>4.5</pineapple>
+**Axis evaluations:**
+- *Originality*: Moderate — SRA is architecturally similar to existing linear attention; time-specific inference is the genuine contribution.
+- *Importance of research question*: High — irregular EHR pre-training is a well-motivated and practically important problem.
+- *Claims well-supported*: Weak — key claims of superiority are not statistically supported; the strongest claim (zero-shot) is reasonably supported.
+- *Soundness of experiments*: Moderate — good breadth, but asymmetric pre-training and missing significance tests are real methodological gaps.
+- *Clarity of writing*: Good — the paper is well-organized, though the zero-shot decision rule and ablation table issues are notable lapses.
+- *Value to research community*: Moderate — the time-specific inference idea is practically useful; the broader framing as an EHR pre-training method is incremental.
+
+MY FINAL SCORE: <pineapple>5.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

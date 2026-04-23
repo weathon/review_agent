@@ -1,90 +1,95 @@
-Now I have a thorough understanding of the paper. Let me compose the final review.
+Now I have a thorough understanding of the paper. Let me write the final consolidated review.
 
 ## Summary
 
-This paper presents the first systematic study of how different image cues (shape, texture, color) and their combinations influence learning success in semantic segmentation DNNs. The authors develop a generic procedure to decompose datasets into cue-specific variants—including a novel Voronoi-based texture extraction method—train "cue experts" on these decompositions, and evaluate their performance on original test images across three datasets (Cityscapes, CARLA, PASCAL Context) using both CNN and transformer backbones, with additional pixel-level late-fusion analysis of location-dependent cue influence.
+This paper studies what semantic segmentation DNNs can learn from individual visual cues (shape, texture, color) and their combinations, shifting perspective from studying biases of pre-trained models to studying learning influence. The authors develop a generic procedure to decompose segmentation datasets into cue-specific variants, train 14 cue experts per dataset across three benchmarks (Cityscapes, CARLA, PASCAL Context) with CNN and transformer backbones, and analyze cue influence at dataset, class, and pixel levels. The main findings are that neither texture nor shape clearly dominate, shape+color without texture achieves surprisingly strong results, and shape dominates at segment boundaries while texture dominates at interiors.
 
 ## Strengths
 
-- **Novel and important research question:** The paper shifts from studying cue *biases* in classification to cue *influence on learning* in segmentation, enabling pixel-level, class-level, and location-dependent analyses that classification studies cannot provide. This is a genuinely underexplored angle (Section 1, abstract).
+- **Novel problem framing**: Switching from "what cues do trained models rely on?" (bias) to "what can models learn from each cue?" (influence) is a genuine conceptual contribution, especially for dense prediction where pixel-level analysis is possible. This is clearly articulated in Section 1 and distinguishes the work from prior bias studies (Geirhos et al., 2018; Tuli et al., 2021).
 
-- **Comprehensive experimental framework with 14 cue combinations:** The systematic shorthand notation (Table 1) covering shape, texture, and color (including V/HS decomposition) enables more granular analysis than prior work. Training from scratch with multiple seeds and reporting standard deviations (Tables 2–3) is methodologically sound.
+- **Comprehensive empirical scope**: 14 cue combinations across 3 datasets (real street scenes, synthetic street scenes, diverse indoor/outdoor) with 2 architectures, plus class-level and pixel-level analyses. Tables 2–3 provide a systematic comparison with standard deviations from multiple seeds.
 
-- **Novel texture extraction method for segmentation:** The Voronoi-mosaic approach (Section 3, Figure 2) solves a genuine technical challenge—prior patch-shuffling methods destroy spatial coherence needed for pixel-level segmentation, making this a real contribution.
+- **Fine-grained location-dependent analysis**: The late fusion approach (Section 4, Table 4) revealing that shape experts dominate at segment boundaries (56.49% vs 37.16% on Cityscapes) while texture excels at interiors for synthetic data is genuinely insightful and less affected by domain shift confounds than the primary mIoU comparison.
 
-- **Actionable location-dependent findings:** Table 4 provides concrete quantitative evidence that shape experts substantially outperform texture experts at segment boundaries (56.49% vs 37.16% on Cityscapes, 19+ pp gaps across all datasets), while Figure 6's late-fusion heatmap visually corroborates this. This fine-grained finding is uniquely enabled by the segmentation setting.
+- **Novel texture-only extraction method**: The Voronoi-based procedure (Section 3, Fig. 2) solves the real problem that patch-shuffling destroys spatial coherence needed for segmentation, enabling the first valid texture-only segmentation dataset.
 
-- **Cross-dataset consistency with informative variations:** The core findings hold across three datasets spanning real-world street scenes, synthetic scenes, and diverse indoor/outdoor scenes (Tables 2–3). The variation on CARLA—where texture experts outperform shape experts on interiors due to highly discriminatory synthetic textures (Table 4)—provides a useful controlled comparison that strengthens the interpretation.
+- **Clean color expert design**: Using 1×1 convolutions to isolate per-pixel color information (Section 3) avoids domain shift entirely, making RGB/HS/V comparisons internally valid — a methodologically sound control.
 
 ## Weaknesses
 
 ### Fatal
-
 None.
 
 ### Major
 
-- **The evaluation protocol conflates cue informativeness with domain shift.** The central measurement trains experts on cue-decomposed data and evaluates on original images, but cue decompositions induce vastly different domain gaps. EED-based shape extraction preserves much of the spatial layout of the original image (smoothing texture while keeping edges and color gradients intact), while the Voronoi texture extraction completely reorganizes spatial structure—replacing natural object boundaries with Voronoi cell boundaries and assigning classes "uniformly at random" (Section 3). The paper itself provides the strongest evidence that this matters: when HED is applied as test-time preprocessing instead (domain-shift-free), the HED vs. EED ranking reverses on Cityscapes (55.80% vs 48.47%, Section 4.2). This directly demonstrates that domain shift can invert apparent cue rankings. The paper acknowledges this but relegates the domain-shift-free analysis to a brief mention and the appendix, and does not apply it to texture experts. While the paper's qualitative rankings are still informative, the claim in the abstract that "the way DNNs perceive the world can be broken down into distinct sources of evidence" is stronger than what the current evaluation establishes. The paper more precisely shows cross-domain transfer from cue-decomposed training to natural images, which is a valuable but different finding.
-
-- **EED removes texture but does not eliminate it.** The paper treats S_EED-RGB as providing "shape+color without texture" (Table 1, Section 4.2), but explicitly describes EED as a method that "diminishes texture through diffusion" (Section 3)—not eliminates it. Residual texture information likely contributes to S_EED-RGB's strong performance. The CARLA S_mvv baseline (checkerboard texture removal with rendering engine access) partly addresses this but is only reported for S+V. No ablation quantifies how much texture EED retains or how much the residual texture contributes, leaving the core "shape+color without texture" finding potentially inflated by unremoved texture.
-
-- **Color experts are architecturally constrained to 1×1 convolutions, confounding cue informativeness with model capacity.** The paper restricts color experts to "a fully convolutional neural network with two to three (1×1)-convolutions" (Section 4.1) to prevent spatial learning, but this means the "C experts are mostly dominated by T experts as well as S experts" finding (Section 4.2) partly reflects that a network with no receptive field is compared against full ResNet18/SegFormer backbones. Color experts with spatial capacity could learn spatial color distributions (e.g., sky is blue at the top), which might make color far more informative than 1×1-convs allow. While the architectural constraint is well-motivated (preventing shape/texture leakage into color), the resulting comparison does not cleanly isolate the contribution of color as a cue.
+- **The primary evaluation protocol confounds cue informativeness with domain shift robustness, and this limitation is insufficiently discussed.** All cue experts are trained on cue-specific data but evaluated on original images (Section 4.1). The domain shift between training and test varies drastically: EED images (S+C) retain visual similarity to originals, while HED edge maps (S-only) and Voronoi mosaics (T+C) are visually radically different. The paper itself provides the most compelling evidence of this confound: on Cityscapes, the HED expert achieves 13.38% mIoU on originals but 55.80% with HED preprocessing — a 42pp swing showing domain shift dominates the measured performance (Section 4.2). While the paper acknowledges this for HED explicitly and provides domain-shift-free numbers for HED and EED, it does not: (1) discuss how this asymmetry affects the S+C vs T+C comparison that drives the "surprisingly strong S+C" claim, (2) provide domain-shift-free numbers for all cue experts in the main paper, or (3) explicitly frame this as a limitation in the conclusion. The "gap" metric in Table 2 therefore measures a mixture of cue informativeness and domain shift tolerance, making direct cross-cue ranking comparisons problematic. This matters because the relative advantage of S_SEED-RGB over T_RGB may partially reflect EED's smaller domain shift rather than shape+color being inherently more informative than texture+color.
 
 ### Minor
 
-- **Voronoi cells introduce confounding spatial patterns while destroying natural spatial priors.** The random class assignment eliminates spatial priors that exist in real data (e.g., road at bottom, sky at top), while Voronoi cell boundaries create artificial edge structure. The texture expert thus faces a double penalty at test time: it learned from data with absent spatial priors and present artificial structure, neither of which exists in natural images. This is a specific manifestation of the domain-shift concern but worth noting separately for the texture decomposition design.
+- **EED-based S+C images may retain residual texture, introducing ambiguity into the headline finding.** EED "diminishes texture through diffusion" (Section 3) but does not eliminate it — smoothed gradients within segments still carry texture-like statistical regularities. The S_SEED-RGB expert may therefore learn from shape+color+residual_texture, not shape+color alone. While the 23pp gap between S_SEED-RGB (42.22%) and all-cues (65.22%) on Cityscapes suggests substantial information is missing, the paper provides no quantification of how much texture survives EED processing, and the CARLA checkerboard control (S_mv) only covers S+V, not S+C. This leaves the "without texture" characterization of the S+C finding somewhat ambiguous.
 
-- **Segment-wise recall analysis (Figure 5) is shown for only two classes on CARLA.** The claim that "small objects and pixels at object borders are dominantly better predicted by shape experts" would be strengthened by systematic evaluation across more classes, especially small-object classes like pole, traffic sign in Cityscapes.
+- **The Voronoi texture extraction creates a surrogate task with random spatial layout, which conflates texture informativeness with spatial-layout mismatch when evaluating on original images.** While this design is intentional (preserving spatial layout would introduce shape information), it means the texture expert's low performance on originals reflects both the absence of shape information during training AND the mismatch in spatial layout geometry. A control preserving original segment geometry while replacing texture (e.g., filling ground-truth segments with class-specific texture mosaics) would help separate these factors, though it would also partially reintroduce shape information.
 
-- **Statistical significance of ranking differences is unclear.** In Table 2, S_EED-HS (19.48 ± 3.19) and T_RGB (20.10 ± 0.98) on Cityscapes CNN have overlapping ranges. Whether the claimed ordering is robust to random variation is not tested, especially for adjacent entries in the ranking.
+- **The claim that findings "hold for CNNs and transformers" based on ranking similarity understates the large absolute performance differences.** For example, T_RGB on Cityscapes: 20.10% (CNN) vs 31.88% (transformer) — a 12pp difference. The paper attributes this to transformers' "increased cross-domain performance" (Section 4.2), which itself suggests the absolute mIoU values are confounded by domain shift handling, not just cue informativeness.
 
 ### Trivial
-
 None.
 
 ## Nice-to-Haves
 
-- A domain-shift-free or domain-shift-mitigated evaluation for texture experts (e.g., evaluating T_RGB on Voronoi-mosaic test images with Voronoi-assigned labels) would substantially strengthen the core claim about relative cue importance.
-- A quantification of EED's residual texture (e.g., via local autocorrelation or Gabor energy metrics) would clarify how much the S_EED results depend on unremoved texture.
-- A color expert ablation with spatial capacity (e.g., training on spatially-shuffled-within-segment data while preserving spatial color distributions) would disentangle color cue poverty from architectural restriction.
+- Domain-shift-free evaluation numbers for ALL cue experts (not just HED and EED) in the main paper, which would allow readers to directly compare cue informativeness unconfounded by domain shift.
+- Quantification of residual texture in EED outputs (e.g., via frequency analysis or texture statistics), which would strengthen the "without texture" claim.
+- Explicit limitation discussion in the conclusion acknowledging the domain shift confound and its implications for interpreting the primary results.
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution:
+These points are flagged to be removed, treat them with caution.
 
-- **Harsh Critic's claim that the paper's conclusions are "unreliable" and that this is a "structural issue that cannot be resolved without redesigning the evaluation protocol."** The domain-shift concern is real and major, but the paper does acknowledge it (Section 4.2, HED pre-processing results) and provides complementary evidence. The findings about location-dependent influence (Table 4), class-level effects (Figure 3), and CARLA's divergence (texture > shape on interiors) are still informative even with the domain-shift confound. The concern warrants major-flagged criticism but not a fatal "unreliable" verdict.
+- **Harsh Critic's claim that the domain shift "invalidates the paper's core claims"**: Overstated. The paper acknowledges the domain shift for HED (Section 4.2), provides domain-shift-free numbers (55.80% HED vs 48.47% EED on Cityscapes), and references a comprehensive domain-shift-free study in the appendix. The late fusion analysis (Table 4) provides domain-shift-robust evidence. The core claims are weakened but not invalidated — the issue is insufficient prominence and discussion, not complete absence.
 
-- **Harsh Critic's claim that the paper does not report domain-shift-free results for texture experts.** While true that a Voronoi-to-Voronoi evaluation is absent, the CARLA dataset partially serves this role—texture is more discriminatory in CARLA (highly distinctive synthetic textures) and indeed texture experts outperform shape experts on interiors (Table 4). This provides indirect evidence that texture's informativeness depends on the domain, which the paper discusses.
+- **Harsh Critic's claim that "the paper does not acknowledge the domain shift confound as a limitation"**: Partially incorrect. The paper explicitly discusses it for HED (Section 4.2, line 224) and for the architecture comparison (line 356), and provides an alternative evaluation. However, it does not frame it as a general limitation affecting cross-cue comparisons or discuss it in the conclusion.
 
-- **Harsh Critic's demand for a "no information" baseline on Voronoi diagrams (uniform fill, no texture) to test whether Voronoi spatial structure is learnable.** This is an interesting suggestion but goes beyond what the current results require—the "no info" row in Table 2 (randomly initialized DNNs achieving 0.25% mIoU) already provides a floor, and whether Voronoi cells alone enable learning is an additional experiment rather than a flaw in the current design.
+- **Harsh Critic's claim that the Voronoi layout issue makes the S vs T comparison "structurally unfair"**: The design choice is defensible — preserving spatial layout would introduce shape information, defeating the purpose of texture-only training. The issue is more accurately described as a limitation that should be acknowledged rather than a flaw that makes the comparison unfair.
 
-- **Strength Finder's claim that the paper shows "strong empirical evidence that shape+color without texture achieves surprisingly high performance" with S_EED-RGB "far exceeding" T_RGB on Cityscapes (42.22% vs 20.10%).** While the numbers are correct, given the domain-shift confound (Major weakness #1), describing this as "strong evidence" overclaims. The gap is informative but its magnitude is partially driven by asymmetric domain shift, not purely by cue informativeness. Downgraded to a qualified strength.
+- **Strength Finder's claim that "surprising finding that shape+color without texture achieves strong segmentation" is a "core strength"**: This is weakened by the residual texture concern and domain shift asymmetry. It should be presented as a finding with caveats rather than an unqualified strength.
 
-- **Strength Finder's "publicly available code and data generation procedure" claim.** The paper states "Our code including the data generation procedure is publicly available at TBA" (Section 1)—the URL is placeholder ("TBA"), so this cannot be verified as a strength at this time.
+- **Strength Finder's claim about "rigorous experimental controls"**: While the paper does use multiple seeds and restricted augmentation, the domain shift asymmetry across cue experts is itself an uncontrolled confound, making "rigorous" an overstatement.
 
 ## Novel Insights
 
-The paper's CARLA results provide a natural experiment that illuminates the domain-shift issue: texture experts outperform shape experts on CARLA interiors (89.83% vs 82.63% accuracy, Table 4) specifically because CARLA's limited set of highly distinctive synthetic textures makes texture a stronger cue than in real-world datasets. This cross-dataset divergence is not just a limitation—it is informative. It suggests that the relative importance of shape vs. texture is genuinely domain-dependent rather than universally shape-favored, which partially mitigates the domain-shift concern: if the rankings were purely artifacts of asymmetric transfer, we would not expect a clean reversal that aligns with the known properties (low texture diversity) of real-world data.
+The paper's most durable contribution may be the late fusion framework itself as a methodology for studying cue influence at pixel level. The finding that shape dominates at boundaries while texture dominates at interiors (Table 4) is intuitively sensible but was previously unquantified, and this pattern holds consistently across all three datasets despite their different characteristics. The domain shift issue, while a real limitation, also yields an interesting incidental finding: in the domain-shift-free evaluation, HED (S-only) outperforms EED (S+C) on Cityscapes (55.80% vs 48.47%), which inverts the ranking from the primary evaluation and suggests that pure shape information may be more informative than shape+color when the domain shift is controlled — a nuance that the paper mentions but underemphasizes.
 
 ## Suggestions
 
-- Reframe the abstract and conclusion to clearly distinguish "what DNNs learn from each cue" from "how well cue-decomposed training transfers to original images." The current abstract claim that "the way DNNs perceive the world can be broken down into distinct sources of evidence" is stronger than the evidence supports; a more precise framing (e.g., "cue-specific training transfers to original images with domain-dependent effectiveness") would be more defensible and still impactful.
-- Report domain-shift-free results (cue extraction as test-time preprocessing) for all cue experts where feasible, and give this analysis equal prominence with the cross-domain evaluation in Tables 2–3.
-- Add a brief quantitative analysis of EED's residual texture (even a simple metric like comparing local variance in EED vs. original images) to bound how much the S_EED results might rely on unremoved texture.
+- Promote the domain-shift-free evaluation from the appendix to the main paper and report numbers for ALL cue experts, not just HED and EED. This would allow a clean comparison of cue informativeness and would either confirm or modify the main findings.
+- Add a brief "Limitations" paragraph in the conclusion explicitly discussing the domain shift confound and the residual texture ambiguity, rather than leaving these to a single paragraph in Section 4.2.
+- When presenting the "surprisingly strong S+C" finding, qualify it with "under the current evaluation protocol where EED images have a relatively small domain shift from originals" to prevent overinterpretation.
 
 ## Score and Decision
 
-**Calibration anchors:**
+**Calibration anchors used:**
 
-- **High band (>7):** `rmg0qMKYRQ` (avg 8.0, shape/texture bias in generative classifiers) — this paper similarly studies cue biases systematically but with a cleaner evaluation methodology (direct likelihood comparison, no domain-shift confound). The paper under review is less methodologically clean but addresses a harder problem (segmentation vs. classification) with richer analysis granularity.
-- `PBjCTeDL6o` (avg 8.0, UNI framework for addressing texture/colour bias in interpretations) — addresses a related problem with strong theoretical grounding. The current paper has less theoretical foundation but broader empirical scope.
-- **Medium band (4–6):** `aM7US5jKCd` (avg 5.25, adversarial robustness in segmentation with methodological confound) — similarly identifies a methodological confound in existing evaluation protocols. This was rejected, partly due to presentation issues and incremental contribution. The current paper has a similar methodological confound (domain shift) but acknowledges it and provides partial mitigation.
-- `bb2Cm6Xn6d` (avg 5.5, LLVM perception properties) — systematic empirical study with some evaluation protocol concerns, rejected.
-- `SYBdkHcXXK` (avg 6.0, frequency aliasing in segmentation) — novel diagnostic finding + mitigation, accepted poster. The current paper is similar in providing a novel diagnostic framework but lacks the mitigation component.
-- **Low band (<3):** `WRxCuhTMB2` (avg 1.67) — fundamentally flawed methodology, no comparison. The current paper is far stronger than this.
-- `V73W8MXnNW` (avg 3.0) — visual cue decomposition with limited novelty/poor baselines, withdrawn.
+| Paper | Path | Avg Score | Comparison |
+|-------|------|-----------|------------|
+| Intriguing Properties of Generative Classifiers | rmg0qMKYRQ | 8.0 | Cleaner methodology, striking finding (99% shape bias); paper under review is below this due to domain shift confound |
+| Object vs Attribute Bias in VLMs | uAFHCZRmXk | 8.0 | Comprehensive across 98 models with clear findings; paper under review has less clean methodology |
+| Does Resistance to Style-Transfer Equal Shape Bias? (DiST) | Yr4RgiZ7P5 | 5.25 | Novel shape bias benchmark but limited scope; paper under review is more comprehensive |
+| Fine-grained Analysis on Spurious Correlation | hom2oeHCnz | 5.33 | Novel bias analysis framework with methodological limitations; comparable level |
+| Evaluating Model Bias Requires Characterizing Mistakes | AKZtQO81GQ | 6.0 | Novel metric but limited novelty; paper under review has more novelty in framing |
+| SEBRA: Debiasing through Self-Guided Bias Ranking | MyVC4X5B2X | 5.75 | Interesting approach with assumption dependency; comparable methodological concern level |
+| Generalized Anomaly Detection with Knowledge Exposure | MbtUctg3KW | 2.50 | Self-serving/confounded evaluation; paper under review is clearly above this |
+| Benchmarking Survival Models | aoW5Sm8Op8 | 2.33 | Fundamental flaws in evaluation; paper under review is clearly above this |
 
-The paper under review has a real methodological confound (domain shift) but also makes genuine contributions (novel segmentation-specific cue analysis, Voronoi texture extraction, location-dependent findings). It is comparable to the medium-band papers that identify evaluation issues in existing paradigms but still provide useful empirical insights. The domain-shift concern is significant but partially addressed by the authors' own CARLA results and HED pre-processing analysis. The paper is stronger than `aM7US5jKCd` (which was rejected at 5.25) because it provides richer multi-granularity analysis and genuinely novel findings (boundary vs. interior effects), but weaker than `SYBdkHcXXK` (accepted poster at 6.0) which offers both diagnostic findings and mitigation.
+The paper under review has genuine novelty in framing and comprehensive experiments, with a particularly strong late fusion analysis. However, the domain shift confound in the primary evaluation is a significant methodological limitation that is acknowledged but insufficiently addressed in the main paper. Compared to medium-scoring anchors (5.25–6.0), the paper has more novelty than DiST (5.25) and comparable methodological concerns to SEBRA (5.75), but its domain shift issue is more central to its claims than SEBRA's assumption dependency. The paper is clearly above the low-scoring anchors (2.33–2.50) which have fundamental evaluation flaws, because the paper provides domain-shift-free numbers and the late fusion analysis is robust. I place it at 5.5 — a borderline reject reflecting genuine contributions undermined by insufficient treatment of a significant methodological limitation.
+
+**Evaluation axes:**
+- **Originality**: High. The framing (learning influence vs bias) and the Voronoi texture extraction are novel.
+- **Importance of research question**: Moderate-to-high. Understanding cue influence for segmentation is important but the findings are somewhat entangled with domain shift.
+- **Claims support**: Moderate. The primary claims are partially confounded; the late fusion claims are well-supported.
+- **Soundness of experiments**: Moderate. The domain shift confound affects the primary evaluation; the paper provides partial mitigation.
+- **Clarity**: Good. The paper is well-organized with clear notation and comprehensive tables.
+- **Value to community**: Moderate-to-high. The framework and texture extraction method could be useful for future work.
 
 MY FINAL SCORE: <pineapple>5.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

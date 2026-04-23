@@ -1,96 +1,81 @@
-I now have a comprehensive picture. Let me write the final review.
+Now I have a thorough understanding of the paper and the key issues. Let me write the final consolidated review.
 
 ## Summary
 
-This paper provides the first convergence rate analysis for flow matching (FM), proving that FM achieves an almost minimax optimal rate under the $p$-Wasserstein distance ($1 \leq p \leq 2$). The main result (Theorem 9) establishes a rate of $\tilde{O}(n^{-(s+(2\kappa)^{-1}-\delta)/(2s+d)})$ for data densities in a Besov space $B^s_{p',q'}$, which for $\kappa = 1/2$ matches the minimax lower bound up to arbitrarily small $\delta > 0$ and polylogarithmic factors. The analysis reveals that the variance parameter must decay as $\sigma_t \sim \sqrt{t}$ to achieve optimality.
+This paper establishes the first convergence rate analysis for flow matching (FM), proving that FM achieves an almost minimax optimal rate under the $p$-Wasserstein distance ($1 \leq p \leq 2$) for target densities in Besov spaces. The key technical innovation is using the Alekseev-Gröbner ODE sensitivity lemma to bound $W_2$ by the $L_2$ error of vector fields, and the analysis reveals that the variance schedule $\sigma_t \sim \sqrt{t}$ (i.e., $\kappa = 1/2$) is the only choice achieving the minimax optimal rate among the class $\sigma_t \sim t^\kappa$ with $\kappa \geq 1/2$.
 
 ## Strengths
 
-- **Addresses a genuine and important open problem.** Convergence rates for flow matching were previously unknown; whether FM is theoretically competitive with diffusion models was an open question. The paper provides the first rate analysis, closing a clear gap in the literature (Sections 1, 4.3).
+- **First convergence rate for flow matching**: Theorem 9 establishes the first minimax convergence rate for FM, filling a genuine gap in the theory. Prior work (Albergo and Vanden-Eijnden, 2023; Benton et al., 2023b) showed convergence but not rates. This directly addresses the open question raised by the rapid empirical adoption of FM.
 
-- **The $\kappa = 1/2$ optimality condition is a concrete, actionable insight.** Theorem 9 and Eq. (24) show that only $\kappa = 1/2$ yields the almost minimax optimal rate, while $\kappa > 1/2$ is strictly suboptimal. This provides the first theoretical criterion for choosing variance schedules in FM, justifying the popular $\sigma_t \sim \sqrt{t}$ choice (Section 4.3, paragraph after Eq. 24).
+- **Alekseev-Gröbner technique for $W_2$ bounds**: Theorem 3 (Eq. 13) uses the Alekseev-Gröbner lemma to relate $W_2$ of pushforwards to the $L_2$ risk of vector fields with a Lipschitz-dependent exponential factor. This is a genuinely different approach from the Girsanov-based KL/coupling arguments used for SDEs (Oko et al., 2023), and extends Wasserstein analysis from $W_1$ to $W_r$ for $1 \leq r \leq 2$.
 
-- **Extends Wasserstein analysis from $W_1$ to $W_2$ via the Alekseev-Gröbner lemma.** Theorem 3 (Eq. 13) bounds $W_2(\hat{P}_t, P_t)$ in terms of the $L_2$ risk of the vector field, using perturbation analysis of ODE flows rather than Girsanov's theorem for SDEs. This covers $1 \leq r \leq 2$ and is a distinct proof strategy from Oko et al. (2023), which only handles $W_1$ (Section 3.2, 4.2).
+- **$\kappa = 1/2$ identified as the only optimal variance schedule**: By analyzing the general class $\sigma_t = b_0 t^\kappa$ (Assumption A3), Theorem 9 shows the rate depends on $\kappa$ through the exponent, and only $\kappa = 1/2$ achieves the minimax bound. This provides genuine theoretical justification for the popular diffusion-type variance schedule, going beyond what prior diffusion model theory established (which only analyzed $\kappa = 1/2$).
 
-- **Generalizes beyond the diffusion path.** The analysis covers arbitrary $\sigma_t = b_0 t^\kappa$ and $1 - m_t = \tilde{b}_0 t^{\tilde{\kappa}}$ under (A3), rather than the fixed $\sigma_t \sim \sqrt{t}, m_t \sim 1-t$ of Oko et al. (Sections 2.2, 4.1). This makes the result applicable to a wider family of FM constructions including affine and diffusion paths.
-
-- **Clear KDE-based motivation for early stopping.** Section 3.1 cleanly explains that running FM to $\tau = 1$ with fixed $\sigma_{\min}$ recovers a Gaussian KDE with rate $O(n^{-4/(4+d)})$, motivating the early stopping at $T_0$. This parallels the diffusion model argument but is presented more transparently.
+- **Systematic analysis of general $(m_t, \sigma_t)$**: Section 2.2 shows that the affine path of Lipman et al. (2023), OT-CFM of Tong et al. (2024), and the diffusion path all fall within the analyzed class (Eq. 6), ensuring the main result applies to widely used methods.
 
 ## Weaknesses
 
 ### Fatal
-
 None.
 
 ### Major
 
-- **$Q_0$ is undefined in the main theorem (Eq. 22).** Theorem 9 states the rate as $O(n^{-(s+Q_0^{-1}-1-\delta)/(2s+d)})$, but $Q_0$ is never defined anywhere in the paper. From the proof sketch (Eq. 24), which gives $\tilde{O}(n^{-(s+(2\kappa)^{-1}-\delta/2)/(2s+d)})$, the natural reading is $Q_0 = 2\kappa$, but this should be explicitly stated in the theorem. The informal Theorem 1 (Eq. 10) also has a mangled exponent $(2\kappa)\kappa$ that appears to be a formatting artifact rather than the intended $(2\kappa)^{-1}$. In a theory paper, undefined notation in the main theorem is a serious presentation defect that makes the stated result ambiguous — a reader cannot verify the claim without guessing the definition.
+- **Incorrect formula in the main theorem (Theorem 1, Eq. 10)**: The stated convergence rate is $O\left(n^{-\frac{s+(2\kappa)\kappa-1-\delta}{2s+d}}\right)$. For $\kappa = 1/2$, this gives exponent $(s + 1/2 - 1 - \delta)/(2s+d) = (s - 1/2 - \delta)/(2s+d)$, which is strictly worse than the minimax lower bound $n^{-(s+1)/(2s+d)}$ from Proposition 2. However, the proof sketch (Eq. 24) derives $\tilde{O}\left(n^{-\frac{s+(2\kappa)^{-1}-\delta/2}{2s+d}}\right)$, which for $\kappa = 1/2$ gives $n^{-(s+1-\delta/2)/(2s+d)}$ — matching the almost minimax optimal rate. The text immediately following Theorem 1 also claims the rate $n^{-(s+1-\delta)/(2s+d)}$, contradicting the formula in (10) but agreeing with the proof. The expression "$(2\kappa)\kappa$" in (10) should be "$(2\kappa)^{-1}$" (and the "-1" in the numerator appears spurious), a difference that fundamentally changes whether the theorem supports the paper's central claim. As stated, Theorem 1 does **not** yield the almost minimax optimal rate for $\kappa = 1/2$ — this is not a cosmetic typo but an error in the paper's headline result. The proof sketch appears to derive the correct rate, so this is likely a formula error rather than a fundamental flaw, but it invalidates the theorem as stated.
 
-- **Time-divided neural networks are needed for the almost minimax optimal rate, and this limitation is under-emphasized.** The paper requires training $O(\log n)$ separate networks on geometrically partitioned time intervals to achieve the claimed rate. Without this division, the analysis only yields $\tilde{O}(n^{-1/(2s+d)})$ (Section 4.4). While the paper honestly acknowledges this in Section 4.4, the abstract and Theorem 1 present the result without this qualification. This is misleading: the "almost minimax optimal" label applies only to a non-standard multi-network variant of FM. In contrast, Oko et al. (2023) achieve TV optimality for diffusion models without time division. The paper frames FM as "as good as" diffusion, but the comparison is asymmetric — it holds only under an additional architectural requirement that the diffusion result does not need. This should be clearly stated upfront.
+- **Optimal rate requires time-partitioned training with $K = O(\log n)$ separate networks**: The main result (Theorem 9) requires training a separate neural network for each time interval $[t_{j-1}, t_j]$ in a dyadic partition. Without this partition, the analysis yields only $\tilde{O}(n^{-s/(2s+d)})$ (Section 4.3), which is not minimax optimal. Standard FM practice trains a single network over all times. The paper acknowledges this in Section 4.4 but does not establish whether the optimal rate is achievable without partitioning. The title and abstract ("Flow Matching Achieves Almost Minimax Optimal Convergence") do not mention this requirement, creating a gap between the claimed result and the actual conditions needed. The observation that Girsanov's theorem enables TV/KL bounds for SDEs but no analogous tool exists for ODEs (Section 4.4) is insightful but underscores the fundamental limitation.
 
 ### Minor
 
-- **The boundary smoothness assumption (A1) is very restrictive but not discussed as a practical limitation.** Assumption (A1) requires $\tilde{s} > \max\{6s - 1, 1\}$ smoothness on the boundary region $I^d \setminus I_N^d$, demanding roughly 6× more smoothness near the boundary than in the interior. While the technical motivation is explained (compensating for nondifferentiability at the boundary under A2), the paper does not discuss whether this can be relaxed or what goes wrong without it, making it hard to assess practical relevance (Section 4.1, p. 4).
+- **Strong boundary smoothness assumption (A1)**: The target density must have smoothness $\tilde{s} > \max\{6s - 1, 1\}$ near the boundary of $[-1,1]^d$, far stronger than the interior smoothness $s$. This is not standard in minimax estimation (typically just $s$-smoothness over the entire domain suffices). The paper explains it is for "a technical reason to compensate for the nondifferentiability of $p_0(\mathbf{x})$ at the boundary by (A2)" but does not discuss whether it is genuinely necessary or merely an artifact of the proof technique.
 
-- **The $\delta/2$ → $\delta$ substitution in the proof sketch is imprecisely stated.** The proof sketch concludes with the rate $\tilde{O}(n^{-(s+(2\kappa)^{-1}-\delta/2)/(2s+d)})$ (Eq. 24) and then says "this proves the claim by replacing $\delta/2$ with $\delta$." Since $\delta$ is arbitrary, the claim that for every $\delta'' > 0$ the rate $n^{-(s+(2\kappa)^{-1}-\delta'')/(2s+d)}$ is achieved is technically valid by choosing $\delta = 2\delta''$. However, the current phrasing incorrectly suggests that $\delta/2$ and $\delta$ yield the same bound, which is not true for any fixed $\delta$. The statement should be rewritten to say: "for any $\delta' > 0$, the rate $\tilde{O}(n^{-(s+(2\kappa)^{-1}-\delta')/(2s+d)})$ holds." (End of proof sketch, Section 4.3)
+- **Inconsistency in non-partitioned rate**: Section 4.3 derives $O(n^{-s/(2s+d)})$ without time partitioning, while Section 4.4 states $\tilde{O}(n^{-1/(2s+d)})$. For $s > 1$, these are different rates. One of these appears to be a formula error, adding to the pattern of imprecise rate expressions.
 
-- **The Lipschitz assumption (A5) is strong and its verifiability is not discussed.** (A5) requires $\|\frac{\partial}{\partial \mathbf{x}} \int \mathbf{y}\, p_t(\mathbf{y}|\mathbf{x})\, d\mathbf{y}\|_{\text{op}} \leq C_L$ for all $t \in [T_0, 1]$. This is non-trivial to verify for specific distributions, and the paper does not provide examples or sufficient conditions under which it holds. (Section 4.1)
+- **$W_p$ claim for $p < 2$ is trivial**: The abstract claims "almost minimax optimal convergence rate for $1 \leq p \leq 2$," but the core analysis is for $W_2$ only. The $W_p$ result for $p < 2$ follows trivially from $W_p \leq W_2$ and the same minimax lower bound. This is not a separate contribution, just a consequence of the $W_2$ result.
 
 ### Trivial
-
-- Eq. (10) in the informal Theorem 1 appears to have a formatting artifact: the exponent shows $(2\kappa)\kappa$ rather than the intended $(2\kappa)^{-1}$.
+None.
 
 ## Nice-to-Haves
 
-- Empirical validation of the $\kappa$ prediction (e.g., simple 2D experiments comparing different variance decay rates as $n$ grows) would strengthen the paper's practical relevance, though this is not expected in a primarily theoretical contribution.
-- A TV or KL convergence rate for FM without time division would be a significant advance; the paper identifies the absence of a Girsanov-type bound for ODEs as the fundamental obstacle, but even a hardness argument would illuminate the ODE-vs-SDE gap.
-- Including Figure E.1 (referenced in the appendix) in the main text would help readers visualize the adaptive time-partitioning and B-spline resolution.
+- Empirical validation comparing $\sigma_t \sim t^\kappa$ for different $\kappa$ values would directly test the theoretical prediction that only $\kappa = 1/2$ is optimal.
+- Extension to TV distance or KL divergence (as noted in Section 4.4) would close an important gap between FM and diffusion model theory.
+- Discussion of whether adaptive network architectures could achieve the optimal rate without explicit time partitioning.
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution:
+These points are flagged to be removed, treat them with caution.
 
-- **Harsh critic's claim that the theorem-proof inconsistency is "fatal" and that "at least one is wrong."** The apparent inconsistency between Eq. (22) and Eq. (24) primarily stems from $Q_0$ being undefined. Once $Q_0 = 2\kappa$ is assumed (the natural reading from context), the exponents are $s + (2\kappa)^{-1} - 1 - \delta$ (formal theorem) vs. $s + (2\kappa)^{-1} - \delta/2$ (proof sketch). The discrepancy is in the $-1$ vs. $-0$ and $\delta$ vs. $\delta/2$. For $\kappa = 1/2$, the formal theorem gives $s + 1 - 1 - \delta = s - \delta$ while the proof sketch gives $s + 1 - \delta/2$, which are genuinely different. This is a real issue (the theorem statement or proof needs correction), but it does not necessarily invalidate the proof approach — it points to a gap in the presentation that needs clarification, not necessarily a mathematical error. Downgraded from fatal to major.
-
-- **Harsh critic's claim that $\theta_n$ has a "suspicious denominator."** The $\theta_n^2 = d t_0^2 n^{-2R_0\kappa/(s+d)}$ uses $s + d$ in the denominator rather than $2s + d$. However, since $(s+1)/(s+d) > (s+1)/(2s+d)$ for $s > 0$ and $d \geq 2$, $\theta_n$ actually decays *faster* than the main rate. The paper correctly claims $\theta_n$ is "negligible" — the harsh critic's concern that $\theta_n$ could dominate the overall rate is mathematically incorrect for this paper's parameter regime. Removed.
-
-- **Harsh critic's claim that the $\delta/2$ substitution means the proof is wrong.** As discussed in the minor weakness above, the claim is valid for any $\delta' > 0$ by choosing $\delta = 2\delta''$; it's a presentation issue, not a mathematical error. Downgraded from structural/evidential to minor.
-
-- **Strength finder's "first proof that flow matching achieves almost minimax optimal convergence rate."** This is somewhat overclaimed given the caveats (undefined $Q_0$, time division requirement, only a proof sketch provided). Downgraded to "first rate analysis showing FM can approach the minimax rate under specific conditions."
-
-- **Strength finder's "adaptive time-partitioning with per-interval B-spline resolution" as a strength.** This is primarily a proof technique rather than a conceptual contribution; it mirrors the approach of Oko et al. (2023) and doesn't represent a novel insight. Moved to removed.
-
-- **Harsh critic's request for empirical validation of $\kappa$.** This is a nice-to-have for a theory paper, not a core weakness. Moved to Nice-to-Haves.
+- **Missing experiments / empirical validation** (from Harsh Critic): While empirical validation would be nice, this is a purely theoretical paper establishing convergence rates. Demanding experiments is scope creep — the paper's contribution is theoretical, and experiments are not standard for this type of work. Moved to Nice-to-Haves.
+- **Reproducibility concerns about implementation details** (implicit in Harsh Critic's discussion of time-partitioned networks): The paper is a theoretical analysis; reproducibility of the mathematical proofs is what matters, not code implementation. Removed per rules on reproducibility nitpicks.
+- **Request to "quantify the effect of the time partition" beyond what's stated** (from Harsh Critic): The paper already provides the non-partitioned rate ($\tilde{O}(n^{-s/(2s+d)})$ in Section 4.3) and the partitioned rate (Theorem 9). Requesting further quantification is demanding work outside the paper's scope.
+- **Strength claim about "adaptive time-partitioning scheme"** (from Strength Finder): This is more of a proof technique than a standalone strength — the partitioning is a standard technique from Oko et al. (2023), not a novel contribution of this paper. Moved to Removed Points as it conflicts with the verified weakness that this partitioning is a limitation.
+- **Strength claim about "Covers popular FM constructions as special cases"** (from Strength Finder): While true, this is a minor observation (a few lines in Section 2.2) rather than a substantial contribution. Generic without deep analysis of how the rates differ across constructions.
 
 ## Novel Insights
 
-The paper's most novel insight — beyond simply extending Oko et al.'s framework to FM — is the identification of a fundamental asymmetry between ODE-based and SDE-based generative models: Girsanov's theorem provides direct KL/TV bounds for SDEs from $L_2$ score errors, but no analogous tool exists for ODEs. This is why FM requires $O(\log n)$ time-divided networks to achieve the $W_2$ rate, while diffusion models achieve TV optimality with a single network. The paper hints at this but doesn't fully explore its implications; understanding whether this gap is inherent or merely a proof artifact would significantly advance the field's understanding of the ODE-vs-SDE tradeoff in generative modeling.
+The paper reveals a fundamental asymmetry between ODE-based and SDE-based generative models in terms of the distance metrics accessible to convergence analysis: Girsanov's theorem provides direct KL/TV bounds for diffusion SDEs, but no analogous tool exists for ODEs, forcing FM analysis into Wasserstein metrics via the Alekseev-Gröbner lemma. This is not merely a technical inconvenience but reflects a genuine gap in our theoretical toolkit for deterministic flows, and explains why FM convergence results are currently limited to $W_2$ while diffusion results extend to TV.
 
 ## Suggestions
 
-- Define $Q_0 = 2\kappa$ (or whatever the intended value is) explicitly in Theorem 9, and reconcile the formal theorem's exponent with the proof sketch's conclusion. If the formal theorem's rate differs from the proof sketch, either correct the theorem or explain the discrepancy.
-- Qualify the "almost minimax optimal" claim in the abstract and Theorem 1 with "under time-divided neural networks" to avoid misleading the reader about the architectural requirements.
-- Replace the $\delta/2 \to \delta$ substitution with a clear statement: "for any $\delta' > 0$, the rate $\tilde{O}(n^{-(s+(2\kappa)^{-1}-\delta')/(2s+d)})$ is achieved."
-
-## Calibration Summary
-
-| Anchor Paper | Path | Avg Score | Comparison |
-|---|---|---|---|
-| Nearly d-Linear Convergence (spotlight) | r5njV3BsuD | 7.33 | Similar topic (diffusion convergence). Stronger proof with minor notation issues but no undefined symbols in main theorem. This paper is below it. |
-| On Error Propagation of Diffusion Models (poster) | RtAct1E2zS | 7.50 | Theory paper with proof issues (Appendix errors). But theorems are self-contained and main claims clear. This paper is below it. |
-| O(d/T) Convergence for DDPM (poster) | 4EjdYiNRzE | 6.67 | Similar profile: first convergence rate result, proof sketches with minor issues, clearly stated theorems. This paper's undefined $Q_0$ is worse. |
-| Conditional DiT minimax optimality (poster) | c54apoozCS | 6.25 | Theory paper on minimax optimality with restrictive assumptions. Comparable in having strong assumptions but clearer theorem statements. Similar level. |
-| SDE-DPM-2 Convergence (reject) | yhmVrA8W0v | 4.60 | Theory paper with notation issues and unclear definitions; rejected but had important first result. This paper is above it — clearer overall. |
-| Optimal NN Approximation (reject) | G2Lnqs4eMJ | 2.50 | Theory paper with undefined notation in theorems and inconsistent proofs. Much worse than this paper. |
-| Grokking via Dynamical Systems (reject) | a8XwgTZzE0 | 2.00 | Theory paper with undefined symbols and vague theorems. Far worse than this paper. |
-
-This paper sits in a middle ground: it has a genuine and important first-result contribution for flow matching, with a reasonable proof strategy, but the main theorem contains undefined notation ($Q_0$) and the proof sketch has an imprecise final step. Compared to the 6.25–6.67 range (theory papers with minor proof issues but clear theorems and important contributions), this paper is slightly below because of the undefined symbol in the main theorem. Compared to the 4.6 range (theory papers with notation problems), it is above because the overall proof strategy is sound and the contribution is more significant. The time-division requirement also limits the practical impact of the claimed optimality.
+- Correct the formula in Theorem 1 (Eq. 10) — the exponent should match the proof sketch's $(2\kappa)^{-1}$ rather than $(2\kappa)\kappa$, and the spurious "-1" in the numerator should be removed or explained. This is essential for the stated theorem to support the paper's central claim.
+- Add a remark in the abstract or introduction acknowledging that the optimal rate requires time-partitioned training, so readers immediately understand the scope of the result.
+- Reconcile the inconsistent non-partitioned rates in Sections 4.3 and 4.4.
 
 ## Score and Decision
 
-The paper makes an important first contribution (first convergence rate for FM, novel $W_2$ bound via Alekseev-Gröbner, actionable $\kappa = 1/2$ insight) but is hampered by a major presentation defect (undefined $Q_0$ in the main theorem), an under-emphasized architectural caveat (time-divided networks), and a proof sketch that cannot be fully verified from the main text. These are correctable issues that significantly affect clarity but do not fundamentally invalidate the proof approach. The paper falls in the borderline-accept to weak-accept range for a theory venue, but the undefined symbol in the formal theorem statement pushes it below the acceptance threshold as-is.
+**Calibration anchors:**
 
-Score: 5.5
+| Paper | Avg Score | Decision | Comparison |
+|-------|-----------|----------|------------|
+| "Nearly d-Linear Convergence Bounds for Diffusion Models via Stochastic Localization" (r5njV3BsuD) | 7.33 | Accept (Spotlight) | Stronger: correct theorems, cleaner results, no formula errors |
+| "Generalization in Diffusion Models Arises from Geometry-Adaptive Harmonic Representations" (ANvmVS2Yr0) | 8.50 | Accept (Oral) | Much stronger: empirical + theoretical, exceptional contribution |
+| "Conditional Diffusion Models are Minimax-Optimal and Manifold-Adaptive" (NltQraRnbW) | 6.67 | Accept (Poster) | Similar topic (minimax rates for diffusion), no formula errors, cleaner presentation |
+| "Global Well-posedness and Convergence of SGM" (r3cWq6KKbt) | 6.00 | Accept (Poster) | Had formula issues in Theorem 4.3 but less central; this paper's error is in the main headline theorem |
+| "Improving Consistency Models with Generator-Induced Flows" (onrNYdciJQ) | 6.00 | Reject | Severe theorem flaw (Theorem 1 incorrect); this paper's error is less fundamental (likely a typo) but still in the headline result |
+| "On Inherent Limitations of GPT/LLM Architecture" (JNZ3Om6NPS) | 2.00 | Reject | Fundamentally flawed; this paper is far above this level |
+
+The paper makes a genuine and significant contribution as the first convergence rate analysis for flow matching, with the Alekseev-Gröbner technique and the $\kappa = 1/2$ optimality result being substantive. However, the formula error in Theorem 1 (Eq. 10) — where the stated rate doesn't yield the claimed almost minimax optimal result — is a serious issue for a paper whose entire contribution rests on its theorem statements. The error is likely a typo (the proof sketch derives the correct rate), but it invalidates the theorem as stated. Combined with the time-partitioning requirement (which limits practical relevance), this places the paper below the "Conditional Diffusion Models are Minimax-Optimal" paper (6.67) which has a comparable contribution but no such errors. The paper is above the "Improving Consistency Models" paper (6.0, rejected) because the error here is likely a typo rather than a fundamental proof flaw. I place it in the borderline range.
 
 MY FINAL SCORE: <pineapple>5.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

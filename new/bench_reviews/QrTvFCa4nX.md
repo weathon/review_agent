@@ -1,99 +1,84 @@
-Now I have enough information to synthesize my final review. Let me compile all verified observations.
+Now I have all the information needed. Let me compose the final review.
 
 ## Summary
 
-The paper proposes INTP, a training-free method to extend Video-LLMs (specifically Video-LLaVA) from processing 8 frames to 32 frames by combining two techniques: (1) an interleaved video token rearrangement strategy that splits frames into alternating subsequences to maintain temporal consistency when passing through a frozen encoder/projector designed for fewer frames, and (2) NTK-aware RoPE interpolation to extend the LLM's context window. It also analyzes inference costs and introduces basic KV-cache quantization to reduce memory overhead.
+This paper proposes INTP, a training-free method to extend existing Video-LLMs (specifically Video-LLaVA) from processing 8 frames to 32 frames without retraining. The method combines three components: (1) a video token rearrangement technique that interleaves tokens from separately-encoded frame groups to bypass the fixed encoder/projector frame limit, (2) NTK-aware RoPE interpolation to extend the LLM backbone's context window, and (3) post-training KV-cache quantization to mitigate the resulting memory bottleneck. Experiments across five video QA benchmarks show modest but consistent improvements at 32 frames.
 
 ## Strengths
 
-- **Training-free extension from 8→32 frames with consistent gains**: Tables 2 and 3 show INTP improves over the 8-frame Video-LLaVA baseline across all five benchmarks (e.g., +3.6 on ActivityNet-QA, +4.4 on NExT-QA temporal, +1.6 on EgoSchema) without any retraining — a practically useful result. No prior Video-LLM method achieves this in a training-free manner as noted in Sec. 2.1.
-
-- **Creative and well-motivated interleaved subsequence idea**: The token rearrangement technique (Fig. 2, Sec. 3.2) — pairing Frame #1 with #3, Frame #2 with #4, etc. — is a simple but thoughtful solution to the temporal inconsistency that would arise from naive concatenation of separately-encoded frame groups. The two-challenge decomposition (❶ fixed encoder/projector, ❷ limited LLM context) in Sec. 3.1 cleanly structures the problem.
-
-- **Practical efficiency analysis identifying KV-cache bottleneck**: Table 1 systematically quantifies that KV cache grows from 1.1 GB (8 frames) to 17.2 GB (128 frames FP16), and INT2 quantization reduces it to 2.1 GB. This identifies a real deployment constraint rather than a hypothetical one, and is a useful practical finding.
-
-- **Transparent reporting of performance degradation at 64 frames**: Table 4 shows performance declining at 64 frames across all three benchmarks, which the paper acknowledges. This honest reporting is valuable, even if the language ("plateau") understates the decline.
-
-- **Plug-and-play applicability with minimal overhead**: The method requires no GPU training hours and only code changes, lowering the barrier to adoption (Sec. 4.1.2).
+- **Practical and well-motivated problem framing.** Extending Video-LLMs to more frames without retraining is a genuinely valuable goal given the prohibitive training costs (Sec. 3.1 notes ~200 A100-hours even for Video-LLaVA fine-tuning). The training-free angle is clearly motivated.
+- **Consistent performance improvements at 32 frames across all five benchmarks.** Tables 2–3 show gains of +1.3 (MSVD-QA), +2.2 (MSRVTT-QA), +3.6 (ActivityNet-QA), +4.4 (NExT-QA Temporal), and +1.6 (EgoSchema) when going from 8 to 32 frames, supporting the claim that more frames provide useful information.
+- **Informative efficiency analysis.** Table 1 systematically profiles OPs, decode time, total memory, and KV-cache storage across frame counts (8–128) and quantization levels (FP16 vs. INT2), correctly identifying KV-cache as the dominant memory bottleneck (17.2GB of 30.1GB at 128 frames).
+- **Honest reporting of scaling limitations.** Table 4 transparently shows performance degradation at 64 frames, and the paper acknowledges this as a limitation of the NTK-based extension method rather than hiding it.
 
 ## Weaknesses
 
 ### Fatal
+
 None.
 
 ### Major
 
-- **No ablation isolating the token rearrangement from NTK-aware scaling**: The paper proposes two distinct contributions (token rearrangement in Sec. 3.2 and context window interpolation in Sec. 3.3) but explicitly refuses to ablate them independently: "We consider Alternative Video Token Rearrangement and Interpolating Video-LLM Backbone as one unit" (Sec. 4.3). Without testing NTK scaling + naive concatenation vs. NTK scaling + interleaved rearrangement, it is impossible to determine whether the rearrangement — the paper's main claimed novelty — contributes anything beyond simply processing more frames. This is the single most critical ablation the paper is missing, and its absence leaves the core technical contribution unsubstantiated.
+- **Token rearrangement advantage over naive concatenation is never experimentally validated.** The paper's first claimed contribution (Sec. 3.2) is that rearrangement "preserves temporal consistency" whereas naive concatenation produces "distorted temporal representations" (p. 4, lines 77–89). Yet no experiment compares rearrangement against naive concatenation of encoded subsequences. If both produce similar results, this claimed contribution collapses. The rearrangement is presented as a core technical novelty but is asserted rather than demonstrated. Tables 2–4 only show results with the full INTP pipeline; there is no ablation isolating the rearrangement's contribution.
 
-- **Unexplained 8-frame anomaly undermining evaluation credibility**: At 8 frames, INTP should be a no-op: m=1 (single subsequence, rearrangement is identity), and the NTK scaling ratio s=L'/L=1 (scaling is identity). Yet Table 4 shows results *different* from baseline: ActivityNet-QA jumps +10.0 points (45.3→55.3), MSVD-QA drops -1.2, and MSRVTT-QA drops -1.0. A method that should be identical to the baseline producing a ±10 point swing on one benchmark is deeply concerning — it suggests either an implementation bug, a hidden pipeline change (prompt format, frame sampling strategy), or highly unreliable GPT-3.5 scoring. The paper does not acknowledge or explain this discrepancy.
+- **Evaluation does not specifically test the core claim of enabling "longer video understanding."** The paper's title and abstract frame the contribution as enabling Video-LLMs to "understand longer video content." Yet all five benchmarks (MSVD-QA, MSRVTT-QA, ActivityNet-QA, NExT-QA, EgoSchema) are standard video QA benchmarks where 8 frames already provide reasonable coverage for many questions. None are specifically designed to require long-range temporal reasoning across distant events—i.e., where 8 frames are demonstrably insufficient. Without evaluation on benchmarks explicitly designed for long-video understanding (e.g., LongVideoBench, or targeted evaluation where temporal coverage is the bottleneck), the headline claim remains untested. The marginal improvements observed (+1.3 to +3.6 points) could result from denser sampling of already-adequately-covered videos rather than genuine long-video comprehension.
 
-- **Evaluation primarily on short-video benchmarks that do not test the claimed long-video capability**: The paper's framing is about understanding *long* videos ("Longer-Sequence LMMs"), but the primary benchmarks (MSVD-QA, MSRVTT-QA) average ~10-30 second videos where 8 frames is arguably sufficient. While EgoSchema and ActivityNet-QA involve longer videos, EgoSchema is multiple-choice only, and ActivityNet-QA shows only modest improvement at 32 frames (+3.6). The paper does not evaluate on established long-video benchmarks requiring temporal reasoning over minutes (e.g., MLVU, LongVideoBench, Video-MME longue). Demonstrating that the method works on short-to-medium videos is necessary but not sufficient to support the claim of enabling long-video understanding.
+- **Unexplained anomalous results at 8 frames undermine internal consistency and the "plug-and-play" claim.** Table 4 shows that INTP at 8 frames (where m=1, meaning no rearrangement occurs) produces contradictory effects: MSVD-QA drops (70.7→69.5), MSRVTT-QA drops (59.2→58.2), but ActivityNet-QA jumps dramatically (45.3→55.3, +10.0). Since at 8 frames the only change is NTK-aware RoPE scaling at the original context length, (a) the +10.0 swing on ActivityNet from just modifying RoPE is suspicious and unexplained, (b) the degradation on MSVD-QA and MSRVTT-QA contradicts the claim in Sec. 4.2 that INTP "acts as a plug-and-play enhancement," and (c) ActivityNet performance under INTP *decreases* when going from 8→16 frames (55.3→46.9), then partially recovers at 32 frames (48.9)—a non-monotonic pattern the paper ignores entirely.
 
 ### Minor
 
-- **KV-cache quantization is introduced as a contribution but never evaluated for quality impact**: The paper introduces INT2 KV-cache quantization (Sec. 3.4, Eq. 3.7) and claims INTP "optimizes memory usage during inference," but all accuracy results in Tables 2–4 use FP16. Without reporting accuracy under INT2 quantization, it is impossible to assess whether the memory savings come at acceptable quality cost. The contribution remains unevaluated.
+- **KV-cache quantization impact on accuracy is not reported.** Section 3.4 introduces INT2 KV-cache quantization as part of the INTP system, and Table 1 shows its efficiency gains. However, no accuracy numbers are reported for the quantized model, making it impossible to assess whether INT2 quantization degrades the quality of the answers. Without this, the quality-efficiency tradeoff claimed in Section 3.4 is incomplete.
 
-- **Performance *decline* at 64 frames is understated as a "plateau"**: Table 4 shows INTP at 64 frames *degrading* below the 8-frame baseline on all three benchmarks (MSVD-QA: -3.2, MSRVTT-QA: -4.0, ActivityNet-QA: -3.8). The paper describes this as a "performance plateau" (Sec. 4.3) when it is actually a performance decline, which misrepresents the method's limitations.
-
-- **RoPE context window scaling is a direct application of existing techniques**: Both context window scaling (Eq. 3.5, from Chen et al. 2023) and NTK-aware interpolation (Eq. 3.6, from Roziere et al. 2023) are applied to Video-LLMs without adaptation. While applying existing techniques to a new domain has value, the novelty of this component is limited. The paper is transparent about this lineage but should more clearly delineate what is novel vs. what is applied.
-
-- **Evaluation limited to a single Video-LLM architecture (Video-LLaVA)**: Generalizability of the token rearrangement and NTK scaling pipeline to other Video-LLMs (e.g., LLaMA-VID, VideoChat2) is not demonstrated, limiting the scope of the claims about universal applicability.
-
-### Trivial
-- The roofline model numbers in Table 1 show some inconsistencies (32-frame INT2 decode time 22.9ms equals FP16; 64-frame INT2 decode 18.8ms is less than 32-frame's), though these are theoretical estimates, not measured latencies.
+- **Performance degradation at 64 frames is attributed to NTK-based extension limitations without evidence.** Section 4.3 states "a limitation in the NTK-based LLM backbone extension method" but provides no diagnostic evidence. The degradation could alternatively stem from the token rearrangement producing worse features for temporally sparse subsequences, the visual encoder struggling with more distant frame pairings, or simply the LLM struggling with more tokens regardless of positional encoding. Ablating rearrangement vs. scaling separately at 64 frames would clarify this.
 
 ## Nice-to-Haves
 
-- Ablation comparing naive concatenation + NTK scaling vs. interleaved rearrangement + NTK scaling at 16/32 frames to validate the rearrangement's contribution.
-- Evaluation on a dedicated long-video benchmark (e.g., MLVU, LongVideoBench) to directly test the claimed capability.
-- Accuracy results under INT2 quantization to validate the KV-cache compression contribution.
-- Testing on a second Video-LLM architecture to demonstrate generalizability.
-- An explanation for the 8-frame anomaly or at minimum an acknowledgment of evaluation noise from GPT-3.5 scoring.
+- Evaluate on benchmarks specifically designed for long-video understanding where 8 frames are demonstrably insufficient and 32 frames provide genuinely new temporal information. This is the single most important gap.
+- Compare token rearrangement against naive concatenation to validate (or falsify) the rearrangement's claimed advantage.
+- Report accuracy under INT2 KV-cache quantization to complete the efficiency analysis.
+- Diagnose and explain the anomalous 8-frame INTP results, especially the +10.0 on ActivityNet-QA.
 
 ## Removed Points
 
-These points are flagged to be removed; treat them with caution:
+*These points are flagged to be removed; treat them with caution.*
 
-- **"INT2 decode times in Table 1 are unreliable"**: The harsh critic questions the roofline model numbers, but these are clearly stated as theoretical estimates from a roofline model ("time estimated by roofline model represents the theoretical performance that the hardware can achieve"), not measured values. The inconsistencies may reflect roofline model limitations rather than errors. This is a soft criticism at best.
+- **"No error bars / statistical significance tests"** — Demanding confidence intervals for GPT-based evaluation is not standard practice in this community for single-run benchmark evaluations. While the improvements are modest, this is a generic critique that doesn't threaten the core claim specifically.
 
-- **"Computation cost analysis is based on roofline model, not real inference"**: The paper clearly discloses this. Using a roofline model for cost analysis is a standard practice in systems work, and the paper is transparent about the methodology.
+- **"Section 3.3 is essentially a recap of prior work" / "Section 3.4 is standard post-training quantization"** — The paper's novelty is explicitly in the *combination and application* of existing techniques to the Video-LLM setting. While the individual components are borrowed, criticizing them individually misses the paper's stated framing. This is already partially captured by the more substantive concern about unvalidated rearrangement.
 
-- **"Cherry-picked qualitative examples"**: All papers use selected qualitative examples. The harsh critic's objection is generic and not specific to anything misleading in this paper's examples.
+- **"Qualitative results are cherry-picked"** — Standard practice; all qualitative examples in papers are selected to illustrate differences. The paper does show both a correct and incorrect case from the baseline, which is typical.
 
-- **"Calibration dataset for KV-cache quantization contradicts training-free claim"**: The paper states "no traditional data training processes" (Sec. 4.1.2), and calibration for PTQ (a small set of forward passes to determine quantization parameters) is standard and distinctly different from training. This is a scope-creep criticism.
+- **"The abstract's '32 frames' claim is cherry-picked"** — The paper transparently shows results at 8, 16, 32, and 64 frames in Table 4. Reporting the best-performing configuration in the abstract is standard practice, not cherry-picking.
 
-- **"Missing related works"**: Removed per instructions (cannot verify existence of uncited works).
+- **"No comparison with encoding each frame independently as images"** — This would test a different approach entirely and is outside the paper's scope. The paper is about extending *existing* Video-LLMs, not proposing an alternative architecture.
 
-- **"Fig. 3 baseline appears to miss key frames (sampling issue)"**: This is a valid observation but it's about the baseline's frame sampling, not about INTP's methodology. The paper's contribution is about processing more frames, which addresses this sampling limitation.
-
-- **Strength removed: "Ablation in Table 4 validates rearrangement's effectiveness"** (from Strength Finder): This conflicts with the verified Major weakness that the rearrangement is never ablated in isolation. Table 4 only varies frame count, which confounds rearrangement with NTK scaling and more frames.
+- **Missing related works** — Per instructions, I do not flag missing citations.
 
 ## Novel Insights
 
-The 8-frame anomaly in Table 4, where INTP at 8 frames (theoretically an identity operation) produces markedly different results from the baseline — particularly the +10 point swing on ActivityNet-QA — potentially reveals more about the unreliability of GPT-3.5-based evaluation than about the method itself. This has implications beyond this paper: the field's reliance on LLM-based scoring for open-ended VQA may be masking genuine methodological gaps. Additionally, the fact that the paper's claimed novelty (token rearrangement) cannot be disentangled from simply scaling up frames with existing RoPE interpolation raises a broader question: in training-free extensions, how much improvement comes from architectural tricks versus simply giving the model more visual evidence?
+The unexplained +10.0 accuracy jump on ActivityNet-QA when applying NTK-aware RoPE scaling at the *original* context length (8 frames, where no rearrangement occurs) may reveal something important about how RoPE scaling interacts with visual tokens specifically. If confirmed, this could suggest that RoPE frequency adjustments have an outsized effect on attention patterns for visual token sequences compared to pure text—a hypothesis worth investigating in future work, as it might imply that the "right" scaling factor for multimodal models differs from that of pure LLMs.
 
 ## Suggestions
 
-- Run the critical missing ablation: test NTK-aware RoPE scaling + naive frame concatenation (no interleaving) at 16 and 32 frames, and compare against the full INTP pipeline. This single experiment would either validate or falsify the rearrangement's contribution.
-- Investigate and explain the 8-frame anomaly. If it stems from GPT-3.5 evaluation noise, report confidence intervals or switch to a more reliable evaluation protocol. If it stems from an implementation artifact, document and fix it.
-- Evaluate on at least one dedicated long-video benchmark to substantiate the "longer-sequence" claim.
+- Add a direct comparison between token rearrangement and naive concatenation of encoded subsequences (e.g., running the same 32-frame setup but concatenating tokens in encoding order rather than absolute position order). This single experiment would validate or invalidate the paper's first technical contribution.
+- At minimum, add a brief discussion of the anomalous 8-frame results in Table 4. If the +10.0 on ActivityNet-QA is reproducible, explain why NTK-aware scaling at the original context length helps ActivityNet but hurts MSVD/MSRVTT. If it's an artifact, acknowledge it.
+- Test on at least one benchmark where video length is the explicit bottleneck (e.g., a long-video subset of an existing benchmark) to substantiate the "longer video understanding" claim.
 
 ## Score and Decision
 
-**Calibration anchors:**
+**Calibration anchors used:**
 
-| Paper | Path | Avg Score | Comparison |
-|-------|------|-----------|------------|
-| Norton (long-term temporal video) | 9Cu8MRmhq2 | 8.0 | Far more novel, thorough ablations, diverse evaluation — this paper is well below |
-| LLaVA-Interleave (multi-frame LMM) | oSQiao9GqB | 7.33 | Comprehensive dataset + model + ablations — this paper is well below |
-| Coarse Correspondences (training-free MLLM boosting) | 8ibaVk4mU8 | 4.67 | Similar training-free angle but had better ablations; this paper is roughly comparable |
-| StreamChat (training-free streaming video) | JbPb6RieNC | 5.8 | Similar training-free concept, had benchmark concerns; this paper has ablation gap but clearer improvement numbers |
-| PPLLaVA (pooling for video LLM) | qUZY7ymDPr | 4.80 | Similar novelty concerns about applying known techniques — this paper is comparable |
-| VAP (training-free key frame selection) | KtqZrNjvjd | 5.8 | Similar training-free video method, but VAP has better evaluation scope |
-| MoE-VideoLLM summarization | ujNe7sybJu | 2.5 | Weak novelty, no ablations — this paper is above this |
-| Grounded-VideoLLM | YCwN7wQA6W | 4.25 | Similar insufficient-ablation and limited-novelty issues — comparable |
+| Paper | Score | Relation to this paper |
+|-------|-------|----------------------|
+| Norton (Multi-granularity Correspondence) | 8.0 | High anchor: novel OT framework for long-video, extensive ablations — far above this paper in novelty and validation |
+| StreamChat | 5.8 | Medium-high anchor: training-free video framework with memory system, more comprehensive but with benchmark quality issues — above this paper due to broader evaluation |
+| VAP (Video Active Perception) | 5.8 | Medium anchor: training-free long-form video QA with novel keyframe selection — above due to novel mechanism and explicit long-video evaluation |
+| MVU | 5.67 | Medium anchor: off-the-shelf tools for video understanding, novel framework — similar in using existing components but more novel in integration |
+| PLLaVA | 5.25 | Medium-low anchor: limited novelty pooling strategy but more comprehensive evaluation — slightly above this paper |
+| Hybrid SSM MLLM | 3.4 | Low anchor: claims long-video but doesn't test on long-video benchmarks, "just follows common practice" — below this paper since this paper at least shows consistent improvements |
+| MixAttention | 2.0 | Very low anchor: no novelty at all, just evaluates a blog post — far below this paper |
 
-This paper sits in the 4–5 range. It has a clear practical contribution (training-free 8→32 frame extension with consistent improvements) but is significantly weakened by: (1) the inability to attribute improvements to the claimed novel component (token rearrangement), (2) the unexplained 8-frame anomaly that undermines evaluation credibility, and (3) evaluation that doesn't directly test the claimed long-video understanding capability. It is below papers scoring 5.5+ (which typically have either thorough ablations or stronger novelty), and above papers scoring ≤3 (which have fundamental flaws or near-zero novelty). It is closest to the 4.0–4.8 band of papers with real but insufficiently validated contributions.
+This paper sits between the Hybrid SSM MLLM (3.4, similarly fails to validate on long-video benchmarks and has limited novelty) and the medium-scoring training-free video papers (5.3–5.8). It shares the Hybrid SSM paper's weakness of not testing on long-video benchmarks, but shows more concrete improvements. However, the unvalidated rearrangement claim and the anomalous 8-frame results place it below PLLaVA and MVU. The combination of (a) unvalidated core technical contribution, (b) evaluation mismatch with stated claim, and (c) unexplained anomalous results keeps it firmly in the reject range.
 
 MY FINAL SCORE: <pineapple>4.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

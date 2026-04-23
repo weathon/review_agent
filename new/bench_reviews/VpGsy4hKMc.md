@@ -1,22 +1,22 @@
-Now I have thorough understanding of the paper and calibration anchors. Let me write the final review.
+Now I have all the information needed. Let me compose the final review.
 
 ## Summary
 
-FreeSplatter presents a feed-forward transformer framework that reconstructs pixel-wise 3D Gaussians from uncalibrated sparse-view images while jointly estimating camera parameters via PnP on predicted 3D positions. The key idea is predicting Gaussian maps for all N views in a unified reference frame (avoiding DUSt3R-style pairwise alignment), with a pixel-alignment loss enforcing that Gaussian centers lie on corresponding camera rays. Two variants—FreeSplatter-O (object-centric) and FreeSplatter-S (scene-level)—are trained on Objaverse and a mixture of scene datasets respectively.
+FreeSplatter presents a feed-forward transformer framework that reconstructs pixel-wise 3D Gaussians from uncalibrated sparse-view images while simultaneously recovering camera parameters. The model predicts all Gaussian maps in a unified reference frame via a single-stream transformer, enabling direct PnP-based pose estimation without pairwise alignment. Two variants are trained: FreeSplatter-O for object-centric and FreeSplatter-S for scene-level reconstruction. A pixel-alignment loss constrains Gaussians to lie on camera rays, which is critical for both rendering quality and valid PnP inputs.
 
 ## Strengths
 
-- **Unified reference frame eliminates pairwise alignment**: Unlike DUSt3R/MAS3R which process image pairs and require a global alignment step, FreeSplatter predicts Gaussian maps for all N views in a single unified reference frame (Section 3.2), enabling direct camera pose recovery via PnP-RANSAC (Eq. 4) without post-hoc alignment. This is a genuine architectural advantage that simplifies the pipeline and avoids accumulated alignment errors.
+- **Unified reference frame design eliminates pairwise alignment bottleneck**: Unlike DUSt3R/MAS3R, which only process image pairs and require post-hoc global alignment, FreeSplatter predicts all N Gaussian maps in a single reference frame via self-attention (Section 3.2), enabling direct feed-forward pose recovery via PnP. This is a clean and impactful architectural choice.
 
-- **Pixel-alignment loss is critical and well-justified**: Eq. 6 enforces that predicted Gaussian centers lie on corresponding camera rays, simultaneously improving rendering quality and ensuring valid PnP-based pose estimation. Table 3 demonstrates its necessity—removing it causes PSNR to drop from 30.443 to 26.684 on GSO and from 25.807 to 21.330 on ScanNet++, a substantial and convincing degradation (~4 PSNR).
+- **Pixel-alignment loss is a genuine and well-validated contribution**: The loss (Eq. 6) enforces that predicted Gaussians lie on their corresponding camera rays, simultaneously improving rendering and ensuring valid PnP inputs. Table 3 shows ~4 PSNR drops on both GSO (30.44→26.68) and ScanNet++ (25.81→21.33) when removed, confirming its necessity.
 
-- **Strong fair comparisons against pose-free baselines**: FreeSplatter-S outperforms Splat3R (the most directly comparable pose-free method) by a large margin on ScanNet++ (25.807 vs 21.013 PSNR) and CO3Dv2 (20.405 vs 18.074 PSNR) in Table 2. This convincingly demonstrates the value of end-to-end Gaussian training over Splat3R's frozen-backbone + Gaussian-head approach.
+- **Competitive scene-level pose estimation with MAS3R**: FreeSplatter-S achieves RRA@15° of 0.982 on ScanNet++ vs. MAS3R's 0.988, and 0.976 on CO3Dv2 vs. 0.975 (Table 1), despite training on only three datasets versus MAS3R's much larger corpus. This validates the approach for the harder real-world scenario.
 
-- **Excellent object-centric pose estimation**: FreeSplatter-O achieves RRE of 11.55° on OmniObject3D and 3.85° on GSO (Table 1), dramatically outperforming FORGE (76.82°/97.81°) and MAS3R (96.67°/61.82°) on these datasets, demonstrating strong cross-domain generalization from Objaverse training.
+- **Scene-level reconstruction outperforms pose-dependent baselines**: FreeSplatter-S achieves 25.81 PSNR on ScanNet++, surpassing pose-dependent pixelSplat (24.97) and MVSplat (22.60) by meaningful margins (Table 2). These comparisons are between methods using the same Gaussian representation, making them more interpretable.
 
-- **Practical integration with 3D content creation**: Figure 6 demonstrates that FreeSplatter's pose-free nature eliminates the need to manually align multi-view diffusion model camera conventions with reconstruction model poses—a real productivity bottleneck in existing pipelines (Section 4.5).
+- **Gaussian representation enables camera estimation without auxiliary branches**: By predicting Gaussian centers explicitly in 3D, FreeSplatter recovers poses via PnP-RANSAC (Eq. 4), unlike PF-LRM which requires an additional network branch for coarse point cloud prediction.
 
-- **Occlusion handling for object-centric reconstruction**: The strategy of only applying the pixel-alignment loss in the foreground area while allowing background Gaussians to move freely (Section 3.3) is a simple but effective design that addresses a known limitation of pixel-aligned representations.
+- **Practical utility for 3D content creation pipelines**: Section 4.5 demonstrates integration with MVDream and Zero123++, where the pose-free nature eliminates the need to align camera poses between diffusion models and reconstruction models.
 
 ## Weaknesses
 
@@ -25,75 +25,65 @@ None.
 
 ### Major
 
-- **Overclaimed narrative that outperforming pose-dependent LGM/InstantMesh demonstrates poses are "not essential"**: Section 4.2 concludes that "camera poses may not be essential for developing high-quality, scalable reconstruction models" based on FreeSplatter-O outperforming LGM and InstantMesh by >5 PSNR. However, this gap conflates multiple factors beyond pose-freedom: FreeSplatter operates at 512×512 with training on 800K Objaverse assets, while LGM and InstantMesh have different operating resolutions, model architectures (Gaussian vs triplane NeRF), and training configurations. The paper states "All metrics are evaluated at the resolution of 512×512" (line 250) but does not clarify whether LGM/InstantMesh render at their native resolution or are forced to render at 512×512 for metric computation. Even rendering at 512×512, LGM's Gaussians were optimized at 256×256 resolution, which inherently limits their detail quality at higher rendering resolutions. The paper's central narrative would be substantially strengthened by a controlled comparison (e.g., evaluating all methods at matched resolution/training data), or by tempering the claim to acknowledge that the improvement stems from a combination of architectural, resolution, and training advantages in addition to pose-freedom.
+- **Missing comparison with GS-LRM undermines the central claim about pose-free superiority**: The paper explicitly acknowledges using "a transformer architecture similar to GS-LRM" (Section 3.2, line 73), and GS-LRM is the most directly comparable pose-dependent baseline—same representation (3D Gaussians), similar transformer architecture, but requires input poses. The paper claims "camera poses may not be essential for developing high-quality, scalable reconstruction models" (Section 4.2, line 254) based on comparisons with LGM (different Gaussian parameterization) and InstantMesh (tri-plane NeRF). The >5–7 PSNR gaps in Table 2 likely conflate representation/architecture differences with pose handling. Without the GS-LRM comparison, the paper cannot attribute its advantage to being pose-free. Notably, the closely related NoPoSplat paper (which also does pose-free Gaussian reconstruction) explicitly compares against GS-LRM, suggesting this is an expected baseline in this research area.
 
-- **Common focal length assumption limits scene-level applicability**: The paper assumes "a common focal length for all input images which is reasonable in most scenarios" (Section 3, line 53). While acceptable for object-centric synthetic data or images from the same camera, this assumption fails when input images originate from different cameras or the same camera at different zoom levels—which is highly relevant for the scene-level reconstruction the paper targets. No sensitivity analysis or discussion of violation frequency is provided. This is a practical limitation that undercuts the generality claims for the scene-level variant.
+- **No pose-dependent variant ablation to isolate the cost of being pose-free**: The paper lacks an ablation where GT poses are provided as input to the same architecture. This would directly quantify whether the pose-free design incurs a performance cost, breaks even, or—remarkably—improves reconstruction. Given the extraordinary object-centric PSNR numbers (30.44 on GSO, 31.93 on OmniObject3D) and the strong prior from Objaverse training, such an ablation is essential to understand whether these numbers reflect genuine pose-free capability or representation/training advantages.
 
 ### Minor
 
-- **Table 1 bolding is misleading**: The caption states "We highlight the best metric as red" (line 260), yet FreeSplatter-S entries are bolded even when they are not the column-wise best—e.g., on OmniObject3D RRE, FORGE (76.822°) is better than FreeSplatter-S (83.795°), yet FreeSplatter-S is bolded. This makes the table misleading at a glance.
+- **The "camera poses may not be essential" claim (Section 4.2) is overclaimed for object-centric results**: While the scene-level evidence is more convincing (FreeSplatter-S vs. pixelSplat/MVSplat with the same representation), the object-centric evidence compares across different representations and architectures. The strong domain-specific priors from Objaverse (800K objects, structured rendering at 20° elevation) may contribute substantially to the high PSNR. The claim should be appropriately qualified.
 
-- **Abstract overclaims on pose estimation accuracy**: The abstract states FreeSplatter "outperforms state-of-the-art baselines in terms of... pose estimation accuracy," but FreeSplatter-S is slightly *worse* than MAS3R on ScanNet++ (RRE 0.791 vs 0.724, TE 0.110 vs 0.104) and CO3Dv2 (RRE 3.054 vs 2.918, TE 0.148 vs 0.112) in Table 1. The claim is only fully supported for the object-centric variant.
+- **Ablation studies are incomplete beyond pixel-alignment loss**: Table 3 validates the pixel-alignment loss, but other design choices lack quantitative ablations: the staged training strategy (acknowledged as "essential to model's convergence"), the position supervision schedule T_max, and the number of input views (relegated to a single figure in the appendix without quantitative analysis).
 
-- **Limited ablation section**: The only ablation in the main paper is the pixel-alignment loss (Table 3). The staged training strategy is described as "essential" to convergence (Section 3.3) but lacks experimental evidence. The number-of-input-views ablation is relegated to a brief mention and an appendix figure reference. Additional ablations (e.g., impact of view embeddings, predicting full 3D coordinates vs. depth) would strengthen the paper.
+- **Two-embedding view differentiation collapses all source views into one category**: The model uses only a reference embedding e^ref and a source embedding e^src (Eq. 2, line 79), providing no mechanism to distinguish among different source views. While results appear acceptable, this limits the model's ability to capture positional relationships between source views, which could be relevant for configurations with similar source view positions.
 
 ### Trivial
-- None beyond the Table 1 bolding issue already noted above.
+None.
 
 ## Nice-to-Haves
 
-- Cross-domain pose estimation evaluation (e.g., testing FreeSplatter-S on datasets with different characteristics from its training distribution) to stress-test the PnP-based pose estimation under domain shift.
-- Ablation of the staged training strategy to substantiate the "essential" claim.
-- Controlled comparison with LGM/InstantMesh at matched resolution and training data to isolate the contribution of pose-freedom from other factors.
-- Sensitivity analysis for the common focal length assumption (e.g., synthetically varying focal lengths across input views).
+- A correlation analysis between pose estimation error and reconstruction quality would reveal whether the method is robust to pose errors or brittle.
+- Failure case analysis showing where pose estimation fails and how this manifests in reconstruction.
+- A GS-LRM comparison or pose-dependent variant ablation would either validate or appropriately reframe the core claim—either outcome substantially strengthens the paper.
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution:
+*These points are flagged to be removed, treat them with caution.*
 
-- **Harsh Critic Claim 1 (structural)**: The critic claims the comparison against LGM/InstantMesh is "fundamentally unfair, invalidating the paper's headline claim." While the comparison has confounding factors (resolution, training data, architecture), it does not invalidate the paper—the factual result that FreeSplatter-O achieves higher PSNR is correct. The issue is the *interpretation* of this result, not the result itself. The claim is weakened from "fatally unfair" to "overclaimed narrative" (see Major weakness 1). Note also that the asymmetric comparison (giving baselines GT poses) actually *favors* the baselines, so per the rules, we do not flag this as "unfair comparison with baselines."
+- **Focal length estimation deferred to appendix (Harsh Critic Issue 3)**: The critic flagged that focal length estimation is deferred to "Section A.1" of the appendix. Per the review rules, weaknesses about content in the appendix are removed because the parser strips those sections from all papers; the appendix exists in the original submission.
 
-- **Harsh Critic Claim 2 (evidential)**: The critic argues that the pixel-alignment loss requiring GT camera origins during training creates a "tight coupling" that is not tested under domain shift. This is the standard DUSt3R paradigm and the paper shows cross-dataset generalization (GSO/OmniObject3D are unseen). Moved to nice-to-have rather than a weakness.
+- **Training relies on GT camera information (Harsh Critic Section 3.3 note)**: The critic noted that L_pos uses GT 3D points and L_align uses GT camera origins, arguing this is "at odds with the pose-free narrative." However, "pose-free" in this context (and in all comparable work like PF-LRM, NoPoSplat) refers to inference-time freedom from pose input, not training-time supervision. Using GT poses for supervision during training is standard practice and clearly described in Section 3.3. The PF-LRM paper (which scored 8.0 at ICLR) follows the same practice. This is a misunderstanding of the claim.
 
-- **Harsh Critic Claim about 3D content creation**: The critic argues that MVDream/Zero123++ outputs have "known camera configurations" so the pose-free advantage is "somewhat diminished." This misunderstands the value proposition—the whole point is that FreeSplatter doesn't need to know or align with those camera configurations, eliminating a practical engineering step. Removed.
+- **Training renders 32 random views vs. 4 structured evaluation views (Harsh Critic Section 4.1 note)**: The critic suggested this "configuration gap" might favor the model. This is a generic concern that applies to nearly all LRM-style papers and is not specific to this method. The paper follows standard evaluation protocols for this area.
 
-- **Harsh Critic about error bars/significance tests**: Requesting error bars for standard benchmarks in the feed-forward reconstruction field is not standard practice. Removed as nitpick.
+- **COLMAP exclusion due to "high failure rates" (Harsh Critic Section 4.3 note)**: The critic suggested this was reasonable, which it is—the paper cites prior work (Wang et al., 2024a) documenting this well-known limitation for sparse-view scenarios.
 
-- **Harsh Critic about number of input views / memory scaling**: The paper shows results for varying N (referenced in appendix). The memory scaling concern is generic for any transformer-based method. Removed as too generic.
-
-- **Harsh Critic about evaluation views at 20° elevation**: This matches standard practice for object-centric evaluation. The concern about wider baseline testing is reasonable but speculative. Moved to nice-to-have.
-
-- **Strength Finder Claim 1**: Lists "poses not essential" as a strength. This conflicts with the verified Major weakness about overclaiming. Removed from strengths.
-
-- **Strength Finder Claim 3**: States "competitive pose estimation accuracy despite no pose input" and implies outperformance, but FreeSplatter-S is slightly worse than MAS3R on scene-level benchmarks. This is partially conflicting with Table 1 data. The strength is kept but the "outperforms" framing is corrected.
+- **Strength Finder: "Pose-free method outperforms pose-dependent baselines by large margins on object-centric reconstruction"** — This strength conflicts with the verified Major weakness about missing GS-LRM comparison. The claim is factually true from Table 2, but the comparison confounds representation differences with pose handling, making it misleading as a standalone strength. Removed from core strengths.
 
 ## Novel Insights
 
-The most insightful observation from the reviews is the tension between FreeSplatter's two main comparison narratives: (1) the overclaimed object-centric comparison against LGM/InstantMesh (where confounds exist), and (2) the genuinely strong and fair comparison against Splat3R on scene-level data (where end-to-end Gaussian training clearly beats frozen-backbone approaches). The latter is actually the more compelling and defensible contribution—it demonstrates that jointly optimizing Gaussian positions and attributes with rendering loss outperforms constraining positions to a frozen backbone's point predictions. This reframes FreeSplatter's core value from "poses aren't needed" (which overclaims) to "end-to-end Gaussian training in a unified frame is more effective than decoupled point-prediction + Gaussian-head approaches" (which the evidence strongly supports).
+The paper reveals an interesting asymmetry: in scene-level reconstruction, pose-free methods can compete with pose-dependent ones on a relatively level playing field (similar Gaussian representations), while in object-centric reconstruction, the evidence for pose-free superiority is muddied by representation differences. This suggests that the value of pose-free design may be context-dependent—more impactful in scenarios where pose estimation adds fragility (real-world scenes with complex backgrounds) and less clearly beneficial in highly structured domains with strong category priors (rendered objects on white backgrounds). The pixel-alignment loss elegantly bridges the gap between unconstrained 3D prediction and the geometric constraints needed for PnP, but its dependence on GT camera origins during training raises the question of whether a purely unsupervised alternative could achieve similar results—this remains an open direction.
 
 ## Suggestions
 
-- Temper the central narrative: replace the claim that "camera poses may not be essential" with a more precise statement that "end-to-end Gaussian training in a unified reference frame can match or exceed pose-dependent approaches," acknowledging the other contributing factors (resolution, training scale, representation).
-- Fix Table 1 bolding to only highlight column-wise best entries.
-- Clarify the evaluation protocol for LGM/InstantMesh in Table 2—at what resolution are their outputs rendered for metric computation?
-- Add a staged training ablation to the appendix to substantiate the "essential" claim.
-
----
-
-**Calibration Anchors:**
-
-| Paper | Avg Score | Comparison |
-|-------|-----------|------------|
-| NoPoSplat (P4o9akekdf) | 8.0 | Closest high anchor—very similar topic (pose-free 3DGS). NoPoSplat is stronger: no depth needed at training, handles arbitrary intrinsics, uses MASt3R pretraining. FreeSplatter has the resolution/confound concern on object-centric comparison and needs depth pre-training, but handles both object and scene domains. |
-| PF-LRM (noe76eRcPC) | 8.0 | Pose-free NeRF LRM. Stronger ablations and cross-dataset results. FreeSplatter has better rendering quality (Gaussian vs NeRF) and unified multi-view frame, but overclaims more. |
-| LEAP (KPmajBxEaF) | 7.0 | Pose-free sparse-view, accepted as poster. Simpler method, limited results. FreeSplatter is clearly stronger with better architecture, broader evaluation, and practical applications. |
-| SHARE (EAT5Jpa4ws) | 5.5 | Pose-free Gaussian splatting, rejected. Flagged for unfair comparisons and missing critical baselines (DUSt3R, Splat3R). FreeSplatter has stronger fair comparisons and more comprehensive evaluation. |
-| Long-LRM (meOELl7HRf) | 5.33 | Feed-forward Gaussian reconstruction, rejected. Overclaimed, unfair comparisons, limited novelty. FreeSplatter has clearer methodological contributions and better-controlled experiments. |
-| GaussianFocus (LieTse3fQB) | 2.5 | Low anchor. Fundamentally flawed with weird results, no novelty, and badly designed experiments. FreeSplatter is in a completely different league. |
-
-FreeSplatter sits above the medium anchors (SHARE, Long-LRM) due to its genuine architectural contribution, strong fair comparisons vs Splat3R, and practical utility. It falls below the high anchors (NoPoSplat, PF-LRM) because of the overclaimed object-centric comparison narrative, the depth-dependent pre-training limitation, and the common focal length assumption. The 7.0 LEAP anchor is a reasonable lower bound; NoPoSplat/PF-LRM at 8.0 are a stretch given the weaknesses. I place FreeSplatter at 6.5—a solid contribution that would benefit from tempering its claims and adding controlled comparisons.
+- Add comparison with GS-LRM on GSO/OmniObject3D (or explicitly explain why it was not possible), as this is the most directly comparable pose-dependent baseline in the same architectural family.
+- Temper the "camera poses may not be essential" claim to "camera pose input may not be essential given strong data priors," qualifying the scope appropriately.
+- Add a pose-dependent variant ablation: feed GT poses to FreeSplatter's architecture (e.g., via Plücker ray embeddings as in LGM) and measure the reconstruction gap. This directly quantifies the pose-free cost/benefit.
 
 ## Score and Decision
 
-MY FINAL SCORE: <pineapple>6.5</pineapple>
-MY FINAL DECISION: <orange>Accept</orange>
+**Calibration anchors:**
+- NoPoSplat (8.0, Oral): Extremely similar concept (pose-free Gaussian reconstruction from sparse views), explicitly compared against GS-LRM, scored 8 despite being called "direct combination of previous works."
+- PF-LRM (8.0, Spotlight): Pose-free LRM predecessor, scored 8 with some baseline concerns but strong overall validation.
+- Long-LRM (5.33, Reject): Flagged for unfair comparison with GS-LRM, missing baselines, limited novelty.
+- SHARE (5.5, Withdrawn): Flagged for missing DUSt3R/MASt3R baselines, insufficient experiments.
+- GaussianFocus (2.5, Reject): Poor baseline selection, unconvincing quantitative results.
+
+FreeSplatter has genuine and impactful contributions—the pixel-alignment loss (with strong ablation support), the unified reference frame architecture, competitive scene-level results versus pose-dependent methods using the same representation, and practical 3D content creation utility. These place it well above the low-scoring anchors (GaussianFocus at 2.5, SITTO at 2.33) and above medium-scoring papers rejected for baseline gaps (Long-LRM at 5.33, SHARE at 5.5), because FreeSplatter's scene-level comparison is well-designed and its core contributions are validated.
+
+However, FreeSplatter is clearly below the high-scoring anchors (NoPoSplat/PF-LRM at 8.0) because: (1) the most comparable pose-dependent baseline (GS-LRM) is absent from the object-centric comparison—NoPoSplat explicitly includes this comparison; (2) the paper's strongest claim ("camera poses may not be essential") relies on confounded evidence; (3) no pose-dependent variant ablation is provided. These are not minor gaps—they directly affect whether the central thesis is supported.
+
+The paper falls in the 6.0 range: a solid contribution with real architectural and algorithmic novelty, but with significant gaps in experimental validation that undermine the strongest claims. The scene-level evidence is convincing; the object-centric overclaim needs either evidence or tempering.
+
+MY FINAL SCORE: <pineapple>6.0</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>

@@ -1,22 +1,24 @@
-Now I have sufficient information to write the final review. Let me compile everything.
+Now I have enough information to write the final review. Let me carefully synthesize all findings.
 
 ## Summary
 
-PF3plat proposes a pose-free feed-forward 3D Gaussian Splatting framework for novel view synthesis from unposed sparse images. The key insight is that pixel-aligned 3DGS is particularly sensitive to depth/pose misalignment (producing noisy gradients that destabilize training), so the method employs a coarse-to-fine strategy: foundation models (UniDepth + LightGlue/MASt3R) provide coarse alignment, then lightweight learnable modules refine depth and pose, and geometry-aware confidence scores condition Gaussian parameter prediction. The method achieves substantial improvements over prior pose-free NeRF-based approaches on RealEstate-10K, ACID, and DL3DV benchmarks.
+PF3plat introduces a pose-free feed-forward 3D Gaussian Splatting framework that achieves novel view synthesis from unposed sparse images by addressing the core challenge of 3D Gaussian misalignment under wide baselines. The method employs a coarse-to-fine strategy: pre-trained monocular depth (UniDepth) and correspondence (LightGlue) models provide coarse alignment, then lightweight learnable modules refine depth and pose estimates, and geometry-aware confidence scores condition Gaussian parameter prediction.
 
 ## Strengths
 
-1. **Well-motivated coarse-to-fine strategy for pose-free 3DGS.** The paper correctly identifies that pixel-aligned 3DGS is fundamentally more sensitive to pose/depth errors than NeRF (which can absorb errors via interpolation), and the approach of bootstrapping from foundation models before refinement is architecturally sound. Table 4 confirms this is *necessary*, not merely beneficial: removing the correspondence network (row V) causes complete training failure.
+- **Large and consistent NVS improvements over all prior pose-free methods**: On RealEstate10K Large, PF3plat achieves 23.366 PSNR vs. CoPoNeRF's 19.985 (+3.38 dB); on ACID Large, 23.935 vs. 22.407; on DL3DV, 19.355 vs. 15.509 in small-overlap settings (+3.85 dB) (Tables 1 and 3). These are substantial margins that clearly advance the pose-free NVS field.
 
-2. **Comprehensive ablation study** (Table 4) that systematically tests each component and training strategy, including the important finding that directly fine-tuning the depth network leads to catastrophic failure (rows I-I, I-II), validating the frozen-foundation-model design.
+- **Coarse alignment is demonstrated to be necessary for training stability**: Table 4 row (V) shows that removing the correspondence network causes complete training failure (N/A), and row (VI) shows removing the monocular depth network drops PSNR from 22.347 to 16.132 and rotation error degrades from 1.965° to 6.990°. This provides strong empirical validation of the core insight that pixel-aligned 3D Gaussians require coarse alignment when poses are unknown.
 
-3. **Geometry-aware confidence mechanism provides the single largest refinement improvement** (+1.1 dB PSNR per Table 4, row IV), and the design—using cross-attention between a multi-view cost volume and a monocular depth guidance volume to derive a confidence score that conditions Gaussian parameter prediction—is thoughtful and well-justified.
+- **Lightweight refinement avoids catastrophic forgetting of foundation models**: Table 4 rows (I-I) and (I-II) show that both full fine-tuning and scale-shift tuning of the depth network result in training failure (N/A), while the proposed lightweight Transformer-based refinement (Eq. 1–2) achieves 22.347 PSNR. This validates the key design choice of refining via learned offsets on frozen features.
 
-4. **Substantial empirical improvements over prior pose-free methods.** On RealEstate-10K Small, PF3plat achieves 22.347 PSNR vs. CoPoNeRF's 19.536 (+2.8 dB). On DL3DV Large, 22.108 vs. 17.586 (+4.5 dB). These are large margins for this area. The method also shows strong inference speed advantages (0.39s vs. 1.456s/4.010s/17.29s for DBARF/FlowCAM/CoPoNeRF per Table 5b).
+- **Geometry-aware confidence provides measurable gains**: Table 4 row (IV) shows removing S_geo drops PSNR by 1.1 dB (22.347 → 21.239) and increases LPIPS from 0.205 to 0.223, confirming that conditioning Gaussian parameter prediction on reliability assessment improves reconstruction quality.
 
-5. **Cross-dataset generalization** (Table 5d) demonstrates models trained on DL3DV achieve 28.882 PSNR on RealEstate-10K, and vice versa at 26.971 PSNR, substantially outperforming CoPoNeRF.
+- **Consistency losses are critical for wide-baseline training**: Table 4 row (I-III) shows removing the 2D-3D/3D-3D consistency losses drops PSNR from 22.347 to 18.832 (−3.5 dB), and row (I-V) shows removing both consistency and regularization losses causes training failure.
 
-6. **Extension to N views** (Table 5c) shows the method scales from 2 to 12 input views with improving quality (26.865→27.082 PSNR), demonstrating practical scalability.
+- **Significant inference speed advantage**: Table 5b shows PF3plat takes 0.390s for 2-view inference vs. DBARF's 1.456s and FlowCAM's 4.010s — a 10–100× speedup over NeRF-based pose-free methods.
+
+- **Cross-dataset generalization demonstrated**: Table 5d shows PF3plat achieves >20 dB PSNR in both cross-dataset settings, substantially outperforming the baseline.
 
 ## Weaknesses
 
@@ -25,67 +27,65 @@ None.
 
 ### Major
 
-- **The "SOTA across all benchmarks" claim is inaccurate for pose estimation on ACID.** Table 2 shows that on ACID, CoPoNeRF achieves lower rotation error (3.283° vs. 4.125° avg. at small overlap) and lower translation error (22.809° vs. 27.727° avg.) across all overlap settings. The abstract, introduction, and conclusion all claim "sets a new state-of-the-art across all benchmarks" without qualification. The paper's own discussion in Section 4.3 attributes this to "larger scale scenes" and "dynamic scenes"—valid explanations, but these represent systematic failure modes that should be reflected in the framing. This matters because the unqualified SOTA claim is a central part of the paper's narrative.
+- **Disconnect between stated depth problem and proposed solution**: Section 3.2.2 identifies "inconsistent scales among predictions" as the key limitation of monocular depth models that "still remain unaddressed." However, the refinement in Eq. 1 uses purely additive offsets: $\hat{\mathcal{D}}_i = \mathcal{D}_i + \Delta\delta_i$. Additive offsets cannot directly correct multiplicative scale inconsistencies — if two views' depth predictions differ by a scale factor $s$, adding pixel-wise offsets will not align them. The paper never acknowledges this gap or explains how scale consistency is actually achieved. This matters because it is unclear whether the method works because the refinement addresses scale (it cannot, by design), or because UniDepth v2 already provides sufficiently metric-scale depth that only additive corrections are needed. If the latter, the depth refinement's contribution is smaller than the problem framing suggests, and the method's generality depends on the specific depth model chosen. An ablation with a per-image multiplicative scale factor (e.g., $\hat{\mathcal{D}}_i = s_i \cdot \mathcal{D}_i + \Delta\delta_i$) would clarify whether scale inconsistency is a real problem for the chosen depth model.
 
-- **Conflation of representation advantage with methodological contribution.** A substantial portion of the performance gap over prior pose-free methods comes from adopting 3DGS instead of NeRF, rather than from the proposed refinement modules. Table 4 reveals this: the ablation baseline (coarse alignment + MVSplat-based Gaussian prediction, without any refinement) already achieves 20.14 PSNR, substantially above DBARF's 14.79 and FlowCAM's 18.24 on RealEstate10K Small. The paper's specific contributions—depth/pose refinement and geometry confidence—add ~2.2 dB on top of this base. The paper never disentangles this, presenting the full gain over prior pose-free NeRF methods as attributable to the proposed method. This makes it difficult for readers to assess the actual contribution of the refinement modules vs. the straightforward representation switch.
-
-- **Table presentation issues reduce verifiability.** Table 4 has duplicate row labels (two rows labeled "(II)"), making it ambiguous which ablation is which. Table 1 contains unlabeled bold rows (lines 202-205 showing 16.615, 22.418, 22.542, 27.064 PSNR) with no method name. Table 5d contains unexplained method names ("UniDepth" and "GP-Gauss") with implausible numbers (36.14 PSNR for GP-Gauss). While these may be parser artifacts for the unlabeled Table 1 rows, the duplicate label in Table 4 and unexplained entries in Table 5d are genuine presentation issues that hinder verification of the paper's central claims.
+- **Overclaimed "state-of-the-art across all benchmarks"**: The abstract, introduction, and conclusion all state PF3plat "sets a new state-of-the-art across all benchmarks" without qualification. This is demonstrably false for ACID pose estimation (Table 2), where CoPoNeRF achieves lower rotation and translation errors across all three overlap settings. The paper acknowledges this in Section 4.3 (attributing it to "larger scale of scenes" and "dynamic scenes"), but provides no controlled evidence for these explanations. Additionally, Table 5a shows InstantSplat achieves 23.079 PSNR vs. PF3plat's 22.347 without TTO, though the paper does fairly frame this as a speed trade-off. The SOTA claim should be precisely scoped to "pose-free feed-forward methods for novel view synthesis" rather than "across all benchmarks."
 
 ### Minor
 
-- **Deep dependence on frozen foundation models is under-analyzed.** Removing UniDepth drops PSNR from 22.35 to 16.13 (Table 4, row VI), and removing the correspondence network causes complete failure (row V). The method's performance is thus bounded by foundation model quality. The paper does not investigate potential data overlap between foundation model pre-training and benchmarks (particularly RealEstate10K and ACID, which come from YouTube videos). While this concern is somewhat mitigated by the cross-dataset results in Table 5d, a brief discussion would strengthen the work.
+- **Consistency losses do not weight by correspondence confidence**: The 2D-3D and 3D-3D consistency losses (Section 3.3) treat all correspondences $\mathcal{M}_{ij}$ equally, despite the coarse alignment module producing per-correspondence confidence values $C_{ij}$. In wide-baseline settings — the very regime the paper targets — correspondence models produce many erroneous matches, and enforcing geometric consistency on wrong correspondences injects harmful gradients. Weighting the consistency losses by $C_{ij}$ is a low-cost improvement that was not explored or justified as omitted. (Note: LightGlue may already filter very low-confidence matches, but varying quality within the remaining set could still matter.)
 
-- **The "single feed-forward pass" characterization is somewhat misleading** about pipeline complexity. The method requires: (1) UniDepth inference for both images, (2) pairwise correspondence estimation, (3) RANSAC-based pose solving, (4) depth refinement, (5) pose synchronization and refinement, (6) cost volume construction, (7) confidence estimation, (8) Gaussian prediction, and (9) rendering. While all components are differentiable and there is no iterative optimization, this is a multi-stage pipeline, not "single feed-forward" in the sense of one network forward pass. The speed breakdown (0.251s for UniDepth vs. ~0.14s for the rest) confirms this.
+- **Depth refinement is view-independent at inference but paper implies cross-view consistency**: Section 3.2.2 states the depth refinement "promotes consistency across views" and "leverages supervision signals derived from pixel-aligned 3D Gaussians that connect the information across views." In reality, the refinement processes each view independently (using only $F_i$ from the depth network), and multi-view consistency arises only through the training loss. The paper should be explicit about this — the current phrasing could mislead readers into thinking cross-view information flows through the refinement module at inference time.
 
-- **Assumption of known intrinsics limits practical applicability.** The paper dismisses this in one sentence (Section 4.1: "intrinsic parameters are given, as they are generally available from modern devices"), but many casually captured images (cropped images, mixed cameras, unknown lenses) lack reliable intrinsics. This is a notable scope limitation that deserves more discussion.
+- **Suspected data entry issue in Table 2 rotation statistics**: For RealEstate10K Small, the paper reports Rotation Avg = 1.965° and Med = 7.949°. Having the median exceed the average by 4× is physically implausible for rotation error (typically right-skewed, so Avg > Med). Notably, Table 4 reports the same method's Rotation Med = 0.751°, which is consistent with typical distributions. The discrepancy between 7.949° and 0.751° suggests a possible table entry error or column misalignment in Table 2.
+
+### Trivial
+
+- The ablation table (Table 4) uses confusing row labels — (II) appears twice with different descriptions, and the label scheme (I), (II), (IV), (V), (VI) skips (III) in the component ablation section.
 
 ## Nice-to-Haves
 
-- Analysis of failure cases in wide-baseline / low-overlap scenarios, including qualitative examples of when coarse alignment breaks down.
-- Comparison with PixelSplat (a directly comparable posed 3DGS method that is cited as a baseline but absent from Table 1).
-- Sensitivity analysis of the depth refinement's ability to correct scale inconsistencies between views, since the offset Δδ alone cannot correct for scale differences.
+- An ablation testing multiplicative scale correction (e.g., per-image scale factor + additive offset) would clarify whether the "inconsistent scales" problem is real for UniDepth and whether additive-only refinement is sufficient.
+- Weighting consistency losses by correspondence confidence $C_{ij}$ — a straightforward experiment that could improve performance in wide-baseline settings.
+- Failure case visualization to help readers understand the method's practical limits, especially on ACID scenes with dynamic content or large scale.
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution:
+*These points are flagged to be removed, treat them with caution.*
 
-- **"Foundation models may not exist or be available"** — Removed per hard rule. The paper cites UniDepth and LightGlue; these are treated as real and available.
-- **"The 'single feed-forward' claim is false"** — Partially removed. The method IS a single forward pass (no test-time optimization), which is the standard usage in this field. However, the pipeline's complexity merits mentioning (kept as minor).
-- **"Missing comparison with PixelSplat"** — Kept as nice-to-have, not as a major weakness, since PixelSplat requires GT poses and the paper includes it only for reference. The asymmetric comparison (needing GT poses) favors the baseline rather than the proposed method.
-- **"Reproducibility concerns about undisclosed hyperparameters or large artifacts"** — Removed per hard rule on reproducibility nitpicks.
-- **"Missing appendix/proofs"** — Removed per hard rule (parser strips appendices).
-- **Typos/formatting issues** — Removed per hard rule on formatting nitpicks.
-- **"Correspondence quality as a function of baseline"** — Moved to nice-to-have; this is an analysis extension, not a core flaw.
-- **"Intrinsics-free extension or analysis"** — Moved to minor; this is outside stated scope but a real practical limitation.
-- **"Scale consistency analysis of depth refinement"** — Moved to nice-to-have; the paper's multi-view losses provide indirect correction through training, even if the offset formulation doesn't explicitly handle scale.
+- **"No GT data of any kind used" overclaim**: The harsh critic suggested the "we do not use any ground truth camera poses" claim is misleading because pre-trained UniDepth and LightGlue were trained with GT supervision. This is a scope clarification, not a factual error — the claim is explicitly about the PF3plat training pipeline, not the pre-trained models. Standard practice in the field.
+
+- **3DGS vs. NeRF confounding performance gap**: The critic noted the large performance gap over NeRF-based baselines is confounded by the representation advantage of 3DGS. The paper's primary claim is about pose-free methods, and all existing pose-free methods happen to be NeRF-based. The representation choice IS part of the contribution, and the ablation (Table 4) shows the refinements add ~2.2 dB on top of the base 3DGS pipeline, providing a fair decomposition.
+
+- **L2 vs. Huber loss discrepancy**: The 3D-3D loss uses L2 norm while the 2D-3D loss uses Huber loss. This is a minor design choice; the 3D-3D loss has a small weight (0.05) and serves as a regularization term, making the L2 sensitivity less impactful.
+
+- **Cross-dataset table PSNR discrepancy**: The critic claimed CoPoNeRF's PSNR in Table 5d (21.721) differs from Table 1 (19.536). However, Table 5d lists "UniDepth" as a separate baseline, not CoPoNeRF, and the cross-dataset evaluation uses different train/test configurations. The apparent discrepancy likely reflects different methods and evaluation protocols rather than an error.
+
+- **Pose refinement dependency on depth quality**: The critic noted that if depth refinement is poor, recomputed poses will also be poor. This is inherent to any coarse-to-fine approach and is partially validated by the ablation showing pose refinement contributes more than depth refinement (−0.828 vs. −0.384 dB when removed).
+
+- **Frame distance curriculum not ablated**: The paper mentions gradually increasing frame distance during training but does not ablate this. This is a standard curriculum learning practice and not a critical omission.
+
+- **ACID pose estimation explanation unsupported**: The critic requested per-scene analysis to support the "larger scale of scenes" and "dynamic scenes" explanations. While the paper's explanations lack controlled evidence, they are reasonable hypotheses that do not affect the validity of the NVS results.
 
 ## Novel Insights
 
-The paper reveals an important asymmetry between NeRF and 3DGS in the pose-free setting: implicit representations can absorb pose/depth errors through interpolation, while explicit pixel-aligned Gaussians cannot, making the pose-free problem qualitatively different and harder for 3DGS. This insight—validated by the training failure modes in Table 4—explains why prior pose-free methods exclusively used NeRF and why a coarse-to-fine bootstrapping strategy is necessary rather than merely beneficial for 3DGS. However, this same insight also means much of the performance gain over NeRF-based baselines is attributable to the representation choice itself rather than the specific refinement modules.
+The ablation revealing that both full fine-tuning and scale-shift tuning of the monocular depth network cause training failure (Table 4, rows I-I and I-II) is a genuinely important negative result. It demonstrates that the common intuition of "just fine-tune the foundation model" is counterproductive for pixel-aligned 3DGS under wide baselines — catastrophic forgetting destroys the very geometry priors needed for alignment. This finding, combined with the success of lightweight additive refinement modules, suggests a general design principle for integrating foundation models into explicit 3D representations: frozen features + learned offsets is not just a convenience but a necessity.
 
 ## Suggestions
 
-- Qualify the "SOTA across all benchmarks" claim to explicitly exclude pose estimation on ACID, or state it as "SOTA for novel view synthesis across all benchmarks."
-- Add a brief disentangling analysis: explicitly acknowledge that the 3DGS representation contributes substantially to the gap over NeRF-based baselines, and report the refinement modules' contribution separately (as the ablation already shows: ~2.2 dB).
-- Fix the duplicate "(II)" row labels in Table 4 and add method names for the unlabeled bold rows in Table 1. Explain "GP-Gauss" and "UniDepth" entries in Table 5d.
-
-## Calibration Summary
-
-| Anchor Paper | Path | Avg Score | Comparison |
-|---|---|---|---|
-| NoPoSplat (Oral) | P4o9akekdf.md | 8.0 | Similar topic (pose-free feed-forward 3DGS). NoPoSplat has a simpler, more elegant canonical-space approach and achieves better results with no foundation model dependency. PF3plat is more complex and has overclaim issues. Below this. |
-| PF-LRM (Spotlight) | noe76eRcPC.md | 8.0 | Pose-free LRM with simple architecture and strong cross-dataset generalization. PF3plat's method is more engineering-heavy but addresses a different (scene-level) problem. Below this due to overclaim. |
-| SplatFormer (Spotlight) | 9NfHbWKqMF.md | 7.5 | 3DGS robustness under OOD views. Strong results, clear contribution. PF3plat is comparable in engineering quality but has the overclaim issue. |
-| LEAP (Poster) | KPmajBxEaF.md | 7.0 | Pose-free sparse-view 3D modeling. Simpler method with solid evaluation. PF3plat has stronger empirical results but the overclaim is a real concern. |
-| SHARE (Withdrawn/Reject) | EAT5Jpa4ws.md | 5.5 | Directly comparable (pose-free Gaussian splatting with coarse-to-fine). Withdrew due to missing baselines and overclaimed SOTA. PF3plat is clearly stronger—better evaluation, more comprehensive ablation. But shares some weaknesses (overclaim, missing PoseSplat comparison). |
-| DepthSplat (Withdrawn/Reject) | IcPkW3QNW2.md | 5.0 | Feed-forward 3DGS with depth priors. Incremental over Transplat. PF3plat has more substantial contributions and better experimental validation. |
-| MG-NeRF (Reject) | WKfMFtlz5D.md | 2.5 | Overclaimed results, performs worse than baselines. PF3plat is clearly much stronger—real improvements, good ablation. |
-
-PF3plat sits above the withdrawn/rejected 3DGS papers (SHARE at 5.5, DepthSplat at 5.0) due to substantially stronger empirical results and more comprehensive evaluation, but below the accepted papers (NoPoSplat/PF-LRM at 8, LEAP at 7, SplatFormer at 7.5) due to the overclaim issue and the fact that a significant portion of the improvement comes from the representation choice (3DGS vs NeRF) rather than the novel modules. The paper makes a real contribution—demonstrating that pose-free 3DGS is viable and effective via coarse-to-fine alignment—but the gap between claims and evidence needs honest correction.
+- Precisely scope the SOTA claim to "pose-free feed-forward novel view synthesis" and explicitly note that ACID pose estimation remains an open challenge.
+- Add a brief discussion explaining why additive depth offsets are sufficient despite the "inconsistent scales" framing — either acknowledge that UniDepth's metric depth output already resolves most scale inconsistency, or test whether multiplicative correction provides additional benefit.
+- Verify the Rotation Med value for RE10K Small in Table 2 — the 7.949° value is inconsistent with both the expected distribution and the 0.751° value reported in Table 4.
 
 ## Score and Decision
 
-The paper's core contribution—enabling pose-free 3DGS via coarse-to-fine alignment with foundation models—is real and the empirical results are strong. The ablation is thorough. However, there are two significant overclaim issues (unqualified "SOTA across all benchmarks" that is false for ACID pose estimation; and presenting representation-switch gains as methodological contribution) that are not minor framing issues but affect how the contribution should be weighed. Table presentation errors compound these concerns. The paper is above borderline because the system itself works well and the problem formulation is valuable, but the overclaim pulls it below the clearly-accept papers.
+**Calibration anchors:**
 
-MY FINAL SCORE: <pineapple>6.0</pineapple>
+- **High-scoring (7+):** NoPoSplat (8.0, Oral) — very similar topic (pose-free feed-forward 3DGS), simpler approach, strong results despite missing related work concerns. PF-LRM (8.0, Spotlight) — pose-free reconstruction with cross-dataset generalization. SplatFormer (7.5, Spotlight), LEAP (7.0, Poster), STORM (6.5, Poster) — strong 3DGS methods with some limitations.
+- **Medium-scoring (4-6):** SHARE (5.5, Withdrawn) — nearly identical topic (pose-free Gaussian splatting), dinged for overclaimed SOTA, missing baselines, no cross-dataset evaluation. DepthSplat (5.0, Withdrawn), SpectroMotion (5.0, Withdrawn) — overclaimed 3DGS methods. EVA-Gaussian (5.5, Reject).
+- **Low-scoring (<3):** GABins (2.5, Reject) — overclaimed depth estimation without proper ablation. SITTO (2.33, Withdrawn) — limited novelty.
+
+PF3plat is clearly above the medium-tier papers (SHARE, DepthSplat, SpectroMotion at 5.0–5.5) because it provides comprehensive baselines, cross-dataset evaluation, large performance margins, thorough ablations, and speed analysis — addressing essentially all weaknesses that sunk SHARE. However, it falls below the top-tier papers (NoPoSplat, PF-LRM at 8.0) due to the scale/refinement disconnect and the overstated SOTA claim, which represent genuine gaps between the paper's framing and its actual contribution. Compared to STORM (6.5), PF3plat has similarly strong empirical results and comprehensive experiments, with a meaningful but not fatal weakness in the overclaimed scope.
+
+MY FINAL SCORE: <pineapple>6.5</pineapple>
 MY FINAL DECISION: <orange>Accept</orange>

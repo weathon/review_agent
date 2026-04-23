@@ -1,115 +1,98 @@
-Now I have enough calibration data. Let me synthesize my review.
+Now I have a thorough understanding of the paper and calibration anchors. Let me write the final consolidated review.
 
-Key calibration anchors:
-- High: Nash equilibrium via stochastic optimization (avg 8, oral) — rigorous theory + strong experiments
-- Medium: COALA/learning-aware policy gradients (avg 6.5, poster) — opponent shaping, some theoretical concerns but generally good
-- Medium-low: Papers with overclaimed theory + some empirical value (avg 4.25-5.75, rejected)
-- Low: Innate-values-driven RL, MARL robustness (avg 2.5-3, rejected) — fundamental theoretical flaws
+## Summary
 
-This paper sits somewhere between the medium and medium-low anchors. It has stronger empirical results than the reject-level papers (the Commons Harvest and Negotiation Game results are genuinely new), but the theoretical overclaiming is substantial (unjustified approximation dropping partition function, overly strong assumptions in Theorem 1, unanalyzed gap in Theorem 2).
-
-Let me finalize my assessment.</think>## Summary
-
-The paper introduces Advantage Alignment, a family of opponent shaping algorithms that modify the policy gradient by adding a term proportional to the product of the agent's past advantages and the opponent's current advantage. The core derivation starts from LOQA's gradient formulation and drops the partition function contribution (Eq. 6 → Eq. 7) to arrive at a simple, REINFORCE-estimable shaping term. A Proximal variant (PAA) further integrates this into PPO's clipped objective. Theorems 1–2 attempt to connect LOLA and LOQA to Advantage Alignment, and Theorem 3 shows Nash equilibrium preservation. Experiments span IPD, Coin Game, a continuous-action Negotiation Game, and Melting Pot's Commons Harvest Open.
+The paper introduces Advantage Alignment, a family of opponent shaping algorithms that reduce opponent shaping to aligning the advantages of interacting agents—increasing the probability of mutually beneficial actions when past interactions have been positive. The key derivation (under a Boltzmann opponent assumption) yields a simple REINFORCE-style update (Eq. 8) depending on the product of past own advantages and current opponent advantages. A Proximal variant integrates this into PPO's clipped objective. Theorems 1 and 2 relate existing methods (LOLA and LOQA) to Advantage Alignment, and Theorem 3 shows Nash equilibria are fixed points of the update.
 
 ## Strengths
 
-- **Intuitive mechanistic insight**: The four-case analysis of how advantage products determine gradient direction (Fig. 1a) gives a clean and interpretable explanation for what opponent shaping mechanisms are doing. The emergence of tit-for-tat-like strategies in IPD (Fig. 1b) provides supporting evidence that this intuition translates into sensible behavior.
+- **Interpretable decomposition of opponent shaping**: Equation 8 provides a clean, intuitive mechanism—opponent shaping reduces to aligning advantage products, with the sign of the product determining whether to increase or decrease action probability (Figure 1a). This is arguably more transparent than LOLA's differentiate-through-imagined-updates or LOQA's DiCE-based approach.
 
-- **Concrete computational simplification**: The final algorithm (Eq. 8) requires only log-probabilities of the agent's own policy and advantage estimates from both agents—quantities already computed in standard actor-critic—unlike LOLA/SOS (second-order differentiation) or LOQA/POLA/COLA (DiCE-based automatic differentiation). This is a genuine architectural advantage that eliminates the need for special automatic differentiation machinery.
+- **Theorem 2's LOQA connection is meaningful**: Unlike Theorem 1, Theorem 2 establishes that LOQA's shaping term matches Equation 8 up to a (1−π̂²) scalar factor, under the same Assumption 2 that LOQA already uses. This is a genuine and clean theoretical contribution.
 
-- **Successful scaling to continuous actions and complex environments**: The paper demonstrates the first REINFORCE-based opponent shaping results in a continuous-action domain (Negotiation Game, Fig. 3a: AdAlign 0.44 vs. PPO 0.25 self-play return) and in a high-dimensional, partially observable, multi-agent setting (Commons Harvest Open, Fig. 4: 1.63 normalized per capita return vs. next-best 1.15 for PPO and 0.94 for acb_p). These results do show that the simplified formulation unlocks environments that prior methods have not been applied to.
+- **Extension to continuous actions**: Because Equation 8 depends only on the agent's own log probabilities (not discrete action enumeration), Advantage Alignment naturally extends to continuous action spaces. This is validated in the Negotiation Game (Section 5.3, Figure 3a), where AdAlign solves the social dilemma while PPO and PPO-SR fail.
 
-- **Clear algorithmic presentation**: Algorithm 1 provides easily implementable pseudocode; the method is a simple additive term to the standard policy gradient, which is a practical strength.
+- **Proximal formulation is elegant and practical**: Integrating the modified advantage (Eq. 10) into PPO's clipped surrogate objective (Eq. 9) is a principled way to scale opponent shaping, directly enabling the Melting Pot experiments.
+
+- **Empirical emergence of tit-for-tat in IPD**: Figure 1b shows AdAlign agents converge to a tit-for-tat-like policy with clear strategic structure—cooperating in START and CC/DC states, defecting in CD/DD states—providing interpretable evidence of the mechanism's behavior.
+
+- **Coin Game league results are competitive**: Figure 2 shows AdAlign performs comparably to LOQA across the league evaluation—self-play reward of 0.28 vs. LOQA's 0.30, similar robustness against AD exploitation.
 
 ## Weaknesses
 
 ### Fatal
-
 None.
 
 ### Major
 
-- **Unjustified partition function approximation undermines the "first principles" claim**: Going from Eq. 6 to Eq. 7, the paper drops the partition function gradient term $\sum_b \hat{\pi}^2(b|s_t) \nabla_{\theta_1} Q^2(s_t, b)$. This is not a variance-reduction baseline—the dropped term depends on $\theta_1$ and is an integral part of the softmax gradient. The paper describes it as an "approximation" (line 122) but provides no justification (e.g., low-temperature limit, small-gradient argument) and no analysis of when it is valid or what objective the resulting update optimizes. The abstract and contribution bullets claim the method is "derived from first principles," which overstates the theoretical grounding. The resulting update is not a valid gradient of any established objective, making the "first principles" framing misleading. This matters because it is the central theoretical claim of the paper.
+- **The "first principles" derivation silently drops the partition function gradient term without error analysis (§4.1, Eq. 6→7)**: The paper moves from the full opponent shaping gradient (Eq. 6) to Equation 7 by "ignoring the contribution due to the partition function." The partition function Z(s) = Σ_b exp(β·Q²(s,b)) depends on θ₁ because Q²(s,b) = E_{a∼π¹}[Q²(s,a,b)], so ∇_{θ₁} log Z(s) is a non-trivial gradient component. The paper provides no error bound, no analysis of when this approximation is valid, and no empirical test of its impact. This is not a minor simplification—it fundamentally changes the gradient being computed. A method claimed to be "derived from first principles" should either justify this approximation or honestly acknowledge it as a limitation. This matters because the principled derivation is a key selling point of the paper.
 
-- **The claimed unification with LOLA and LOQA requires overly strong or gap-laden assumptions**: Theorem 1 requires that $\nabla_{\theta^i} \log \pi^2(a|s)$ for all $(a,s)$ form an orthonormal basis—an assumption that does not hold for any practical neural network parameterization, and the paper does not discuss its restrictiveness. Theorem 2 shows equivalence only "up to $(1 - \hat{\pi}^2(b_k|s_k))$," a factor that can be arbitrarily close to 0 for frequently-taken actions, severely attenuating the shaping signal. The paper does not analyze when this factor is negligible versus significant. Together, the claim that "existing opponent shaping methods implicitly perform Advantage Alignment" (Abstract, Section 4.2) is substantially overstated—these theorems establish at best a formal resemblance under restrictive or partial conditions, not a true unification.
+- **Theorem 1's orthonormality condition renders the LOLA unification claim misleading (§4.2)**: Theorem 1 requires that ∇_{θ^i} log π²(a|s) for all (a,s) form an orthonormal basis—a condition essentially never satisfied for any practical neural network parameterization. The paper does state the condition in the theorem, but the conclusion (line 284) claims "we prove that existing opponent shaping methods implicitly perform Advantage Alignment" without qualifying this restriction, and the abstract states this as an unconditional result. The Theorem 2 (LOQA) connection is valid, but the Theorem 1 (LOLA) connection is formally unsupported in practice. This matters because the unification with LOLA is presented as a key contribution.
 
-- **No comparison with opponent shaping baselines in the two environments where the paper claims its biggest wins**: The Negotiation Game (Section 5.3) and Commons Harvest (Section 5.4) compare against PPO, PPO with summed rewards, and Melting Pot baselines (acb, vmppo, opre)—none of which are opponent shaping methods. The Coin Game (Section 5.2) does compare against LOQA and POLA, where AdAlign achieves at best parity (self-play: 0.28 vs. LOQA 0.30; against AD: 0.15 vs. 0.12). Given that the paper's key claimed advantages are computational efficiency, continuous-action extension, and scalability, the absence of any demonstration that competing opponent shaping methods fail or are impractical in the Negotiation Game and Commons Harvest means these advantages are asserted rather than established. Even a brief discussion of why LOLA/LOQA cannot be applied (e.g., second-order gradients infeasible at this scale) would suffice, but the paper provides none.
+- **No opponent shaping baselines in the two most challenging environments (§5.3, §5.4)**: In Coin Game (the simpler environment), AdAlign performs comparably to LOQA—not clearly better. In the Negotiation Game and Melting Pot—the environments that test scalability—only PPO and PPO-SR baselines are present; LOLA, LOQA, SOS, POLA, and MFOS are absent. The claim of "state-of-the-art cooperation" (abstract, conclusion) is unsupported in precisely the settings where it matters most. Without these comparisons, we cannot tell whether the improved performance comes from the advantage alignment insight or simply from having any opponent shaping mechanism in these environments.
 
 ### Minor
 
-- **Assumption 2 (Boltzmann opponent policy) is strong and its failure modes are unexplored**: The method assumes $\pi^i(a|s) \propto \exp(\beta Q^i(s,a))$, which is violated by algorithms like PPO with clipping or $\epsilon$-greedy Q-learning. No robustness study to misspecification of this assumption is provided. However, the empirical evaluations do include PPO-trained opponents (as league members) and the results hold, providing some implicit robustness evidence—making this a minor concern rather than major.
+- **Best-seed selection in Melting Pot inflates headline results (§5.4, Figure 4)**: The paper states "we select the best agent out of 10 seeds" following the Melting Pot contest protocol. While this is standard practice for the benchmark, it introduces selection bias that can substantially inflate performance, especially with only 10 seeds. Reporting mean and standard deviation across all seeds would strengthen the claim. This is mitigated by the fact that the paper follows established protocol.
 
-- **Best-seed selection in Commons Harvest**: The Melting Pot evaluation protocol selects the best agent out of 10 seeds (line 252), which inflates reported performance. While this follows the Melting Pot contest protocol, it means the results are not directly comparable to methods evaluated with average-seed reporting.
+- **Theorem 3 establishes fixed-point preservation, not stability**: The paper's claim that Advantage Alignment "preserves Nash equilibria" is strictly correct—A¹ = 0 at equilibrium, so the alignment term vanishes and the gradient is zero. However, this only means equilibria are fixed points, not that they are stable attractors. Perturbations could cause divergence. The distinction matters for understanding the method's dynamics, though the paper's claim as stated is technically accurate.
 
-- **Theorem 3 (Nash equilibrium preservation) is essentially trivial**: At any Nash equilibrium, advantages are zero for all visited state-action pairs, so *any* method that scales an update by advantages preserves the equilibrium. Presenting this as a property specific to Advantage Alignment inflates the theoretical contribution.
+- **The Negotiation Game is heavily modified from Cao et al. (2018)**: Values are made public (eliminating information asymmetry), negotiation is one-shot simultaneous rather than multi-turn, and the reward function is replaced. The paper is transparent about these changes (line 206), but calling it a "continuous variant" may overstate the connection to the original game. The strategic richness of the original is largely absent.
 
-- **Negotiation Game modifications**: The game is substantially modified from the standard benchmark (one-shot, simultaneous, public values). The paper discloses the reason for making values public ("otherwise Advantage Alignment would have an unfair edge over PPO agents by using the opponent's value function"), which honestly reveals a practical limitation—the method requires access to the opponent's reward function—that is not discussed as a general limitation.
+- **Access to opponent's reward function is a practical limitation insufficiently discussed**: The paper notes that making values public in the Negotiation Game was necessary "otherwise Advantage Alignment would have an unfair edge over PPO agents by using the opponent's value function." This reveals that the method requires access to the opponent's reward function—a significant practical requirement shared by LOLA and LOQA, but not discussed as a limitation of the approach.
+
+### Trivial
+None.
 
 ## Nice-to-Haves
 
-- **Computational cost comparison**: The paper claims "reduces the computational burden" but provides no wall-clock time, FLOPs, or per-step cost comparison with LOLA or LOQA. A simple table would substantiate this claim.
-
-- **Ablation of the partition function approximation**: Compare the full gradient (with partition function term retained) vs. the dropped version to show whether the approximation is empirically harmless or materially changes behavior.
-
-- **Robustness to Assumption 2 misspecification**: Test against opponents trained with algorithms that violate the Boltzmann policy assumption (e.g., heavy PPO clipping, $\epsilon$-greedy).
+- Ablation comparing the full gradient (including ∇log Z) vs. the approximate version to quantify the error introduced by the partition function approximation
+- Sensitivity analysis for the inverse temperature parameter β
+- Opponent shaping baselines (LOLA, LOQA) in the Negotiation Game or Melting Pot
+- Learning curves for Melting Pot showing training dynamics over the 34k steps
+- Mean and standard deviation across all 10 seeds in Melting Pot (not just best seed)
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution:
+These points are flagged to be removed, treat them with caution.
 
-- **"No comparison with LOLA, LOQA, POLA in IPD"**: The paper shows IPD results only as behavioral analysis (tit-for-tat emergence), not as a competitive benchmark. IPD is a diagnostic toy environment. The absence of league comparison here is acceptable given the Coin Game provides that comparison.
+- **"High variance of nested REINFORCE estimator"**: The paper cites Aghajohari et al. (2024b) who empirically demonstrated efficient estimation from a single trajectory. Requesting variance analysis is reasonable but not a core flaw. Moved to Nice-to-Have.
 
-- **"High-variance procedure for REINFORCE estimator"**: The paper cites Aghajohari et al. (2024b) for empirical validation of the single-trajectory estimate. While variance analysis would strengthen the paper, demanding independent variance proof for a technique validated in prior work is beyond scope.
+- **"Figure 3b contradicts tit-for-tat"**: The paper says AdAlign "closely resembles tit-for-tat" specifically in the IPD (Figure 1b). The Negotiation Game is a different game with different strategic structure; different emergent behavior is expected. This is a misunderstanding of the paper's claim.
 
-- **Missing related works**: Removed per rules—cannot confirm whether missing works exist.
+- **"34k steps is too short; baselines may be undertrained"**: The paper follows Melting Pot evaluation protocols, and the baselines (acb, vmppo, opre) are established methods from the Melting Pot contest. There is no evidence that baselines were given different training budgets. This is speculative.
 
-- **"34k training steps is very short compared to baselines trained for $10^9$ steps"**: The $10^9$-step baseline is the *normalization reference* (the exploiter upper bound), not a direct training comparison. The paper's own PPO and PPO-summed-rewards baselines are trained with the same 34k budget, making the comparison fair.
+- **"Missing comparison with Shaper"**: The paper discusses Shaper in related work. While a comparison would be informative, Shaper uses a fundamentally different meta-game approach, and no comparison is demanded as a standard expectation.
 
-- **Format/typo nitpicks**: Removed per rules.
+- **"Assumption 2 is not a first principle"**: This is a semantic objection. The paper states it as an assumption explicitly. All derivations from assumptions are "from first principles" in the standard usage of the term. The assumption is also shared with LOQA, making it standard in this literature.
+
+- **"Overclaimed 'state-of-the-art cooperation and robustness against exploitation' in abstract"**: This is partially valid and already captured in Major weaknesses about missing baselines. The claim about robustness against exploitation is well-supported by Coin Game and Negotiation Game league results.
+
+- **Strength removed: "State-of-the-art scalability results on Melting Pot" as a core strength**: This is weakened by the best-seed evaluation and absence of opponent shaping baselines. The large gap (1.63 vs 0.94) is still suggestive, but should not be presented as "state-of-the-art" without the relevant baselines.
+
+- **Strength removed: "Nash equilibrium preservation" as a core strength**: Theorem 3 only establishes fixed-point preservation, not stability. While technically correct, the practical significance is limited without stability analysis.
 
 ## Novel Insights
 
-The paper's most insightful observation is that the sign-product structure of current and past advantages (Fig. 1a) provides a unified mechanistic explanation for what opponent shaping does: it reinforces actions whose advantages are positively correlated across agents when interaction history has been positive, and does the opposite when it has been negative. This captures, in a single scalar product, the intuition that LOLA and LOQA operationalize through very different mechanisms (second-order differentiation and DiCE, respectively). However, the theoretical "unification" is more aspirational than established, given the restrictive assumptions required.
+The partition function approximation issue reveals an interesting asymmetry: LOQA effectively retains the full softmax gradient (including the partition function term) via its REINFORCE estimator, while Advantage Alignment explicitly drops it to achieve a simpler formulation. This trade-off—computational and conceptual simplicity in exchange for an uncontrolled approximation—is the hidden cost of the paper's main selling point. If the dropped term turns out to be small in practice (which the empirical results indirectly suggest), then Advantage Alignment's simplification is justified; if not, the method works despite the approximation rather than because of it. Either way, this deserves explicit analysis.
 
 ## Suggestions
 
-- Reframe the contribution honestly: remove the "derived from first principles" claim and instead describe Advantage Alignment as *inspired by* the gradient structure of opponent shaping, with a practical approximation that proves effective. Acknowledging the partition function drop as a heuristic design choice rather than a derivation step would align claims with evidence.
-
-- Add even brief justification for why LOLA/LOQA cannot be applied in the Negotiation Game and Commons Harvest (e.g., continuous actions break LOQA's softmax, second-order gradients are infeasible at Melting Pot scale). This would turn an absence of comparison into a strengths story.
-
-- Discuss access to the opponent's reward function as an explicit limitation of the approach, comparing it with methods like LOLA that do not require this.
-
-## Evaluation
-
-**Originality**: The insight that opponent shaping reduces to advantage alignment is genuinely novel and provides a clean conceptual lens. The algorithmic simplification is non-trivial. The theoretical packaging is overclaimed.
-
-**Importance of research question**: High—opponent shaping and cooperation in social dilemmas are important and active research areas.
-
-**Claims well supported**: Partially. The empirical results are strong where they exist, but the "first principles" and "unification" claims are not well supported. The missing opponent shaping baselines in the strongest environments leave key claims unsubstantiated.
-
-**Soundness of experiments**: Good in scope (four domains of increasing complexity). Weakened by the selection of baselines (no opponent shaping methods in Negotiation Game/Commons Harvest) and the best-seed protocol.
-
-**Clarity of writing**: The paper is well-organized and the four-case analysis table is an effective communication device.
-
-**Value to the community**: Significant if the theoretical claims are properly scoped. The practical algorithm (Eq. 8) is simple, implementable, and effective, and the scaling results open new directions.
-
-## Calibration
-
-**Anchors examined**:
-
-| Paper | Path | Avg Score | Comparison |
-|-------|------|-----------|------------|
-| Learning-aware policy gradients (COALA) | GkWA6NjePN.md | 6.5 (Accept poster) | Most topically similar—opponent shaping in social dilemmas, some theoretical concerns, strong experiments. Current paper has similar empirical scope but weaker theoretical grounding due to the unjustified approximation. |
-| Neural multigrid solver | 5KF3Q79t8B.md | 4.25 (Reject) | Overclaimed "rigorous" theory with fundamental gaps; strong empirical results. Current paper has a similar pattern (overclaimed "first principles" derivation) but its empirical contribution is more clearly new (first continuous-action and large-scale opponent shaping). |
-| Eikonal equation first-principles | e9iRAkEJQ1.md | 4.75 (Reject) | Overclaimed first-principles connection; disjoint contributions. Current paper's advantage alignment insight is tighter than this anchor's contribution. |
-| Nash equilibrium via stochastic optimization | cc8h3I3V4E.md | 8.0 (Accept oral) | Rigorous theory with strong experiments—a clear standard. Current paper falls well below this due to the approximation gap. |
-| Innate-values-driven RL | XHvguNJRbE.md | 2.5 (Reject) | Weak theory, messy method section. Current paper is substantially better structured and has more convincing experiments. |
-| MeVa (LOLA-based Q-learning) | 3OzQhhPLyW.md | 5.17 (Reject) | LOLA-based opponent shaping with REINFORCE variance concerns and limited experiments. Current paper has broader experiments and a cleaner formulation. |
-
-The paper is better than the reject-level anchors (4–5 range) because its empirical contribution is genuine and its algorithmic simplification is practically meaningful. It is worse than the COALA anchor (6.5) because its theoretical claims are more overstated (COALA's derivation has limitations but is more honest about them). The paper's empirical novelty—first opponent shaping in continuous actions and in Melting Pot—deserves credit. But the "first principles" and "unification" overclaiming is a real problem that this community's reviewers have consistently penalized. Taking the center of the relevant anchor cluster (4.75–6.5 weighted toward the lower end due to the theoretical overclaiming), a score of **5.5** is appropriate.
+- Run LOLA and/or LOQA on the Negotiation Game to provide at least one opponent shaping baseline in a complex environment. Even showing that these methods cannot scale to the environment would be informative and honest.
+- Add a brief analysis or discussion of the partition function approximation: when is it reasonable, when might it fail, and what is the empirical impact?
+- Qualify the Theorem 1 LOLA connection in the abstract and conclusion, or clearly note that the unification result applies unconditionally only to LOQA.
+- Report mean ± std across all 10 seeds in Melting Pot alongside the best-seed result.
 
 ## Score and Decision
+
+**Calibration anchors compared:**
+
+- **High band**: HASAC (7.50) — unified MaxEnt framework for cooperative MARL with strong theoretical guarantees and extensive 6-benchmark evaluation. Much stronger evidence and cleaner theory than the current paper.
+- **COALA-PG (6.50)** — most topically similar paper (learning-aware/opponent-shaping policy gradients). Had some missing baselines (no LOLA comparison) but offered a clearer theoretical contribution (unbiased, higher-derivative-free formulation) and cleaner experimental evidence. The current paper has a more interpretable insight but muddier theory.
+- **Medium band**: Pin2kdWloe (5.75) — "overstated" conclusions and "not fully supported" claims with experiments on "small-scale toy problems." Similar pattern of overclaiming, but the current paper has stronger empirical results. Meta-Value Learning (5.17) — opponent-shaping paper with high variance concerns and missing ablations.
+- **Low band**: D78HxVUg1Q (2.50) — fundamentally flawed theoretical proof combined with missing baselines. The current paper's issues are less severe.
+
+The current paper sits between the medium-band papers. It has a genuinely useful conceptual insight and practical results, but its three compounding major issues (partition function approximation undermining the "first principles" claim, Theorem 1's impractical condition making the LOLA unification misleading, and missing opponent shaping baselines in complex environments) collectively prevent it from supporting its key claims at the level needed for acceptance. It is above the low-band papers (the core idea is sound) but below the high-band papers (the evidence and theory don't match the claims). Relative to COALA-PG (6.50), the current paper has weaker theoretical grounding and comparable or worse baseline coverage.
 
 MY FINAL SCORE: <pineapple>5.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

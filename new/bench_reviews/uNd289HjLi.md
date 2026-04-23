@@ -1,112 +1,95 @@
-Now I have thoroughly reviewed the paper and calibrated against anchors. Let me write the final review.
+Now I have a thorough understanding of the paper and calibration anchors. Let me write the final consolidated review.
 
 ## Summary
 
-The paper introduces Corruption2Self (C2S), a score-based self-supervised framework for MRI denoising. Its core contribution is a Generalized Denoising Score Matching (GDSM) loss (Theorem 1) that extends denoising score matching to learn from noisy observations by modeling the conditional expectation of higher-SNR images given further corrupted versions, unifying DSM, ADSM, and Noisier2Noise under one objective. C2S also incorporates a noise-level reparameterization for training stability and a detail refinement extension that trains the network to predict a slightly noisy image to preserve fine features. The method is evaluated on M4Raw and fastMRI datasets against classical, supervised, and self-supervised baselines.
+The paper introduces Corruption2Self (C2S), a score-based self-supervised MRI denoising framework built on a Generalized Denoising Score Matching (GDSM) loss that extends denoising score matching to work directly from noisy observations by modeling conditional expectations across noise levels. GDSM unifies DSM, ADSM, and Noisier2Noise as special cases via a free target noise level parameter σ_{t_target}. The paper also introduces a reparameterization of noise levels for training stability, a detail refinement extension to balance noise removal with detail preservation, and a multi-contrast extension leveraging complementary MRI contrasts.
 
 ## Strengths
 
-- **Clean theoretical unification:** Theorem 1 and Remark 1 show that GDSM subsumes standard DSM (when σ_{t_target} = σ_{t_data}), ADSM (when σ_{t_target} = 0), and Noisier2Noise (fixed noise level special case). This provides a principled connection between score matching and existing self-supervised denoising methods, which is valuable even if the technical novelty over ADSM is incremental.
+- **Clean theoretical unification via GDSM (Theorem 1, Eq. 3):** Theorem 1 formally proves that minimizing the GDSM loss recovers E[X_{t_target} | X_t] for any target noise level, and Remark 1 explicitly shows how this subsumes DSM (σ_{t_target} = σ_{t_data}), ADSM (σ_{t_target} = 0), and Noisier2Noise as special cases. This provides a principled, unified view absent from prior work.
 
-- **Strong self-supervised performance:** C2S clearly outperforms all self-supervised baselines on M4Raw (Table 2) and fastMRI (Table 3), with margins of 0.5–1.5 dB over the nearest self-supervised competitor (Noisier2Noise/Recorrupted2Recorrupted). These are substantial and consistent improvements across all contrasts and noise levels.
+- **State-of-the-art among self-supervised methods:** On M4Raw (Table 2), C2S with detail refinement achieves the best PSNR/SSIM across all three contrasts (T1: 32.77/0.919, T2: 32.33/0.890, FLAIR: 32.51/0.876), substantially outperforming the next-best self-supervised methods Noise2Void (31.46/0.870 on T1), Noise2Self (31.72/0.887 on T1), and Recorrupted2Recorrupted (31.67/0.876 on T1). Similar trends hold on fastMRI (Table 3).
 
-- **Comprehensive experimental evaluation:** The paper evaluates on two datasets (M4Raw with 3 contrasts, fastMRI with 2 contrasts × 2 noise levels), comparing against 4 classical, 3 supervised, and 6 self-supervised methods. This breadth is above average for the field.
+- **Detail refinement with statistical significance:** Table 1 reports statistically significant improvements (paired t-tests, all p < 0.05) across all contrasts when adding detail refinement, demonstrating that this extension meaningfully preserves fine features rather than merely trading noise for blur.
 
-- **Detail refinement with statistical testing:** Table 1 reports statistically significant improvements (paired t-tests) from the detail refinement extension across all contrasts (e.g., T1 PSNR: 34.56→34.89, p=0.001).
+- **Comprehensive baseline comparison:** The paper compares against a wide range of classical (NLM, BM3D), supervised (SwinIR, Restormer, Noise2Noise), and self-supervised methods (Noise2Void, Noise2Self, PUCA, LG-BPN, Noisier2Noise, Recorrupted2Recorrupted) across multiple datasets, contrasts, and noise levels.
 
-- **Robustness to noise estimation error:** The paper demonstrates that C2S maintains stable performance under ±50% noise level misestimation (Section 4, Appendix H), which is practically important for clinical deployment.
+- **Reparameterization is effective and well-motivated:** Table 4a shows reparameterization boosts T1 PSNR from 31.14 to 34.43 on M4Raw validation, confirming the stabilizing effect claimed in Section 3.1.
 
 ## Weaknesses
 
 ### Fatal
-
 None.
 
 ### Major
 
-- **"Competitive with supervised" claim requires significant qualification.** The abstract and introduction claim "competitive results compared to supervised counterparts," but this primarily holds on M4Raw where supervised methods are trained on 3-repetition-averaged labels but tested against 6-repetition-averaged (higher SNR) labels. The paper itself acknowledges this in Section 4 (lines 187–213): supervised methods learn E[X_{t_target} | X_{t_data}] with t_target > 0, making them less effective when test labels are cleaner than training labels. While this observation is practically relevant (clean labels are indeed rare), the abstract and introduction omit this critical caveat. On fastMRI (Table 3), where supervised baselines have cleaner labels (Noise2True uses clean targets), the gap is 0.7–1.0 dB in favor of supervised. The "competitive" framing conflates a specific experimental design choice with a fundamental capability. The paper should either qualify the claim in the abstract ("competitive when supervised methods are trained on imperfect labels") or remove it from headline claims.
-
-- **Detail refinement inference mechanism is deferred to Appendix G.** When σ_{t_target} > 0, the model learns to predict E[X_{t_target} | X_t]—an image that still contains noise at level σ_{t_target}. The inference equation (Eq. 11) evaluates h_θ(X_{t_data}, t_data), which under detail refinement would yield a still-noisy image, not a clean one. How the remaining residual noise is removed is not explained in the main text; the reader is directed to Appendix G (line 145). Since detail refinement produces the paper's best results (Table 2) and is presented as a core contribution, leaving its actual inference mechanism opaque in the main body is a significant evidential gap. A reader cannot evaluate whether the approach is theoretically coherent without consulting the appendix.
-
-- **Inference at the boundary of the training domain lacks analysis.** The model h_θ is trained with t ∈ (t_data, T] (Eq. 3, Algorithm 1), but inference evaluates at t = t_data (Eq. 11). While this is analogous to the t = 0 boundary issue in standard diffusion models (which works in practice due to neural network smoothness and training noise levels approaching zero), the paper provides no analysis of this boundary behavior: no ablation varying how close the trained minimum noise level gets to t_data, no discussion of when the T' ≈ T approximation might break down, and no evaluation of discretization effects at the boundary. A brief discussion or ablation would strengthen confidence that the method works for the reasons the theory claims.
+- **The "competitive with supervised" claim is misleading without proper qualification.** The abstract claims "competitive results compared to supervised counterparts across varying noise conditions and MRI contrasts on the M4Raw and fastMRI dataset." However, on fastMRI (Table 3) where the comparison is fair (supervised methods have clean labels), C2S trails supervised methods by 0.5–2 dB (e.g., PD σ=13: Noise2True SwinIR 34.44 vs. C2S w/ refinement 33.48; PD σ=25: Noise2True U-Net 32.61 vs. C2S 30.67). On M4Raw, the comparison structurally favors C2S because supervised methods are trained on 3-rep-averaged labels but evaluated against 6-rep-averaged labels, while C2S targets E[X_0|X_t]. The paper acknowledges this in one sentence in Section 4 ("Empirical results on test labels (three-repetition-average) matching the SNR of the training data (presented in Appendix F) show that supervised methods like SwinIR and Restormer perform better") and the introduction provides more context ("competitive performance with supervised approaches when the latter are trained on practically obtainable higher-SNR labels"), but the abstract's unqualified claim is what readers will take away. The M4Raw comparison setup is arguably the practically relevant one (since clean ground truth is unavailable in practice), but this nuance must be stated upfront rather than buried.
 
 ### Minor
 
-- **Architecture contribution not fully disentangled from loss contribution.** Table 4b shows U-Net (33.11 dB) → DDPM architecture with time conditioning (34.82 dB) → NVC-MSA (34.91 dB) on M4Raw T1. The 1.71 dB gain from adding time conditioning is standard for diffusion methods rather than a novel contribution, and the NVC-MSA module adds only 0.09 dB. However, the paper does not report how much self-supervised baselines (N2V, N2S, etc.) improve when given the same architecture, making it impossible to fully separate loss vs. architecture contributions to the headline numbers.
+- **Reparameterization is essential yet underemphasized in framing.** Table 4a shows that without reparameterization, the method achieves only 31.14 dB on T1 validation (worse than Noise2Void at 31.46 dB on test). With reparameterization, it jumps to 34.43 dB—a 3.3 dB improvement that makes the method viable. The paper frames reparameterization as a "stabilization" enhancement, but it is actually critical for the method to function competitively. This should be more honestly presented, as the standalone GDSM framework without reparameterization is not competitive.
 
-- **Missing variance estimates on main comparison tables.** Tables 2, 3, and 5 report only point estimates of PSNR and SSIM, while Table 1 does include ±values for the detail refinement ablation. Some margins over self-supervised baselines are small (e.g., C2S vs. Noise2Noise on M4Raw FLAIR: 32.51 vs. 32.70—a loss), making it difficult to assess statistical meaningfulness of claimed improvements.
+- **No standard deviations on main comparison tables (Tables 2, 3, 5).** Table 1 reports standard deviations and p-values for the detail refinement ablation, demonstrating the authors can compute them, but the main results tables lack uncertainty estimates. Some claimed differences are small (e.g., C2S 32.77 vs. Noise2Noise 32.59 on M4Raw T1 is only 0.18 dB), making it impossible to assess statistical significance. While single-run reporting is common in the field, the inconsistency with Table 1 is notable.
 
-- **Noise2Noise categorization as "supervised" is debatable.** Noise2Noise requires paired noisy images (not clean labels) and is arguably a self-supervised or weakly-supervised method. It outperforms C2S on M4Raw FLAIR (32.70 vs. 32.51) and matches it on T1 (32.59 vs. 32.59). Classifying it as "supervised" while C2S "outperforms supervised approaches" (Table 2 caption) is misleading.
+- **Inference operates at a training boundary with vanishing gradient signal.** At inference (Eq. 11), the model evaluates h_θ(X_{t_data}, t_{data}), but during training τ is sampled from U(0, T) and as τ → 0, the blending coefficients satisfy λ_out → 0 and λ_skip → 1, causing the loss to vanish. The model thus receives weak gradient signal near the inference noise level and must interpolate from higher noise levels. The weighting function w(τ) partially addresses this, but no analysis is provided for how performance degrades as a function of distance from trained noise levels.
+
+- **Multi-contrast C2S (Table 5) compared against single-contrast supervised baselines.** Table 5 shows multi-contrast C2S achieving 33.89/0.922 on T1 using T1 & FLAIR inputs, compared to supervised Noise2Noise at 32.59/0.911 with single-contrast input. While the table labels are clear, the comparison gives C2S more input information. The paper should either compare against multi-contrast supervised methods or explicitly frame this as leveraging additional input data.
+
+- **Rician noise not evaluated despite low-field MRI motivation.** The Gaussian approximation is acknowledged as valid only for SNR > 2 (Section 3), and VST is mentioned as a remedy but never evaluated. Low-field MRI—a stated motivation—often operates in low-SNR regimes where this approximation breaks down. The claim that "empirical results suggest robustness even when this condition is not strictly satisfied" (line 65) is vague and unsupported by specific evidence.
 
 ### Trivial
-
-None.
+- None.
 
 ## Nice-to-Haves
 
-- An ablation varying the minimum sampled noise level τ_min (e.g., {0.01, 0.1, 0.5, 1.0}) during training would directly address the boundary evaluation concern and is a simple experiment to run.
-- Running self-supervised baselines (N2V, N2S, etc.) with the same NVC-MSA architecture would cleanly disentangle the contribution of the GDSM loss from the architecture.
-- Reporting results on matching SNR train/test labels (currently in Appendix F) in the main text would provide a fairer comparison picture and strengthen the practical argument.
+- Reporting standard deviations on Tables 2, 3, and 5 would make the small numerical differences more interpretable.
+- A fair supervised comparison on M4Raw, evaluating supervised methods against 3-rep-averaged test labels alongside the existing 6-rep-averaged evaluation, would settle the competitiveness question definitively.
+- Experiments under Rician noise conditions or with VST preprocessing would validate the method for the low-SNR regime that motivates the work.
+- Analysis of how performance changes as training noise levels approach t_data would address the boundary extrapolation concern.
 
 ## Removed Points
 
 These points are flagged to be removed, treat them with caution:
 
-- **Harsh Critic Issue #4 (No variance on main results):** Demoted from structural to minor. While valid, single-run evaluation is the norm in this field; demanding variance on all tables is a generic critique. Kept as minor since some margins are small enough to warrant it.
+- **"We are among the first to comprehensively analyze" claim is unsupported.** The critic challenged this claim as "likely false," but we cannot verify whether prior comprehensive comparisons exist without external sources. Removed per rules about not flagging missing related works.
 
-- **"Reparameterization 3+ dB gain is suspicious":** The gap of 3.29 dB (Table 4a) is large but the paper explains the mechanism (uniform sampling over τ) and shows training dynamics in Appendix I. Without evidence that the non-reparameterized version was improperly tuned, calling this "suspicious" is speculative. The large gain is better interpreted as showing that the reparameterization is critical for practical performance rather than a red flag.
+- **Validation vs. test discrepancy (34.43 → 32.77) indicates overfitting.** The critic compared Table 4a validation results (34.43 dB on T1, 3-rep-averaged reference labels) with Table 2 test results (32.77 dB, 6-rep-averaged reference labels). These numbers are computed against different reference images and on different data splits, so they are not directly comparable. The discrepancy likely reflects the different evaluation setups, not overfitting.
 
-- **"T' ≈ T approximation breaks down without analysis":** This is folded into the boundary analysis concern (Major weakness #3). As a standalone weakness it is minor and partially addressed by the reparameterization design.
+- **Noise estimation as a significant practical limitation requiring appendix-level analysis.** The paper discusses noise estimation robustness in the main text (Section 4, lines 264-268), reporting ±50% tolerance and noting that standard tools (e.g., skimage) provide sufficient estimates. While more detail in the main text would help, the concern is already partially addressed and the noise estimation requirement is standard in many denoising methods.
 
-- **"Reparameterization is just a change of variables—standard in diffusion":** While technically true that it is a change of noise schedule, the 3+ dB empirical impact shows it is non-trivial in this specific context. The theoretical point is acknowledged but not elevated to a weakness since it does not diminish the paper's contribution.
+- **Formatting/style nitpicks.** Removed per rules.
 
-- **"Multi-contrast is just concatenation, not conceptually novel":** Fair observation but the paper does not overclaim novelty here—it presents it as a natural extension. Moved to nice-to-have territory.
-
-- **Harsh critic's request for ADSM direct comparison ablation:** Reasonable suggestion but folded into Nice-to-Haves rather than a substantive weakness, since ADSM is a special case of GDSM (σ_{t_target} = 0).
-
-- **Request for failure cases:** Reasonable suggestion but moved to Nice-to-Haves. Every method has failure modes; demanding their exhibition is a generic request.
-
-- **Missing related works claim:** Per instructions, removed since I cannot verify external references.
+- **Demand for multi-contrast supervised baseline.** While it would strengthen the paper, Table 5 clearly labels what inputs each method uses, and the multi-contrast extension is presented as leveraging additional available information—a reasonable design choice for MRI.
 
 ## Novel Insights
 
-The paper identifies an important practical asymmetry in MRI denoising evaluation: supervised methods trained on imperfect (multi-repetition-averaged) labels are inherently disadvantaged when evaluated against higher-SNR references—a scenario that reflects realistic clinical constraints more than an experimental artifact. This insight, while acknowledged in the text, deserves more prominence because it reframes how the community should think about fair evaluation: in real-world MRI, "perfectly clean" labels rarely exist, so a method that targets E[X_0 | X_t] rather than E[X_{t_target} | X_t] has a genuine practical advantage even if it loses on idealized benchmarks. This is a meaningful contribution to the evaluation philosophy of the field, separate from the technical contribution.
+The paper's most insightful contribution is the observation that the M4Raw comparison asymmetry reveals something fundamental about supervised vs. self-supervised denoising: supervised methods trained on imperfect (3-rep-averaged) labels learn E[X_{t_target}|X_{t_data}] with t_target > 0, making them inherently less effective when evaluated against cleaner references, while C2S's target of E[X_0|X_t] naturally aligns with any cleaner reference. This is not merely an evaluation artifact—it has practical implications for real-world MRI where perfect ground truth is never available. The paper's introduction captures this nuance but the abstract does not.
 
 ## Suggestions
 
-- Qualify the "competitive with supervised" claim in the abstract and introduction to specify "when supervised methods are trained on imperfect (multi-repetition-averaged) labels," which is the honest framing.
-- Move at least a brief description of the detail refinement inference mechanism (how residual noise at σ_{t_target} is removed) from Appendix G to the main text—2–3 sentences suffice.
-- Add a boundary behavior ablation: train models with different minimum τ values near zero and show that performance degrades gracefully (or doesn't), which would resolve the t = t_data evaluation concern.
+- Qualify the abstract's "competitive with supervised counterparts" claim by adding "on M4Raw, where supervised methods are trained on imperfect labels" or equivalently noting that competitiveness holds when clean ground truth is unavailable.
+- Present the reparameterization's impact more honestly: acknowledge that GDSM alone (without reparameterization) is not competitive, and position the reparameterization as a co-equal contribution rather than a secondary "stabilization" enhancement.
+- Add standard deviations to Tables 2, 3, and 5 for consistency with Table 1, or at minimum note in the caption that results are from single runs.
 
-## Evaluation
+## Calibration
 
-**Originality:** The theoretical contribution over ADSM is incremental (generalizing σ_{t_target} from 0 to [0, σ_{t_data}]). The reparameterization, detail refinement, and NVC-MSA architecture are engineering contributions. The unification of DSM/ADSM/Noisier2Noise under GDSM is a clean and valuable framing. Overall: moderate originality.
-
-**Importance of research question:** Self-supervised MRI denoising is a high-impact practical problem. The paper addresses a clear gap (existing self-supervised methods oversmooth) with meaningful improvements.
-
-**Claims support:** The self-supervised claims are well-supported. The "competitive with supervised" claim is partially supported under specific conditions but overclaimed in prominent positions. The detail refinement mechanism lacks sufficient explanation in the main text.
-
-**Soundness of experiments:** Comprehensive baselines and datasets. Missing variance estimates on main tables. Missing ablations for boundary behavior and architecture disentanglement.
-
-**Clarity:** Generally well-written but key inference mechanisms are deferred to the appendix.
-
-**Value to community:** C2S provides a practical, strong self-supervised MRI denoising method with clear gains over existing approaches. The GDSM framework provides a useful unifying perspective.
-
-## Calibration Anchors
+**Anchors used:**
 
 | Paper | Avg Score | Comparison |
-|---|---|---|
-| ANvmVS2Yr0 (Inductive biases of denoisers) | 8.5 (Oral) | Much deeper theoretical contribution; C2S is clearly below this. |
-| DJSZGGZYVi (REPA) | 9.0 (Oral) | Very novel and impactful; C2S is far below. |
-| Z9Odi09Rv9 (Frequentist diffusion solver) | 4.75 (Reject) | Similar use of Tweedie's formula in noisy regime, but less comprehensive experiments and more theoretical controversy; C2S has stronger empirical results. |
-| mDvL3wcmms (Classification-denoising) | 4.0 (Reject) | Unifies classification/denoising but inferior to standalone methods in both; C2S clearly outperforms self-supervised baselines. |
-| z8PcUSKXXN (RNINet) | 5.75 (Accept/Poster) | Similar profile—strong empirical denoising with incremental novelty. C2S has comparable strengths and a similar overclaiming issue but a clearer theoretical contribution. |
-| jsBhmOCKYs (Denoising as Adaptation) | 5.8 (Accept/Poster) | Similar profile, accepted with moderate scores. |
-| nnYsWoe1ST (Semi-SL unfair comparison) | 4.0 (Reject) | Overclaimed comparison similar to C2S's supervised claim, but C2S has much stronger self-supervised wins. |
-| H6XYCIlZdo (Competitive without finetuning) | 3.0 (Withdrawn/Reject) | Unfair competitive claims; C2S is much stronger because it genuinely outperforms self-supervised baselines. |
-| KqTzfiNjWU (Restorer guided diffusion) | 2.0 (Withdrawn/Reject) | Misleading theoretical claims; C2S's theory is sound, just incremental. |
+|-------|-----------|------------|
+| ANvmVS2Yr0 (geometry-adaptive harmonic bases in denoisers) | 8.5 (Oral) | Much deeper theoretical analysis of denoising/score connection; this paper is less theoretically deep |
+| DJSZGGZYVi (denoising representation alignment for diffusion) | 9.0 (Oral) | More novel contribution; this paper is well below this bar |
+| z8PcUSKXXN (generalizable denoising with limited data) | 5.75 (Poster) | Similar practical focus; this paper has cleaner theory but overclaims comparison |
+| mbPvdO2dxb (zero-shot diffusion for MRI inverse problems) | 5.0 (Reject) | Similar MRI domain; this paper has stronger empirical results |
+| mDvL3wcmms (joint classification-denoising, "competitive with supervised") | 4.0 (Reject) | Also overclaimed competitiveness; this paper has better theory and experiments |
+| eRAXvtP0gA (overclaimed "better than supervised", no std) | 2.5 (Reject) | Much worse overclaiming with no theoretical backing; this paper is clearly better |
+| 1gqR7yEqnP (overclaimed, no std, limited baselines) | 2.2 (Withdrawn) | No theoretical contribution; this paper is clearly superior |
 
-C2S sits above the medium-scoring rejects (4.0–4.75) because it has genuine, substantial empirical wins over self-supervised baselines and a sound (if incremental) theoretical framework. It sits below the 5.75–5.8 Accept/Poster anchors because those papers don't overclaim and have slightly cleaner experimental narratives. The overclaiming issue and the detail refinement gap are real but don't invalidate the core self-supervised contribution. A score around 5.5–6.0 is appropriate—strong enough to recognize the real contributions, tempered by the qualification issues.
+The paper sits above the medium-scoring rejects (4.0–5.0) because its GDSM framework is a genuine theoretical contribution and its self-supervised results are convincingly state-of-the-art. It sits well below the high-scoring papers (7+) because its theoretical contribution is more incremental (parameterized interpolation between DSM and ADSM) and the overclaimed supervised comparison is a significant presentation issue. The closest anchor is z8PcUSKXXN at 5.75 (Accept Poster), but this paper has a cleaner theoretical framework and more comprehensive experiments, placing it slightly above.
 
-MY FINAL SCORE: <pineapple>5.5</pineapple>
-MY FINAL DECISION: <orange>Reject</orange>
+## Score and Decision
+
+The paper makes a solid contribution: GDSM is a clean theoretical unification, C2S is convincingly the best self-supervised MRI denoiser, and the detail refinement is well-motivated with statistical significance. However, the abstract's unqualified "competitive with supervised" claim is misleading (C2S trails supervised methods by 0.5–2 dB on fastMRI where the comparison is fair), and the reparameterization's outsized role is underemphasized. These issues do not invalidate the core self-supervised contribution but they inflate the paper's apparent scope. Relative to calibration anchors, this places the paper in the 5.5–6.5 range—above reject-level papers with similar overclaiming issues (due to stronger theory and experiments), below accept-level papers with deeper contributions.
+
+MY FINAL SCORE: <pineapple>6.0</pineapple>
+MY FINAL DECISION: <orange>Accept</orange>

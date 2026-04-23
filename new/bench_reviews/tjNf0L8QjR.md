@@ -1,89 +1,84 @@
-Now I have a solid understanding. Let me synthesize my final review.
+Now I have enough information to write the final review. Let me synthesize everything.
 
 ## Summary
 
-This paper investigates whether the inductive bias of locality—neighboring pixels being more related than distant ones—is necessary for vision Transformers. By treating individual pixels (1×1 patches) as tokens instead of grouped patches (e.g., 2×2 or 16×16), the authors remove locality from patchification and use learned (not spatially-structured) position embeddings. Across three tasks—supervised classification, self-supervised MAE pre-training, and DiT-based image generation—the pixel-level models match or outperform patch-based baselines of the same parameter count, leading to the conclusion that locality is not a necessary inductive bias for vision.
+This paper investigates whether the inductive bias of locality is necessary for vision architectures by treating each individual pixel as a token in a vanilla Transformer (1×1 "patches" instead of standard patchification), using learned position embeddings with no 2D grid prior. Across three case studies—supervised classification/regression, self-supervised MAE pre-training, and diffusion-based image generation—the pixel-level Transformers consistently match or outperform patch-based baselines at the same parameter count, leading the authors to conclude that locality is "not fundamental" and that patchification is merely a useful efficiency heuristic.
 
 ## Strengths
 
-- **Well-defined, important research question with ambitious scope**: The paper asks a precise question about the role of locality as an inductive bias and tests it across three distinct paradigms—supervised learning (Table 3 across four datasets including CIFAR-100, ImageNet, Oxford-102-Flowers, NYU-v2), self-supervised MAE (Table 4), and DiT-based image generation (Table 5)—spanning discriminative and generative tasks with different architectures. On CIFAR-100, ViT-S/1 achieves 86.4 vs. 83.7 Acc@1 for ViT-S/2; on ImageNet at 64×64, ViT-S/1 achieves 74.1 vs. 72.9.
+- **Clean, minimalist experimental design that directly tests the question.** The only modification from standard ViT/DiT is setting patch size to 1×1 with learned position embeddings, making it hard to attribute results to confounding architectural changes. This elegance strengthens internal validity of the core finding.
 
-- **Insightful "two trends" analysis (Figure 2)**: The paper identifies that the interplay between patch size, sequence length, and input size produces opposite trends depending on experimental protocol—fixed sequence length (Fig. 2a) makes pixel-level worst, while fixed input size (Fig. 2b) makes it best. This is a useful characterization of why prior work following standard protocols would miss the pixel-as-token benefit.
+- **Consistent evidence across three distinct tasks and architectures.** The pixel-level improvement holds for supervised classification on CIFAR-100 (Table 3a: ViT-S/1 at 86.4% vs ViT-S/2 at 83.7%), ImageNet (Table 3b: ViT-L/1 at 76.9% vs ViT-L/2 at 75.6%), depth estimation on NYU-v2 (Table 3d), MAE self-supervised learning (Table 4), and DiT image generation (Table 5: FID 4.05 vs 4.16). This breadth demonstrates the finding is not task- or architecture-specific.
 
-- **Systematic dissection of locality sources in ViT (Section 5)**: The pixel permutation experiment with distance thresholds (Figure 5) decouples the two sources of locality—position embeddings and patchification—and demonstrates that patchification carries far more locality prior (removing PE costs only 1.6% Acc@1 vs. 25.2% from full pixel permutation). The graded permutation design with Hamming distance thresholds δ provides nuanced evidence about locality structure.
+- **Two-trends analysis (Figure 2) is genuinely insightful.** At fixed sequence length, decreasing patch size hurts (Fig 2a: 82.8→63.4); at fixed input size, it always helps (Fig 2b: 63.7→81.8). This reconciles the paper's finding with prior negative results (e.g., iGPT) and identifies input information content as a key confound that earlier work did not properly control for.
 
-- **Honest framing about limitations**: The paper explicitly states it introduces no new method, acknowledges the quadratic computational cost, and notes that "patchification is still a simple and effective idea that trades quality for efficiency, and locality is still highly *useful*" (Section 3). Table 1 provides a clear taxonomy of inductive biases across ConvNet, ViT, and the proposed approach.
+- **The finding itself—pixel Transformers work at all—is surprising and valuable.** The depth estimation result on NYU-v2 (RMSE 0.72 vs 0.80) is particularly compelling as it counters the intuitive objection that spatial reasoning tasks require locality as an architectural prior.
 
 ## Weaknesses
 
 ### Fatal
-
-None. While the central claim is overstated (see Major), the empirical findings are real and valuable—the paper does document a genuine phenomenon.
+None.
 
 ### Major
 
-- **The central claim that "locality is not a necessary inductive bias" is confounded by simultaneous increases in sequence length and compute**: Every comparison between pixel Transformers (patch size 1) and patch Transformers (patch size 2) simultaneously removes locality AND quadruples the sequence length, yielding ~16× more self-attention FLOPs. The paper's own "two trends" analysis partially acknowledges this: Figure 2a (fixed sequence length) shows the locality-free model is *worst*; Figure 2b (fixed input size) shows it is best—but Figure 2b does not control for compute. The paper concludes "resolution is the enabler for ViT, not locality" (Section 6), but a more parsimonious reading of the evidence is that the benefit of finer tokenization (more tokens, more compute) outweighs the cost of losing locality—a weaker and less surprising statement. No experiment isolates locality from sequence length/compute (e.g., comparing a pixel Transformer with global attention vs. a pixel Transformer with local windowed attention at identical FLOPs). This does not invalidate the empirical findings, but the strong causal claim about locality being unnecessary is not justified by the experimental design.
+- **The core comparisons confound removal of locality with increased sequence length and compute, making it impossible to attribute accuracy gains to the removal of locality per se.** ViT-S/1 processes 4× more tokens than ViT-S/2 for the same input, incurring quadratically more self-attention computation. The paper's own Figure 2a demonstrates this directly: at fixed sequence length (which approximately controls for compute), the locality-free variant is the *worst* option (63.4% vs 82.8%). The "better in quality" claim in the abstract and Table 3 rests on comparisons that simultaneously change locality, resolution granularity, and compute budget. The paper acknowledges the efficiency tradeoff ("trades quality for efficiency," Section 7), but still frames the results as demonstrating the superiority of locality-free models. Without a compute-matched comparison, the paper cannot distinguish "removing locality helps" from "processing finer-grained input at more compute helps"—and Figure 2a suggests the latter explanation dominates when compute is controlled. This undermines the strongest reading of the central claim, though the weaker claim that locality is "not necessary" (models without locality can function) remains supported.
 
-- **The pixel permutation experiment (Section 5) directly contradicts the central claim, and the attempted reconciliation is unverified**: Permuting pixels within patches drops accuracy by 25.2% (Figure 5, T=25K), demonstrating that locality in patchification is *critically important* for ViT. The paper hypothesizes this is because permutation also breaks "location equivariance" (weight sharing), but this hypothesis is untested. A simple control—permuting pixels while correspondingly permuting position embeddings and/or the linear projection weights—would disentangle lost locality from lost weight-sharing. Without this control, the paper simultaneously claims locality is unnecessary (Section 4) and that locality destruction is devastating (Section 5), creating an internal tension that is hypothesized away rather than resolved.
+- **All primary experiments operate at small resolutions where standard ViTs are already degraded, limiting the generality of the findings.** The main pixel-level results are on CIFAR-100 (32×32) and ImageNet at 64×64, where the pixel variant has only 1024–4096 tokens. Standard ImageNet ViTs operate at 224×224, where pixel Transformers would need 50,176 tokens—still computationally prohibitive. The paper acknowledges this explicitly ("more of an approach for investigation, and less for applications," Section 7), but the claim that "locality is not fundamental" rests on evidence only from a regime where the efficiency tradeoff is manageable. Whether the finding generalizes to the practical regime where ViT is actually deployed remains untested.
 
 ### Minor
 
-- **No compute-controlled or training-budget-controlled comparison**: Across all experiments, pixel models have identical parameter counts but vastly higher FLOPs than patch baselines. A fairer comparison would train patch models with proportionally larger hidden dimensions, more training steps, or compare pixel models equipped with sparse/local attention at matched FLOPs. The paper acknowledges the quadratic cost but does not attempt any compute-equivalent comparison, which makes the performance gaps in Tables 3–5 difficult to interpret in terms of the locality claim specifically.
+- **The permutation experiment (Section 5) conflates locality destruction with location equivariance destruction, limiting its interpretability.** The 25.2% accuracy drop from permuting pixels within patches is dramatic, but as the paper notes, permutation also breaks location equivariance (weight sharing becomes meaningless when pixel positions are shuffled). The paper's hypothesis that location equivariance loss explains the gap is plausible but untested—a cleaner experiment would compare pixel Transformers with learned PE vs. shuffled learned PE (breaking the spatial correspondence while preserving weight sharing). The result does demonstrate that spatial structure in the data matters, which is an important nuance that somewhat tensions with the headline claim.
 
-- **The DiT generation experiments operate on VQGAN latent tokens, not raw pixels**: VQGAN encoders are trained with convolutional (locality-biased) architectures, so the "locality-free" claim is diluted—the model's input already encodes strong locality priors from the tokenizer. The paper should acknowledge this caveat more prominently when claiming the finding generalizes to image generation.
+- **The paper does not investigate whether learned position embeddings recover 2D grid structure.** If the 1024–4096 learned position embedding vectors converge to representations encoding 2D spatial relationships, then locality has not been truly removed from the system—it has merely been shifted from a hard-coded architectural prior to a learnable one recovered from data. This would actually *strengthen* the paper's weaker claim (locality is not a necessary *architectural* bias) but complicate its stronger framing (locality has been "completely eliminated"). The paper mentions visualizing position embeddings in Appendix B, but this analysis is not available in the main text.
 
-- **No standard deviations or multiple runs reported**: Key results like the Oxford-102-Flowers comparison (46.3 vs. 45.8 Acc@1) and DiT FID comparison (4.05 vs. 4.16) have small gaps that could fall within run-to-run variance. Reporting variance would strengthen the reliability of these comparisons.
-
-- **Permutation equivariance claim is misleading (Section 3)**: The paper states the pixel Transformer is "permutation equivariant at the pixel level," but with learned position embeddings, it is *not* permutation equivariant—position embeddings break this equivariance. The claim should be clarified to state that the *architecture* (self-attention + MLP) is permutation equivariant, but the full model with position embeddings is not.
+- **The DiT generation experiment operates on VQGAN latent tokens, not raw pixels, which partially reintroduces locality.** The VQGAN encoder has locality built into its convolutional architecture. The paper is transparent about this ("latent token space from VQGAN"), but the claim that the finding generalizes to a "different input representation" should note that this representation itself encodes locality from a different component of the pipeline.
 
 ### Trivial
-
-- The claim that this work "puts a conclusive remark" (Section 6) on the iGPT vs. ViT debate is overly strong given the confounds in the experimental design.
+None.
 
 ## Nice-to-Haves
 
-- A compute-controlled ablation (e.g., pixel Transformer with windowed/local attention vs. global attention, at matched FLOPs) would directly isolate whether locality *in the architecture* matters, independently of sequence length.
-- Visualizing learned position embeddings for pixel models to check whether they rediscover 2D spatial structure would inform whether the model is effectively re-learning locality from data.
-- Testing with sub-quadratic attention mechanisms (e.g., linear attention) would make compute-controlled comparisons feasible at higher resolutions.
+- Compute-matched comparison (e.g., compare a pixel Transformer with reduced depth/width against a patch-based model at the same FLOPs) would directly resolve the confound and either strengthen or clarify the limits of the claim.
+
+- Analysis of learned position embeddings to determine whether they recover 2D grid structure—this would add important nuance about whether locality is eliminated or merely learned.
+
+- Any experiment at standard ImageNet resolution (224×224), even with efficient attention variants, would significantly strengthen generality claims.
 
 ## Removed Points
 
 These points are flagged to be removed, treat them with caution:
 
-- **Harsh critic's claim that "no experiment in the paper disentangles [locality from sequence length], so the paper cannot substantiate its core claim"**: This overstates the issue. The Figure 2a analysis (fixed sequence length, varying input size) *does* partially isolate the factors—showing that when sequence length is held constant, removing locality (smaller input) hurts. The paper's two-trend analysis is a real (if incomplete) attempt at disentanglement. The issue is that the *causal claim* is too strong for the evidence, not that the paper provides zero relevant evidence. Downgraded from Fatal to Major.
+- **Harsh Critic's claim that the permutation experiment "contradicts" the paper's argument.** The permutation experiment shows that locality in the *data* matters, but the paper's claim is about locality as an *architectural* inductive bias. The paper discusses the confound with location equivariance and hypothesizes that the destruction comes from breaking both biases simultaneously. While the interpretation could be clearer, calling it "internally inconsistent" overstates the case—the paper's argument is that you can remove architectural locality while preserving the data's structure (which the model can learn), which is different from destroying that structure.
 
-- **Harsh critic's claim that the paper is "misleading" in the abstract for not mentioning compute cost**: The abstract does state "it's computationally less practical to directly operate on individual pixels." The information is present, just not quantified. This is a presentation nitpick, not a substantive error.
+- **Harsh Critic's claim that the paper "never demonstrates that the pixel approach scales to standard-resolution ImageNet" as a fatal issue.** The paper explicitly acknowledges this limitation and frames the work as a scientific investigation at affordable scale. This is a valid concern about generality but is already disclosed.
 
-- **Strength Finder's claim about permutation equivariance as a "hypothesis about location equivariance preservation" being an insightful strength**: While the hypothesis is interesting, it is unverified, so calling it a "strength" is premature. Moved to Minor weakness (untested hypothesis).
+- **Strength Finder's claim that "systematic disentanglement of two locality sources reveals patchification as the dominant factor."** The permutation experiment does not cleanly disentangle locality from location equivariance, so this strength is overstated.
 
-- **Harsh critic's claim that the iGPT discussion is "speculation without evidence"**: The paper's interpretation that iGPT fell short due to resolution rather than locality is explicitly supported by its own Figure 2a analysis showing resolution matters. This is a reasonable (if not conclusive) inference from the paper's own data.
+- **Strength Finder's claim that Figure 2 "provides a clear explanation for why this finding was previously missed."** While Figure 2 is genuinely insightful, the claim that it explains why prior work missed this is speculative—there could be other reasons (e.g., iGPT's autoregressive formulation vs. the bidirectional attention used here).
 
-- **Harsh critic's demand for missing related works**: Per instructions, criticism about missing related works is removed.
+- **Harsh Critic's demand for confidence intervals on FID in the generation experiment.** Single-run FID evaluation is the norm in the diffusion model literature; this is a nice-to-have, not a weakness.
+
+- **Harsh Critic's concern about the MAE experiments only being on CIFAR-100.** This is a minor limitation, not a structural issue; the paper's MAE case study is explicitly a secondary validation.
 
 ## Novel Insights
 
-The most interesting insight emerging from the review is the tension between Sections 4 and 5 of the paper: the pixel-as-token experiments argue locality is unnecessary, while the permutation experiments show locality destruction is devastating. The paper's own hypothesis—that the difference is explained by location equivariance (weight sharing) being preserved in one case but not the other—is both the key to reconciling these findings and the most important avenue for future work. If true, the proper conclusion would not be "locality is unnecessary" but rather "locality is unnecessary *provided weight sharing across spatial locations is maintained*," which significantly narrows and qualifies the finding.
+The two-trends analysis (Figure 2) reveals a fundamental tension in how patch size is studied: at fixed sequence length, locality appears beneficial; at fixed input size, locality appears harmful. This suggests that the perceived importance of locality in prior work may be largely explained by an interaction between input resolution and compute budget rather than locality itself being indispensable. The implication is that future architecture design should think of patchification as a compute-quality tradeoff knob rather than a fundamental inductive bias decision.
 
 ## Suggestions
 
-- Reframe the central claim from "locality is not a necessary inductive bias" to "locality is not a necessary inductive bias when sufficient compute and resolution are available and weight sharing is maintained"—this is a more precise and defensible statement that still challenges conventional wisdom.
-- Run the permutation + position-embedding control experiment to resolve the internal tension between Sections 4 and 5.
-- Add compute-controlled comparisons (e.g., ViT-S/2 trained for 4× more epochs, or with wider hidden dim to match FLOPs) to separate the effects of locality removal from compute scaling.
+- Add a compute-matched experiment: compare a pixel Transformer with reduced model capacity (e.g., fewer layers or smaller hidden dim) against a full-size patch-based model at the same total FLOPs. This single experiment would resolve the most important open question about the paper's central claim.
+
+- Reframe the "better in quality" language to clearly state that the comparison is at equal parameter count but unequal compute, and that the efficiency-accuracy tradeoff is the key finding rather than unconditional superiority.
 
 ## Score and Decision
 
-**Calibration anchors:**
+**Calibration anchors used:**
+- High: "Vision Transformers Need Registers" (avg 8.0) — clean identification of a ViT phenomenon with thorough analysis and elegant solution; substantially stronger evidence and clearer causal claims than this paper.
+- Medium: "From Attention to Activation" (avg 5.67) — surprising empirical findings about LLM phenomena with some overclaiming; comparable in that it identifies interesting empirical observations but the claims outpace the evidence.
+- Low: "Vision-free Baseline for Multimodal Grammar Induction" (avg 2.33) — fundamentally unfair comparison using pre-trained LLM vs. from-scratch baselines; this paper is better because it has a genuine, reproducible finding and acknowledges limitations.
+- Low: "On the Long Range Abilities of Transformers" (avg 4.5) — many inaccurate claims and confounded experiments; this paper is more honest and better executed.
 
-| Paper | Path | Avg Score | Comparison |
-|-------|------|-----------|------------|
-| Vision Transformers Need Registers (oral) | /human_reviews/2dnO3LLiJ1.md | 8.0 | Much stronger: clean, well-controlled finding with simple solution; no confound concerns. Our paper has a valuable but confounded finding. |
-| On the Role of Discrete Tokenization (spotlight) | /human_reviews/WNLAkjUm19.md | 7.0 | Stronger: theoretical grounding + empirical findings on tokenization. Our paper is more empirical and has the overclaim issue. |
-| A Spitting Image: Superpixel Transformers | /human_reviews/Vy6sjPt2Vr.md | 5.50 | Similar: alternative tokenization study with partial evidence. Our paper has a clearer and more surprising message but also a confounded claim. |
-| On the Long Range Abilities of Transformers | /human_reviews/lnffMykYSj.md | 4.50 | Similar: studies inductive biases in attention, makes overclaimed causal conclusions from empirical evidence. Our paper is comparable but with more complete experiments. |
-| Joint Training Does Not Transfer (withdrawn) | /human_reviews/qdJ1jJzyVP.md | 2.6 | Much weaker: fundamentally confounded claims, rebuttal paper. Our paper has real empirical findings even if the causal claim is overstrong. |
-| Texture Patterns in TxTN | /human_reviews/MrOefpTvev.md | 2.33 | Much weaker: poorly described method, unclear experiments. Our paper is far more rigorous. |
-
-The paper sits between the medium-scoring tokenization/inductive-bias papers (4.5–5.5) and the well-controlled high-scoring papers (7.0–8.0). The empirical finding is genuinely surprising and valuable, and the two-trend analysis + permutation experiments provide real insight. However, the central causal claim is confounded (Major weakness), and the permutation experiment creates an internal contradiction that is hypothesized away rather than resolved. The paper is stronger than the typical rejected inductive-bias studies (4–5 range) because the finding is more surprising and the experimental scope is broader, but weaker than the accepted papers (7+) because the core claim outpaces the evidence.
+This paper falls between the medium and high anchors. The finding that pixel Transformers work at all across multiple tasks is genuinely surprising and valuable. However, the compute confound prevents attributing the accuracy gains to locality removal specifically, and Figure 2a shows the opposite trend when compute is held constant. The limited resolution regime also constrains generality. The paper is more carefully executed and honest about limitations than the low-scoring anchors, but the gap between the evidence and the strongest claims is wider than in the medium-scoring anchors.
 
 MY FINAL SCORE: <pineapple>5.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

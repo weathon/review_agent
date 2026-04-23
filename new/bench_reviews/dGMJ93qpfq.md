@@ -1,20 +1,20 @@
-Now I have all the information needed. Let me write the final consolidated review.
+Now I have all the information needed to write the final review. Let me synthesize everything.
 
 ## Summary
 
-The paper proposes Patch-Aware Prompting (PAP), a modular framework that incorporates patch-level information across the vision, text, and prediction branches of prompt tuning for CLIP models. It introduces (1) an intra- and inter-view patch consistency loss, (2) view-tailored text prompts conditioned on Voronoi-clustered patch features, and (3) patch-enhanced vision features with inter-view logit regularization. PAP is evaluated on 11 datasets across three transfer settings (base-to-novel, cross-dataset, domain generalization), achieving consistent but modest improvements over PromptSRC and DePT.
+The paper proposes Patch-Aware Prompting (PAP), a modular framework that integrates patch-level information into prompt tuning for vision-language models across three mechanisms: (1) patch consistency loss with intra-view and inter-view alignment, (2) view-tailored text prompts conditioned on Voronoi-clustered patch features, and (3) patch-enhanced vision features with inter-view logit regularization. PAP is designed as a plug-in add-on to existing methods (PromptSRC, DePT, CoCoOp, CoPrompt) and demonstrates consistent improvements across base-to-novel generalization (11 datasets), cross-dataset evaluation (10 target datasets), and domain generalization (4 ImageNet variants).
 
 ## Strengths
 
-- **Well-motivated core idea**: The observation that existing consistency-based prompt tuning methods operate only at the global feature level, overlooking patch-level information, identifies a genuine gap. The paper systematically addresses this gap across all three branches (vision, text, predictions), which is a principled design choice (Section 3.2, Eqs. 5–14).
+- **Modular and broadly applicable design**: PAP improves four different base methods—PromptSRC (+1.08% HM avg), DePT (+1.09% HM avg), CoCoOp (+0.85% HM), and CoPrompt (+0.84% HM) —demonstrating that the approach is not overfit to a specific architecture. Table 11 provides evidence for this versatility.
 
-- **Consistent improvements across all evaluation settings**: PAP improves HM over PromptSRC by +1.08% on base-to-novel (Table 1a), +0.64% on cross-dataset average (Table 2), and +0.31% on domain generalization average (Table 3). Improvements are not sporadic—every single dataset in base-to-novel shows positive HM gain. When combined with DePT, similar improvements are observed (+1.09% HM, Table 1a).
+- **Extensive evaluation suite**: The paper evaluates on 11 datasets for base-to-novel generalization, 10 target datasets for cross-dataset evaluation, and 4 domain shift datasets, providing strong empirical breadth. Improvements are consistent across nearly all settings (Tables 1–3).
 
-- **Intra- and inter-view patch losses are complementary**: Table 6 shows that intra-view alone (80.06 HM) and inter-view alone (80.03 HM) both underperform the combination (81.05 HM), confirming that both mechanisms address distinct regularization needs.
+- **Comprehensive ablation of design choices**: Tables 4–12 systematically evaluate individual components (Table 4), loss terms (Table 5), patch loss variants (Table 6), conditioning techniques (Table 7), clustering methods (Table 8), projection/adapter choices (Table 9), crop configurations (Table 10), and augmentation strategies (Table 12), providing useful guidance for practitioners.
 
-- **Modular and composable design**: Table 11 demonstrates improvements when applied to CoCoop (+0.85% HM) and CoPrompt (+0.84% HM), confirming PAP is not tailored to a single base method.
+- **Voronoi clustering outperforms alternatives by a clear margin**: Table 8 shows Voronoi (HM 81.05) substantially outperforms KMeans (79.51) and EM (79.22), with the gap most pronounced on novel classes (+2.44% over KMeans), supporting the design choice.
 
-- **Comprehensive ablation studies**: Tables 4–12 cover component contributions, individual loss effects, clustering alternatives (Table 8: Voronoi 81.05 vs. KMeans 79.51 vs. EM 79.22), projection/adapter choices (Table 9), and augmentation/crop configurations, providing solid empirical justification for design decisions.
+- **Transparent computational cost reporting**: Table 13 reports learnable parameters (4.89M vs 0.46M for PromptSRC), GPU memory, and training time, allowing readers to assess the cost-benefit tradeoff.
 
 ## Weaknesses
 
@@ -23,86 +23,79 @@ None.
 
 ### Major
 
-- **Improvements over baselines are modest given the added complexity, and the attribution of gains to patch-level semantics is not fully established**: The consistent ~1% HM improvements come at the cost of 10× more learnable parameters over PromptSRC (0.46M → 4.89M), 2× training time, and a framework with three loss components, a convolution projection block, a text adapter, Voronoi clustering, and view-specific forward passes. The paper does not include a control experiment that adds comparable regularization capacity (second view, adapter, projection head, additional losses) *without* patch-level semantics. Without such a control, it is difficult to determine whether the improvements come from patch-level information specifically or from the increased regularization and model capacity. This concern is partially mitigated by the ablation showing each component contributes (Table 4), but the ablation does not isolate the patch information itself from the architectural additions that carry it.
+- **Core claim about patch-level information is confounded by simultaneous introduction of multiple components**: The paper's central thesis is that patch-level information improves prompt tuning generalization. However, PAP simultaneously introduces (i) a second augmented view, (ii) three new loss terms, (iii) a convolution projection layer, (iv) a text adapter, and (v) Voronoi clustering. The ablation in Table 4 decomposes the method into three coarse blocks (patch loss, view-tailored text, enhanced vision features), but each block inherently combines patch-level processing with multi-view augmentation. The critical missing baseline is: **PromptSRC + second augmented view + inter-view KL/logit consistency + inter-view ℓ₁ feature consistency, but without any patch-level components**. If this simpler multi-view baseline matches PAP's performance, the core claim about patch-level information collapses. The current evidence cannot rule this out. While the consistency of improvements across datasets and base methods makes it unlikely that all gains come from multi-view augmentation alone, the absence of this baseline significantly weakens the attribution.
 
-- **Per-dataset hyperparameter tuning creates tension with the generalization claim**: Section 4 states "we set λ_p, λ_t, λ_l to 1.0, 0.1, 1.0 respectively as default but modify it for individual dataset when required." A paper whose central thesis is improved *generalization* through patch-level information permits per-dataset tuning of its loss weights, yet provides no details about which datasets required modifications, what the modifications were, or how sensitive results are to these choices. This is especially notable when the reported improvements are sub-1.5%—even small amounts of per-dataset tuning could account for a meaningful fraction of the gains. A sensitivity analysis with fixed λ values across all datasets would substantially strengthen the paper.
+- **The "first integration" claim in the abstract is overreaching**: The abstract states the method represents "the first integration of such semantics in this context," but the related work section (Section 2) explicitly acknowledges Long et al. (2024), which uses clustered patch tokens for text prompts. The distinction drawn—that Long et al. lacks inter-view consistency and patch integration into predictions—is a difference in scope, not a difference in kind that justifies a "first" claim. Additionally, self-supervised frameworks cited by the paper itself (Yao et al., 2021; Yun et al., 2022) also integrate patch-level information. The claim should be qualified (e.g., "the first to integrate patch-level semantics across vision, text, and prediction branches simultaneously in prompt tuning").
 
 ### Minor
 
-- **The "first integration" claim in the abstract is imprecise**: The abstract states the method is "representing the first integration of such semantics in this context." However, Section 2 acknowledges that Long et al. (2024) "uses clustered patch tokens for text prompts." While Long et al. lacks inter-view consistency and patch integration into predictions (making PAP's scope broader), the blanket "first integration" claim is inaccurate. The claim should be qualified to specify "first integration across all three branches" or similar.
+- **Dataset-specific hyperparameter tuning without transparency**: Section 4 states "We set λp, λt, λl to 1.0, 0.1, 1.0 respectively as default but modify it for individual dataset when required," but no information is given about which datasets required tuning, what values were used, or sensitivity to these choices. Given that some improvements are sub-1% (e.g., ImageNet HM: 74.01→74.33, Food101 HM: 91.10→91.34), reporting per-dataset hyperparameters and sensitivity analysis would strengthen confidence that gains are methodological rather than tuning artifacts.
 
-- **Voronoi clustering's superiority over KMeans lacks explanation**: Table 8 shows a notable 1.54% HM gap between Voronoi (81.05) and KMeans (79.51), with most of the difference on novel classes (77.41 vs. 74.97). The paper simply states "Voronoi clustering generates more generalizable clusters" without explaining why. Analyzing cluster properties (balance, spatial coherence, per-class behavior) would strengthen the mechanistic understanding.
+- **Notation ambiguity in equations**: The paper uses the same notation (e.g., $\mathbf{P}_{\text{an}}$) for both zero-shot and prompted patch features in Section 3.2, and Eq. 5 appears to use identical symbols for both arguments of the similarity function, which would yield zero loss. While the text description makes the intended meaning clear (alignment between prompted and zero-shot patches), the notation is confusing and could mislead readers.
 
-- **Inter-view patch matching in Eq. 6 uses purely feature-based nearest neighbor without spatial correspondence**: Since the two views are different crops/augmentations, spatial correspondence is broken. The paper asserts that "using zero-shot outputs to calculate similarity prevents the model from finding an easier learning path" (line 151) but does not empirically validate this (e.g., comparing zero-shot vs. prompted-feature matching) or analyze what fraction of matches are semantically correct.
+- **Modest improvements on several individual datasets**: While average improvements are meaningful (+1.08% HM over PromptSRC), many individual datasets show sub-1% gains (ImageNet +0.32%, Food101 +0.34%, OxfordPets +0.43%, SUN397 +0.59%). Without variance reporting, it is hard to assess the statistical significance of these smaller improvements.
 
-- **The stop-gradient design in Eqs. 11 and 13 lacks justification or ablation**: Both apply stop-gradient to the anchor view, making it a fixed target. While this design has precedent in SSL (BYOL, SimSiam), the paper does not discuss the theoretical motivation or ablate alternative designs (symmetric updates, reversed stop-gradient). This is a design choice that could affect the method's behavior but is treated as arbitrary.
-
-- **Parameter overhead framing is somewhat misleading**: The paper describes the parameter increase (0.46M → 4.89M for PromptSRC variant) as a "slight increase in learnable parameters" justified by comparison to the total CLIP model. However, comparing to CoCoop (3.53M) and CoPrompt (4.74M) shows PAP is in the same parameter range, and the 10× increase over PromptSRC is specific to PromptSRC's unusually lean design. The framing should be more balanced.
+- **Significant increase in computational cost**: Table 13 shows PAP increases learnable parameters ~10× (0.46M→4.89M vs. PromptSRC) and training time ~2× (6:06→13:47 min). The cost-benefit ratio deserves more discussion, especially for the smaller improvements.
 
 ### Trivial
-None.
+
+- The stop-gradient design in Eqs. 11 and 13 (applied to the anchor view) is justified briefly as encouraging "the augmented view to align more closely with the anchor," but no comparison with symmetric alignment is provided.
 
 ## Nice-to-Haves
 
-- A control experiment matching the parameter/regularization budget without patch semantics would definitively answer the attribution question.
-- Sensitivity analysis for per-dataset hyperparameters (fixed λ vs. tuned λ) would clarify the source of improvements.
-- Error analysis showing concrete cases where patch-level information corrects novel-class errors that global-feature methods make would strengthen the narrative beyond "slightly higher numbers."
-- Patch attention/alignment visualizations for correct novel-class predictions vs. baselines.
+- A "multi-view PromptSRC without patches" baseline, as discussed in the Major weakness section, would decisively establish whether patch-level information drives the gains.
+- Visualization of Voronoi clusters on example images to demonstrate that clusters capture meaningful semantic regions (rather than being a procedural step with incidental benefits).
+- Analysis of failure modes (e.g., EuroSAT shows high base but relatively low novel performance despite patch-level information).
+- Variance reporting across multiple seeds for key results.
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution:
+These points are flagged to be removed, treat them with caution.
 
-- **Ablation tables are "unreadable" (all ✓ marks)**: The harsh critic claims Tables 4, 5, 6 display ✓ for every column, making ablations unverifiable. This is a **parser artifact**—the original submission uses ✓/✗ marks to indicate active/inactive components, but the text parser stripped the ✗ symbols. The surrounding text explicitly describes each ablation row ("Each component improves performance"), and the numerical values differ across rows, confirming distinct configurations. This is not an author error.
+- **Harsh critic: "Cannot attribute improvements to patch-level information specifically [Evidential]"** — Partially removed. The core concern about the missing "multi-view without patches" baseline is valid and kept as a Major weakness. However, the claim that "the evidence cannot rule this out" is too strong — the consistent improvements across multiple base methods and the per-component ablations (Table 4, each component contributing) provide some evidence even if not definitive. Downgraded from Fatal to Major.
 
-- **"Not yet released / cannot be independently verified" concerns about Long et al. or any cited model**: As per the hard rules, if the paper cites it, it exists.
+- **Harsh critic: Eq. 5 notation error as "fatal" issue** — Kept as Minor, not Fatal. While the notation is genuinely confusing (same symbol for both prompted and zero-shot patches), the text description makes the meaning unambiguous. This is a presentation issue, not a methodological one.
 
-- **Missing comparison with MaPLe and KgCoOp for modular claim**: Testing with only CoCoop and CoPrompt is sufficient to demonstrate modularity; demanding more base methods is a generic improvement request, not a weakness.
+- **Harsh critic: ConvProj not motivated** — Removed. Table 9 provides ablation evidence for the projection/adapter choices, and the text describes its role in obtaining "better feature representations." The design choice is supported empirically even if the motivation could be more explicit.
 
-- **Demanding theoretical proofs for an empirical prompt tuning paper**: Not standard in this community; the paper provides adequate empirical justification through ablations.
+- **Harsh critic: Cross-view matching using zero-shot features introduces mismatch** — Removed as a standalone weakness; kept only as a trivial note about stop-gradient. The paper explicitly argues that zero-shot matching "prevents the model from finding an easier learning path, such as having all prompted patches match closely with a single target patch" (line 151), which is a reasonable design rationale.
 
-- **Missing motivating example showing failure cases from lacking patch information**: This would strengthen the paper but is outside the stated scope; the motivation is clearly articulated conceptually.
+- **Harsh critic: Improvements over CoCoOp/CoPrompt are modest (Table 11)** — Removed. The harsh critic treats +0.85 HM over CoCoOp and +0.84 HM over CoPrompt as "modest," but these are meaningful improvements given the difficulty of the base-to-novel generalization task and the fact that PAP is an add-on module.
 
-- **Demanding confidence intervals or multiple runs**: Single-run evaluation is standard for large-scale prompt tuning benchmarks in this field.
+- **Harsh critic: Cross-dataset improvements even smaller on average (+0.64%)** — Partially removed. The average improvement is indeed smaller in cross-dataset evaluation, but this is expected since the model is trained on ImageNet and evaluated on out-of-distribution datasets. The consistency of improvements matters more than absolute magnitude here.
+
+- **Harsh critic: Training time roughly doubles and parameters ~10×** — Kept as Minor, not Major. The paper transparently reports these costs (Table 13), and the absolute training time (13:47 min) is still practical. The parameter increase is mostly from the adapter and ConvProj, not from fundamental architectural changes.
+
+- **Harsh critic: No standard deviations or confidence intervals** — Kept as Minor, not Major. This is standard practice in the prompt tuning literature (most papers in this area don't report variance). The concern is valid for sub-1% improvements but is a community norm issue.
+
+- **Strength finder: "First integration of patch-level semantics into prompt tuning for VLMs"** — Removed as a strength. This claim is contested by Long et al. (2024) and self-supervised frameworks, as discussed in the Major weakness section. A strength cannot stand when it directly conflicts with a verified Major weakness.
+
+- **Strength finder: "Non-trivial cross-view patch matching design"** — Partially kept. The design choice is interesting but the claim that it prevents "trivial collapse" is asserted rather than empirically demonstrated (e.g., by showing what happens with prompted-prompted matching). Moved to nice-to-have for further validation.
 
 ## Novel Insights
 
-The inter-view patch consistency mechanism (Eq. 6–7) is an interesting design that differs from standard multi-view SSL by anchoring to *zero-shot* patch features rather than using a momentum encoder. This creates an asymmetric design where the frozen CLIP model acts as a stable teacher at the patch level, which is distinct from global consistency methods that regularize only class-token embeddings. The key empirical finding that Voronoi clustering significantly outperforms KMeans specifically on novel classes (77.41 vs. 74.97) but is comparable on base classes (85.07 vs. 84.36) suggests the clustering method affects generalization behavior differently from base-class fitting—an observation that deserves deeper analysis.
+The paper reveals an interesting asymmetry in how patch-level information can be leveraged across the three branches of a VLM pipeline: (1) in the vision branch, patches serve as regularization targets against zero-shot features; (2) in the text branch, clustered patches serve as initialization biases for view-specific prompts; (3) in the prediction branch, averaged patch projections augment class token features. This three-pronged integration pattern—where the same patch information plays qualitatively different roles (regularization target, initialization bias, feature augmentation) across branches—is the paper's most insightful design contribution, even if the empirical attribution to patch-level information specifically remains confounded.
 
 ## Suggestions
 
-- Add a "patch vs. capacity" control: run PAP with the same multi-view, adapter, and projection infrastructure but replace patch-level features with global features throughout. This single experiment would cleanly isolate the contribution of patch-level information.
-- Report results with fixed λ values across all datasets alongside the current per-dataset-tuned results to quantify the tuning contribution.
-- Qualify the "first integration" claim in the abstract to "first integration of patch-level semantics across vision, text, and prediction branches."
-- Provide per-dataset λ values in the supplementary to enable reproducibility.
-
-## Calibration Anchors
-
-| Paper | Avg Human Score | Comparison |
-|-------|----------------|------------|
-| CLIP Data-Free KD (1aF2D2CPHi) | 8.0 (Accept Oral) | Much stronger contribution with 9.33% improvement and novel problem formulation. PAP is clearly below this. |
-| Local-Prompt (Ew3VifXaxZ) | 6.0 (Accept Poster) | Also uses patch-level/local info for CLIP adaptation. PAP is comparable in motivation but evaluated on different tasks (generalization vs. OOD detection). Slightly more complex with modest improvements. |
-| CoPrompt (wsRXwlwx4w) | 5.75 (Accept Poster) | Very similar domain — consistency-guided prompt tuning for CLIP generalization. PAP adds patch-level information on top of this paradigm with similar-sized improvements. Comparable quality. |
-| APPLe (YG01CZDpCq) | 5.5 (Reject) | Adaptive prompt prototypes for base-to-novel generalization with ~3.66% improvement on novel. Rejected despite larger improvements, partly for limited technical novelty. PAP has more components and a clearer structural contribution but even smaller gains and an attribution question. |
-| MVMP (j1FLTvgyAh) | 2.5 (Reject) | Multi-component framework combining existing tricks with marginal gains. PAP is clearly above this — more principled design, clearer motivation, and consistent improvements. |
-| LCN (wYVP4g8Low) | 3.0 (Reject) | Added complexity for marginal ~1% improvements over baselines, overclaimed novelty. PAP shares some similarity in the complexity-to-gain ratio, but PAP's improvements are more consistent and the design is more principled. |
-| Active test-time prompt (pdzHpQbGrn) | 2.5 (Reject) | Marginal improvements, limited novelty. PAP is clearly above this. |
-
-PAP sits in the medium band, most comparable to CoPrompt (5.75, Accept Poster) and Local-Prompt (6.0, Accept Poster). It is below these slightly because: (1) its improvements are modest even by the standards of this space, (2) the attribution of gains to patch information specifically is not fully established, and (3) the per-dataset hyperparameter tuning concern is not addressed. However, it is clearly above the low-band papers in motivation quality, design coherence, and consistency of results.
+- Run the critical "multi-view PromptSRC without patches" baseline: take PromptSRC, add a second augmented view, apply inter-view KL on logits and ℓ₁ on global features between views, but use no patch loss, no patch-conditioned text, and no patch-enhanced vision features. This single experiment would either validate or substantially undermine the core claim.
+- Soften the "first integration" claim to something like "the first framework to systematically integrate patch-level semantics across vision, text, and prediction branches."
+- Report per-dataset λ values in a supplementary table and provide sensitivity analysis for at least one representative dataset.
 
 ## Score and Decision
 
-**Originality**: Moderate. The core idea of patch-level information in prompt tuning is natural but has been partially explored by Long et al. (2024). The specific multi-branch design with intra/inter-view consistency is novel in its scope but builds heavily on existing consistency regularization paradigms.
+**Calibration anchors used:**
 
-**Importance of research question**: High. Improving generalization of prompt-tuned VLMs is a central and active research question.
+| Paper | Avg Score | Decision | Relation to PAP |
+|-------|-----------|----------|-----------------|
+| CoPrompt (wsRXwlwx4w) | 5.75 | Accept poster | Same domain, multi-component consistency method, questioned novelty but accepted |
+| Local-Prompt (Ew3VifXaxZ) | 6.0 | Accept poster | Also leverages local information in VLMs, cleaner design |
+| LogicAI-PT (BlzBcWYmdB) | 5.0 | Reject | Multi-component VLM prompt tuning, overclaimed novelty |
+| CLIPSelf (DjzvJCRsVf) | 7.0 | Accept spotlight | Patch-level VLM adaptation, much stronger contribution |
+| MVMP (j1FLTvgyAh) | 2.5 | Reject | Multi-prompt VLM method, overclaimed, negligible improvements |
+| PLPP (2VAi5F9BOJ) | 2.5 | Reject | Overclaimed "first work" in prompt tuning |
 
-**Claims well supported**: Partially. Consistent improvements are shown, but the central claim that *patch-level information* drives the improvements (versus added regularization capacity) is not cleanly isolated.
+PAP is stronger than LogicAI-PT (more extensive experiments, broader applicability) but weaker than CoPrompt (confounded ablation undermines core claim). The confounded ablation—where the contribution of patch-level information cannot be isolated from multi-view augmentation—is a significant methodological gap that places PAP below the acceptance threshold compared to CoPrompt, which had cleaner attribution of its contributions. PAP is clearly above the weak rejected papers (MVMP, PLPP). The paper makes genuine contributions (consistent improvements, modular design, extensive evaluation) but the core claim is not convincingly established.
 
-**Soundness of experiments**: Adequate. Extensive evaluation across 11 datasets and 3 settings, with comprehensive ablations. The per-dataset tuning and missing capacity control are concerns but do not invalidate the results.
-
-**Clarity of writing**: Good. The framework is clearly described with proper mathematical notation. Some imprecision in claims ("first integration," "slight increase") but overall readable.
-
-**Value to community**: Moderate. The framework provides a useful direction (patch-level prompting) that could inspire follow-up work, but the current evidence does not definitively establish the mechanism.
-
-MY FINAL SCORE: <pineapple>5.5</pineapple>
+MY FINAL SCORE: <pineapple>5.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

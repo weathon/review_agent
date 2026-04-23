@@ -1,20 +1,18 @@
-Now I have all the information I need. Let me write the final consolidated review.
+Now I have all the information needed. Let me write the final consolidated review.
 
 ## Summary
 
-The paper proposes Influence-Guided Diffusion (IGD), a training-free guided sampling framework for dataset distillation that uses trajectory influence functions to steer diffusion models toward generating training-effective data. By connecting the dataset distillation objective to trajectory influence (which approximates how training data impacts validation loss), the authors derive gradient-based guidance signals that promote both influence (training effectiveness) and diversity, achieving state-of-the-art results on ImageNet-1K (60.3% at IPC=50) without retraining diffusion models.
+The paper proposes Influence-Guided Diffusion (IGD), a training-free sampling framework for dataset distillation that uses trajectory influence functions as guidance signals during diffusion model sampling. By computing cosine similarity between gradients of generated data and real data at checkpoints from a model trained on the original dataset, IGD steers diffusion generation toward training-effective samples without retraining the diffusion model. Combined with a diversity-promoting deviation guidance and early-stage guidance strategy, the method achieves 60.3% on ImageNet-1K at IPC=50, surpassing the prior SOTA RDED (56.5%).
 
 ## Strengths
 
-- **Novel conceptual contribution: using influence functions as diffusion guidance signals.** Connecting trajectory influence (which quantifies training impact) to guided diffusion generation is genuinely novel—this is the first work to use influence functions as a guidance mechanism for controlled diffusion, converting an abstract "training-effectiveness" condition into a computable gradient objective (Eq. 6–7). This is fundamentally different from prior guided diffusion that relies on explicit content specifications like class labels or text prompts.
+- **State-of-the-art results on ImageNet-1K**: Minimax-IGD achieves 60.3% at IPC=50 (Table 2), surpassing the previous SOTA RDED (56.5%) by 3.8 percentage points. Consistent improvements are also shown on ImageNette/ImageWoof across all IPC settings and test architectures (Table 1), with DiT-IGD alone outperforming Minimax in most evaluations despite requiring no fine-tuning.
 
-- **Strong empirical results consistently outperforming baselines.** DiT-IGD (pretrained DiT + IGD, no fine-tuning) outperforms Minimax (which requires expensive fine-tuning) in most ImageNette/ImageWoof settings (e.g., 61.9% vs. 58.2% on ImageNette IPC=10, ConvNet-6 in Table 1). Minimax-IGD achieves 60.3% at IPC=50 on ImageNet-1K (Table 2), surpassing the previous SOTA RDED (56.5%) by 4.0 percentage points. This demonstrates that guided sampling is both more effective and more efficient than diffusion model retraining for this task.
+- **Training-free guidance framework**: Unlike Minimax which fine-tunes the diffusion model, IGD operates purely at sampling time using pre-computed checkpoints and averaged gradients from a surrogate model. The orthogonality to fine-tuning is demonstrated by the consistent improvement of Minimax-IGD over both Minimax and DiT-IGD (Tables 1–3), showing that guidance and fine-tuning are complementary.
 
-- **Comprehensive cross-architecture generalization analysis.** Table 3 shows consistent improvements over RDED across four unseen architectures at IPC=50—ResNet-101 (+5.6%), MobileNet-V2 (+5.2%), EfficientNet-B0 (+4.2%), Swin Transformer (+5.0%) for Minimax-IGD. Table 4 further demonstrates robustness to surrogate architecture choice (ConvNet-6, ResNetAP-10, ResNet-18), with differences typically within 1–2%.
+- **Efficient checkpoint selection**: The gradient-similarity-based filtering selects 4 adaptively chosen checkpoints (threshold 0.7) that outperform 10 regularly-spaced checkpoints (82.0% vs 81.1%, Table 6), providing a non-obvious and useful efficiency improvement.
 
-- **Clean ablation design demonstrating complementarity.** Table 5 isolates influence and deviation guidance contributions, showing they address distinct issues and their combination (81.0%/84.4% for DiT-IGD) is consistently better than either alone.
-
-- **Efficient checkpoint selection via gradient similarity.** The proposed adaptive checkpoint filtering retains only 4 checkpoints at threshold 0.7 yet outperforms regular-interval selection with 10 checkpoints (82.0% vs. 81.1%, Table 6), providing both efficiency and effectiveness gains.
+- **Comprehensive cross-architecture evaluation**: Tables 3 and 4 provide cross-architecture results across four unseen architectures on ImageNet-1K and three surrogate architectures, going beyond many DD papers that evaluate only on the distillation architecture. DiT-IGD and Minimax-IGD surpass RDED by average margins of 4.6% and 5.0% at IPC=50 on unseen architectures (Table 3).
 
 ## Weaknesses
 
@@ -23,79 +21,70 @@ None.
 
 ### Major
 
-- **The theoretical justification for replacing θ_e^S with θ_e^T in Eq. 6→7 has a circularity problem.** Section 3.2 states that replacing synthetic-data checkpoints with real-data checkpoints is "an optimally equivalent target" because "these two targets converge to the same optimal solution when z can provide the same training dynamics as T_c." This equivalence condition (matching training dynamics at all epochs) is essentially the goal of dataset distillation itself—achieving it means the method has already succeeded. At any non-optimal point (where the method actually operates), the substitution introduces uncharacterized approximation error. The paper then further relaxes to full-dataset checkpoints θ_e^T (rather than per-class θ_e^{T_c}) and switches from dot products to cosine similarity. Each step is motivated heuristically, and the cumulative deviation from the original objective is unanalyzed. The theory thus provides post-hoc motivation rather than a principled derivation of why IGD works—this is a meaningful gap between the claimed "correlation" and what is actually proven.
+- **The proportionality claim in Equation 5 is incorrect for a single training point.** Equation (5) claims $\mathcal{I}(\mathbf{x}, \mathbf{x}') \propto \ell(\mathbf{x}', \mathbf{y}'; \theta_0) - \ell(\mathbf{x}', \mathbf{y}'; \theta_E)$ for the trajectory influence of a single training point on a single validation point. However, the telescoping argument that connects influence to total loss change requires summing over ALL training data used during the trajectory: $\sum_{(x,y)} \mathcal{I}(\mathbf{x}, \mathbf{x}') \approx \ell(\mathbf{x}', \mathbf{y}'; \theta_0) - \ell(\mathbf{x}', \mathbf{y}'; \theta_E)$. The influence of a single point is one of many terms that sum to the total loss change, not proportional to it. This error underpins the paper's central theoretical justification—the claim that maximizing per-sample influence approximates the DD objective (Equation 1). The paper does briefly acknowledge the connection to gradient matching ("This essentially shares a similar purpose with the Gradient-Matching scheme," line 108), but the influence-function framing remains the paper's headline contribution despite this bridge being invalid.
 
-- **The relative importance of influence vs. diversity guidance varies by backbone in unexplained ways, undermining the narrative that influence is the primary mechanism.** Table 5 shows that for DiT at IPC=50, deviation guidance alone (78.2%) outperforms influence guidance alone (76.5%), while for Minimax, influence guidance (81.5%) substantially outperforms deviation (78.5%). The paper frames influence guidance as the core contribution, but the data suggests the mechanism of action is backbone-dependent. Section 4.4 notes this descriptively but does not explain why influence is more critical for Minimax (which already addresses diversity via fine-tuning) while diversity is more critical for DiT (which lacks diversity by default). Without understanding when and why influence guidance helps versus when diversity alone suffices, the paper's "understanding" contribution is incomplete.
+- **The "optimally equivalent" claim for replacing θ_e^S with θ_e^T (Section 3.2) is circular.** The paper states: "This equivalence holds because these two targets converge to the same optimal solution when z can provide the same training dynamics as T_c." This condition—$\bar{\nabla}_\theta \ell_c(\mathcal{X}_c; \theta_e^{\mathcal{T}_c}) = \nabla_\theta \ell_c(D(\mathbf{z}); \theta_e^{\mathcal{T}_c}) \forall e$—defines the hypothetical fixed point that we are trying to reach. At any non-optimal point during optimization, the two formulations define different loss landscapes. The practical motivations for the substitution (avoiding retraining, mitigating trajectory mismatch) are reasonable, but the claim of "optimally equivalent" is misleading and should be replaced with an honest acknowledgment that this is an approximation with practical advantages.
+
+- **The ablation reveals the deviation guidance, not influence guidance, drives much of the improvement for DiT.** Table 5 shows that for DiT at IPC=50, deviation guidance alone improves accuracy by +3.0% (75.2→78.2) while influence guidance alone adds only +1.3% (75.2→76.5). For Minimax, the pattern reverses: influence guidance adds +3.4% (78.1→81.5) vs. deviation guidance +0.4% (78.1→78.5). The paper acknowledges this asymmetry ("deviation guidance yields results akin to those obtained with raw Minimax, primarily due to its ability to augment the diversity of generated data"), but the overall framing as "Influence-Guided Diffusion" overstates the role of the influence component. The method's primary contribution for one of the two base models is diversity enhancement, not influence-based training-effectiveness optimization. This is important because it suggests the core claim about "generating training-effective data via influence" is only partially supported.
 
 ### Minor
 
-- **Key hyperparameters are dataset-dependent with no general principles for selection.** The guided range [A,B], influence scale k, deviation scale γ_t, and checkpoint similarity threshold are all tuned per-dataset (Appendix A.10). Figure 2c shows performance collapses when k≥10 for entire guidance. The early-stage guidance range [30,45] out of 50 steps is justified only by "empirical observations in diffusion generation" (Section 3.2). While the paper demonstrates sensitivity to k, it does not report sensitivity to [A,B] selection specifically. For a method claiming to be a general framework, the lack of principled setting guidelines is a weakness—though common for first works and partially mitigated by the ablations that do exist.
+- **Generation order dependency is unexplored.** The deviation guidance in Equation (8) depends on previously generated samples $\mathcal{M}^c$, making the entire generation process sequential. The first sample faces no diversity constraint while later samples are repelled from all predecessors. The paper does not analyze sensitivity to generation order or provide any randomization control.
 
-- **Compute cost accounting is incomplete.** The abstract correctly states "without the need to retrain diffusion models," and Section 4.1 claims "all results can be obtained on a single RTX 4090." However, the method requires training a ConvNet-6 surrogate on the full dataset for 50 epochs and computing/storing averaged gradients across all retained checkpoints. No wall-clock time or memory breakdown is provided for these steps, making it difficult to compare the true cost against competitors like RDED (which doesn't require a surrogate model). This is an important practical consideration that the paper should address.
+- **The guided range [A, B] is a critical hyperparameter chosen empirically.** The paper provides only the example of [30, 45] for 50-step DDIM and no principled method for choosing it across different settings. Figure 2c shows that without early-stage guidance, high k degrades performance, which the paper attributes to "overfitting to the surrogate" without providing evidence for this mechanism.
 
-- **The surrogate model capacity gap is untested for ImageNet-1K.** The ConvNet-6 surrogate used for ImageNet-1K is a very small model compared to the ResNet-18 and larger architectures used for evaluation. Table 4 tests cross-architecture surrogate robustness only on ImageNette/Woof, where the gap between surrogate and evaluation model is smaller. While the ImageNet-1K cross-architecture results (Table 3) implicitly validate the surrogate's usefulness, an explicit ablation on ImageNet-1K with a stronger surrogate would strengthen confidence.
+- **Computational cost of guidance is not quantified.** The influence gradient requires decoding through the VAE, forward passes through retained checkpoints, and backpropagation through all of the above. The paper states that results can be obtained on a single RTX 4090 but provides no wall-clock comparison of generation time with vs. without guidance. While the single-GPU claim is useful, the overhead of guidance relative to vanilla generation is unknown.
 
 ### Trivial
 None.
 
 ## Nice-to-Haves
 
-- A principled heuristic for setting [A,B] and k (e.g., based on signal-to-noise ratio of the predicted clean image or variance of the influence gradient) would substantially strengthen the generality claim.
-- Analysis of approximation error from using real-data checkpoints vs. synthetic-data checkpoints, even on a small-scale dataset, would quantify the gap introduced by the key theoretical shortcut.
-- Failure cases showing when IGD produces worse results than vanilla (e.g., for rare classes or poorly chosen k) would reveal operational boundaries.
-- Analysis of how the order of generation affects results under deviation guidance (since it pushes away from only the single most-similar previously generated sample).
+- A direct comparison with a vanilla gradient-matching loss applied as guidance (without the influence framing) would isolate whether the theoretical connection adds value beyond the practical gradient-matching mechanism.
+- Analysis of what influence guidance actually does to generated samples beyond diversity—e.g., whether influence-guided samples have more discriminative features or harder training examples—would strengthen the claim about "training-effective" data generation.
+- Gradient alignment visualization showing how cosine similarity between synthetic-data gradients and real-data gradients evolves across checkpoints for IGD vs. vanilla samples would directly demonstrate whether influence guidance achieves its stated goal.
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution:
+These points are flagged to be removed; treat them with caution.
 
-- **Claim that the abstract is misleading about soft labels.** The harsh critic argues the 60.3% headline depends on soft labels that are "not part of IGD itself." However, Section 4.2 clearly states: "Following the evaluation protocol of the RDED, we employ a ResNet-18 model, trained on the original dataset, to generate soft labels for synthetic images." This is a shared evaluation protocol, not a method-specific trick—and IGD's gains over DiT (52.9→59.8%) and Minimax (58.6→60.3%) at IPC=50 are computed under the same protocol, so relative improvements are attributable to IGD.
+- **Harsh critic: "ResNetAP-10 notably outperform ConvNet-6" claim not supported by data**: Looking at Table 4, ResNetAP-10 surrogate does outperform ConvNet-6 surrogate at several ResNet-18 evaluations (e.g., ImageNette IPC50: 82.3 vs 81.0, ImageWoof IPC50: 65.5 vs 62.0). While some differences are within standard deviations, the paper's claim of "in several tests" is partially supported and is not a serious overclaim.
 
-- **Claim that the comparison with baselines on ImageNet-1K may be unfair due to soft labels.** The paper explicitly states it follows RDED's evaluation protocol, implying the same soft-label setup. Whether SRe²L and G-VBSM use soft labels is a question about those methods' own protocols, not a fairness critique of IGD.
+- **Harsh critic: "The abstract claims IGD generates data without the need to retrain diffusion models, but the surrogate model must still be trained on the full dataset"**: The surrogate model training is a one-time precomputation, not retraining at each generation step. The paper's claim about not retraining diffusion models is accurate. The surrogate training cost is a different concern.
 
-- **Claim that Table 6 comparison with 10 regular checkpoints is not apples-to-apples.** The paper frames this as an efficiency argument (4 smartly-selected checkpoints beat 10 regular ones), and the text makes this clear. It is fairly presented.
+- **Harsh critic: "This framing has been explored in concurrent/recent work (including Minimax)"**: Minimax fine-tunes the diffusion model; IGD provides guidance at sampling time. These are fundamentally different approaches to using diffusion for DD. The paper's framing as "controlled diffusion generation" is distinct from Minimax's fine-tuning approach.
 
-- **Claim that the ∝ in Eq. 5 is problematic.** This proportional relationship is inherited from the standard trajectory influence formulation (Pruthi et al., 2020) and is a well-known first-order approximation. Questioning the approximation's validity for short, high-learning-rate regimes is reasonable but is a known limitation of trajectory influence methods broadly, not specific to this paper.
+- **Strength finder: "Novel theoretical connection between dataset distillation and trajectory influence (Equation 5)"**: This claimed strength conflicts with the verified Major weakness that the proportionality in Equation 5 is incorrect for a single point. The theoretical connection is flawed and cannot be listed as a strength.
 
-- **Formatting and presentation nitpicks** (citation format, capitalization, etc.) are removed per the rules.
+- **Strength finder: "Training-free guidance that avoids retraining diffusion models" listed as a core strength tied to the influence connection**: The training-free property is valid and important, but it is a practical advantage of the guidance-at-sampling-time approach, not a consequence of the influence function framework. Keeping as a strength but decoupled from the influence claim.
 
-- **Missing experiments about surrogate model quality on ImageNet-1K** is moved to minor weakness above; the claim that this is a "critical" gap is overstated since the ImageNet-1K cross-architecture results already provide implicit validation.
+- **Strength finder: "Single-GPU accessibility"**: This is a practical detail, not a substantive contribution strength. Removed as a standalone strength.
+
+- **Harsh critic: "Cross-architecture evaluation only uses IGD variants (not RDED with other architectures at all IPC settings)"**: The paper does compare against RDED across four architectures in Table 3. The comparison is fair given that RDED is a separate method not designed for cross-architecture evaluation by its authors.
+
+- **Harsh critic: Questions about existence/unavailability of models/benchmarks**: Per hard rules, these are removed.
 
 ## Novel Insights
 
-The most striking finding from the reviews is the asymmetric contribution of influence vs. diversity guidance across backbones: for DiT (which lacks diversity), deviation guidance alone closes most of the gap with Minimax; for Minimax (which already handles diversity), influence guidance is the dominant factor. This suggests the two guidance components are not simply complementary filters but address fundamentally different failure modes that vary by backbone—diversity guidance compensates for the diffusion model's inherent mode concentration, while influence guidance compensates for suboptimal training-effectiveness of randomly sampled data. This asymmetry, if properly analyzed, could inform a more principled design where guidance allocation adapts to the backbone's known weaknesses.
+The ablation in Table 5 reveals an instructive asymmetry: influence guidance is the dominant factor for Minimax (which already has diversity through fine-tuning) while deviation guidance is the dominant factor for DiT (which lacks diversity). This suggests that the two guidance components address different bottlenecks—diversity for under-diverse generators, gradient alignment for already-diverse generators—rather than both contributing to a unified "influence" objective. The paper's narrative treats them as synergistic complements, but they may be better understood as conditionally useful mechanisms that address distinct failure modes of different base generators.
 
 ## Suggestions
 
-- Add a brief discussion or analysis section explicitly examining why influence vs. diversity guidance matter differently for DiT vs. Minimax, connecting this to each backbone's known limitations. This would transform the currently descriptive ablation into an explanatory one.
-- Provide wall-clock time and memory comparisons for the full IGD pipeline (surrogate training + checkpoint collection + guided generation) vs. RDED to enable proper practical assessment.
-- Add sensitivity analysis for the [A,B] guidance range, which is currently untested despite being critical to the method's success.
+- Reframe the theoretical contribution honestly: acknowledge that the proportionality in Equation 5 holds only for the sum over all training data, present the method as "gradient-matching guided diffusion with diversity constraints" rather than "influence-guided diffusion," and discuss the practical advantages of using real-data checkpoints (no retraining, mitigates trajectory mismatch) as design choices rather than theoretically equivalent alternatives.
 
-## Evaluation
+- Report generation time with and without IGD guidance to allow readers to assess the practical cost-benefit tradeoff.
 
-**Originality:** The core idea of using trajectory influence functions as diffusion guidance signals is genuinely novel and a meaningful departure from prior guided diffusion work. The framing of dataset distillation as guided diffusion generation is also creative. The theoretical derivation, while having gaps, provides useful motivation.
+## Score and Decision
 
-**Importance:** Dataset distillation for high-resolution, large-scale datasets (especially ImageNet-1K) is an important problem with practical impact. Achieving SOTA results without retraining diffusion models is a significant practical advance.
+**Calibration anchors used:**
+- MGD³ (avg 5.0, Reject): Same domain (guided diffusion for DD without fine-tuning). Our paper has substantially stronger empirical results, more comprehensive evaluation, and attempts theoretical justification (even if flawed). Clearly above MGD³.
+- DATM (avg 7.0, Accept): Strong empirical DD results with correct insights about difficulty alignment. Our paper has comparable empirical strength but weaker theoretical soundness due to incorrect proportionality claim. Below DATM.
+- Influence Functions for Diffusion (avg 8.0, Oral): Rigorous theoretical framework for influence functions in diffusion. Our paper's theoretical contribution is much weaker. Well below.
+- Prodigy (avg 4.25, Reject): Strong empirical results with incorrect theoretical claims (invalid bounds, misleading equations). Our paper has a similar pattern but the incorrect claim is more localized (one proportionality in the motivation) and the empirical results are on a more established benchmark with clearer baselines. Above Prodigy.
+- Farzi Data (avg 2.5, Reject): Incorrect claims, essentially rebranding. Well above.
+- Enhancing DD with Concurrent Learning (avg 5.33, Reject): Limited novelty, unclear theory, modest improvements. Our paper has stronger empirical results but similar theoretical issues. Slightly above.
 
-**Claims support:** Empirical claims are well-supported by extensive experiments across datasets, architectures, and configurations. The theoretical claim of "correlating" DD with trajectory influence is partially supported but weakened by the unanalyzed approximations.
+The paper sits between the rejected papers with flawed theory (~4.0-5.0) and accepted papers with strong theory (~7.0). Its empirical results are genuinely impressive and clearly advance the SOTA, but the incorrect proportionality claim and circular equivalence argument undermine the stated conceptual contribution. The method is effective but should be understood as gradient-matching guided diffusion with diversity constraints rather than the theoretically grounded influence-guided framework the paper claims.
 
-**Experimental soundness:** Experiments are thorough—multiple datasets, IPC settings, architectures, ablations, and visualizations. The main gaps are incomplete compute cost reporting and missing surrogate quality ablation on ImageNet-1K.
-
-**Clarity:** The paper is generally well-written and the method is clearly described. Algorithm 1 helps implementation clarity. The theoretical section could be clearer about the status of its claims (motivational vs. rigorous).
-
-**Community value:** This work opens a new direction (influence-guided diffusion for DD) and shows strong practical results. The code release further enhances value.
-
-## Calibration
-
-| Anchor Paper | Path | Avg Score | Comparison |
-|---|---|---|---|
-| MGD³ (mode-guided diffusion for DD, training-free) | /home/wg25r/review_agent/human_reviews/vKJ8YH0iNp.md | 5.0 | IGD is clearly stronger: more novel guidance mechanism (influence vs. mode clustering), better results (60.3% vs. modest gains), more thorough evaluation, and genuine theoretical motivation even if imperfect. MGD³ was rejected partly because influence on DD was unclear; IGD directly addresses DD effectiveness. |
-| DATM (difficulty-aligned trajectory matching for DD) | /home/wg25r/review_agent/human_reviews/rTBL8OhdhH.md | 7.0 | DATM has similarly strong empirical contributions and clearer practical impact (lossless DD). IGD has comparable empirical strength but weaker theoretical grounding than DATM. |
-| Adversarial robustness via SNNs (overclaiming, avg 2.0) | /home/wg25r/review_agent/human_reviews/KncRpAnprQ.md | 2.0 | IGD is much stronger: real novelty, solid empirical results, and no fabricated claims—just theoretical gaps. This anchor establishes the low end. |
-| Momentum-driven guided sampling (theoretical gaps, avg 5.33) | /home/wg25r/review_agent/human_reviews/i8bdPSmOwk.md | 5.33 | Similar profile: novel guidance mechanism with theoretical gaps but practical value. IGD is somewhat stronger due to better empirical results and a more significant problem setting. |
-| Hyperparameter sensitivity paper (avg 4.33) | /home/wg25r/review_agent/human_reviews/8FxELTdwJR.md | 4.33 | IGD's HP sensitivity is real but less severe—k sensitivity is documented, and the method works across varied settings. |
-
-IGD falls above MGD³ (5.0) and the momentum-guided paper (5.33) due to stronger empirical results and more novel contribution, but below DATM (7.0) due to weaker theoretical grounding. The paper makes a genuine and significant practical contribution with a novel idea, and the theoretical gaps—while real—are motivational rather than invalidating.
-
-MY FINAL SCORE: <pineapple>6.0</pineapple>
-MY FINAL DECISION: <orange>Accept</orange>
+MY FINAL SCORE: <pineapple>5.5</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>

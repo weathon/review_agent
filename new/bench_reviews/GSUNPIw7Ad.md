@@ -1,22 +1,22 @@
-Now I have all the information needed. Let me synthesize the final review.
+Now I have a thorough understanding of the paper and calibration anchors. Let me write the final review.
 
 ## Summary
 
-This paper presents the first framework for adapting compressed image latents to Multimodal Large Language Models (MLLMs), proposing a lightweight transform-neck that bridges neural image codec latents directly into the visual encoder's intermediate features, combined with a surrogate loss (cross-entropy + distillation) that avoids backpropagating through the billion-parameter LLM. The framework supports three application scenarios: (d1) fixed human-perception codec, (d2) jointly updated codec for human+machine perception, and (d3) codec updated for machine perception only. Experiments across four MLLMs and tasks show consistent rate-accuracy improvements and ~95% reduction in computational cost compared to a post-processing baseline.
+This paper presents the first study of adapting neural image compression for Multimodal Large Language Models (MLLMs). It proposes a lightweight transform-neck that bridges compressed image latents directly into an intermediate layer of the MLLM's visual encoder, bypassing full image reconstruction and reducing complexity. A surrogate loss combining distillation and cross-entropy (via a CLIP text encoder) enables training without backpropagating through the billion-parameter LLM. The framework accommodates three scenarios: using a fixed human-perception codec (d1), jointly training for human+machine perception (d2), or training exclusively for machine perception (d3).
 
 ## Strengths
 
-- **First study of neural image compression tailored specifically for MLLMs.** The paper correctly identifies that existing coding-for-machines methods require backpropagation through the downstream network, which is infeasible for billion-parameter MLLMs. The proposed surrogate loss workaround (Section 3.4, Eqs. 1–3) backpropagates only through the partial visual encoder C', enabling training on a single RTX 4090 (Section 1). This is a genuine and well-motivated practical contribution.
+- **Genuinely novel problem formulation**: This is the first work addressing image compression specifically for MLLM consumers. The paper correctly identifies that existing coding-for-machines methods require backpropagation through the downstream network, which is infeasible for billion-parameter MLLMs (Sections 1, 2.2). No prior work has tackled this problem.
 
-- **Clean problem decomposition into orthogonal components.** The transform-neck (latent-to-feature adaptation) and the surrogate loss (training objective without MLLM) are well-separated contributions. The three scenarios (d1/d2/d3) provide practitioners with a concrete design space (Table 1), and Figure 4 demonstrates that (d2) achieves only marginal PSNR drop versus (d1) while gaining MLLM task performance.
+- **Creative surrogate loss design with progressive training**: Combining distillation (feature-matching to the original visual encoder output) with cross-entropy (text-domain alignment via a CLIP text encoder) is a non-obvious and well-motivated choice. The progressive training schedule (Eq. 4) and the MSE-reduction visualization (Figure 7) provide genuine insight: CE loss reduces foreground errors while distillation reduces global errors, explaining why their combination is necessary.
 
-- **Substantial empirical improvements consistently across tasks and MLLMs.** Figure 3 shows consistent gains over the Reconstruction baseline across four distinct tasks (captioning with LLaMA-Adapter, VQA with Honeybee, REC with Shikra, few-shot classification with V2L-Tokenizer) at low bitrates (0.1–0.2 bpp). Scenario (d3) approaches uncompressed-image performance on several tasks.
+- **Cross-task universality without retraining**: Because multiple MLLMs share the same CLIP ViT-L/14 visual encoder, a single trained transform-neck serves all four tasks/MLLMs in Table 2 without retraining (Section 4.1). This is a practical advantage over task-specific coding-for-machines methods.
 
-- **Large computational savings well-quantified in Table 3.** The transform-neck operates at 52.795 kMAC/pixel vs. ~970 kMAC/pixel for the full Post-processing pipeline (decoder + first 2 CLIP layers + U-Net), a genuine efficiency win from operating in the latent domain rather than at full image resolution.
+- **Substantial efficiency gains with comparable accuracy**: Table 3 shows the transform-neck requires only 52.8 kMAC/pixel vs. 1017.96 kMAC/pixel for Post-processing—a ~95% reduction—while achieving comparable task accuracy. The Post-processing baseline uses the same surrogate loss, isolating the contribution of the latent-domain approach as an efficiency gain.
 
-- **Insightful ablation analysis of loss components.** Figure 7 provides per-pixel MSE reduction visualizations showing that CE loss targets foreground regions while distillation loss provides global alignment — offering a mechanism-level explanation for why the progressive combination works, going beyond simply showing "it works."
+- **Comprehensive breadth across MLLMs, tasks, and codecs**: The evaluation covers 4+ MLLMs, 4 tasks, and 2 codec families (ELIC and TIC), plus 2 additional MLLMs with non-CLIP-ViT visual encoders (Section 4.6, Figure 8). The codec-agnostic result (Figure 6c) confirms the method is not specific to one codec family.
 
-- **Generalization to non-CLIP MLLMs and different codecs.** Figure 6(c) confirms effectiveness across CNN-based (ELIC) and Transformer-based (TIC) codecs. Figure 8 shows applicability to mPLUG-Owl2 (custom ViT) and Osprey (CLIP ConvNeXt), both outperforming the Reconstruction baseline under all three scenarios.
+- **Practical single-GPU training**: The system trains on one RTX 4090 with 24GB memory (Section 1), which would be impossible if the entire MLLM were in the training loop. This is a concrete and important practical advantage.
 
 ## Weaknesses
 
@@ -25,85 +25,64 @@ None.
 
 ### Major
 
-- **The headline "60–80% bit-rate reduction" claim is unverifiable from the main paper.** The abstract prominently states this result, referencing Sections 4.2 and A.2, but Section 4.2 only discusses trends from Figure 3 with no formal BD-rate or iso-accuracy analysis. The actual computation is deferred to Appendix A.2 (unavailable in this review). A quantitative claim this specific and prominent should be directly verifiable from the main text — the main paper's figures alone do not allow a reader to confirm this number. This is not a claim that the result is wrong, but that the paper stakes its most headline-worthy claim on evidence the reader cannot access.
+- **Limited baseline comparison—no coding-for-machines baselines**: The paper only compares against Reconstruction and Post-processing. It cites multiple prior coding-for-machines works that bridge compressed latents to task networks (Liu et al., 2022a; Mei et al., 2021; Singh et al., 2020 in Section 2.2) but does not experimentally compare against any of them. The paper argues these methods "cannot be directly applied to MLLMs" because they require backpropagation through the downstream network (line 36–37). However, a fair comparison could still be constructed: e.g., a simple linear projection from latents to visual encoder features (without the transform-neck's self-attention architecture), trained with the same surrogate loss, would isolate the contribution of the transform-neck architecture versus a minimal latent-bridging approach. The paper acknowledges Post-processing "is able to reach comparable performance to our (d1)" (line 222), which suggests the accuracy gains over Reconstruction come primarily from the surrogate loss training signal rather than the architectural innovation. Without a latent-domain baseline, it remains unclear how much the transform-neck's architecture contributes beyond what a simpler bridging module would achieve.
 
-- **The captioning metric in Figure 3 is incorrectly labeled as "LPIPS."** LPIPS is a learned perceptual image similarity metric, not a text captioning metric. Figure 6 (ablation on the same captioning task) uses "CIDF1r" instead, confirming that LPIPS is a labeling error in the main results figure. While this is almost certainly a mislabeling rather than a wrong metric being used in evaluation (the plotted values would not make sense as LPIPS scores for captioning), having an incorrect metric label on the paper's central results figure undermines confidence and should be corrected.
-
-- **The CE loss uses the CLIP text encoder "independently of the visual encoder integrated into the MLLM" (Section 3.4), but this design choice is insufficiently justified for non-CLIP MLLMs.** When the MLLM's visual encoder is CLIP ViT (trained with the CLIP text encoder), the CE loss is well-motivated. For mPLUG-Owl2 (custom ViT with different training) and Osprey (CLIP ConvNeXt), the text-image alignment space differs, and Section 4.6 only mentions a "re-trained scheme" without specifying what text encoder (if any) was used for the CE loss. This gap makes it unclear whether the generalization results reflect a properly aligned loss or a misaligned one that happens to work.
+- **No upper-bound comparison to validate surrogate loss quality**: The central claim is that the surrogate loss (distillation + cross-entropy on the visual encoder alone) is a sufficient substitute for optimizing the end-task loss through the full MLLM. Yet there is no experiment testing this approximation quality. A reduced-scale oracle experiment—e.g., training with the actual MLLM task loss on a smaller LLM or subset of data—would establish how much performance the surrogate leaves on the table. Without it, we cannot assess whether the surrogate is a tight approximation or a crude one that merely beats a weak baseline. The "Uncompressed" results serve as an implicit ceiling on task performance but do not measure the surrogate-to-oracle gap specifically.
 
 ### Minor
 
-- **The progressive training schedule (Eq. 4) is entirely heuristic and not ablated against simpler alternatives.** The 3-stage schedule (CE only → CE+distill → distill only) with specific epoch boundaries E₁=20, E₂=40 and 1:100 α:β ratio is set empirically. Figure 6(b) ablates individual loss components but not the schedule itself (e.g., fixed-weight combined training vs. progressive). Without this comparison, it's unclear whether the schedule's complexity is truly necessary.
+- **Server-side MLLM modification requirement not discussed as a limitation**: The transform-neck injects features into an intermediate layer of the MLLM's visual encoder (Section 3.3, line 103), which requires the deployed MLLM to expose this internal hook. If the MLLM is a third-party API (e.g., GPT-4V), the entire framework is inapplicable. The paper frames the setting as server-hosted MLLMs (Section 1, Figure 2) but never explicitly acknowledges this constraint or discusses its implications for deployment generality.
 
-- **The Post-processing U-Net baseline has ~2.4× the parameters of the transform-neck (31M vs. 13M).** While the primary point of comparison is latent-domain vs. pixel-domain processing, the capacity gap means the computational advantage claim partially conflates architectural choice with parameter budget. A matched-capacity Post-processing baseline would provide a cleaner architectural comparison.
+- **Narrow bitrate operating range in main results**: Figure 3 only shows results at 0.1 and 0.2 bpp. While the paper focuses on low-bitrate scenarios (which are the most problematic for MLLMs), the four ELIC models span λ ∈ {0.004, 0.008, 0.016, 0.032}, yet only the two lowest-rate models appear in the primary comparison. Characterizing performance at moderate bitrates (0.3–0.5 bpp) would give a more complete picture of where the method's advantages diminish.
 
-- **Generalization evidence for non-CLIP MLLMs is thin.** Only two MLLMs are tested, each on a single task/dataset, with limited rate points. The mPLUG-Owl2 plot (Figure 8, left) has an extremely tight y-axis range (62–66), making small absolute differences appear large. The evidence is suggestive but not compelling for the broad "generalizability" claim.
+- **Progressive training hyperparameters lack sensitivity analysis**: The schedule switches at E₁=20 and E₂=40, with α:β = 1:100 (Section 3.5, line 143). Given that the ablation (Figure 6b) shows CE-only and distillation-only both fail dramatically, the schedule appears critical. No sensitivity analysis explores whether small changes to these values cause collapse or merely adjust convergence speed.
 
-- **A separate transform-neck is trained for each of the 4 rate points × 3 scenarios = 12 models.** This deployment requirement is mentioned once (Section 4.1) and never discussed as a practical limitation. A single rate-adaptive transform-neck would be far more practical.
-
-- **The layer-skipping choice (first two layers of CLIP ViT) is empirically justified (Figure 6a) but lacks analytical rationale.** A brief discussion of why layer 3 is the right insertion point (e.g., early layers extract low-level features redundant with latents) would strengthen the design justification.
+- **CLIP text encoder used for all MLLMs regardless of their visual encoder**: Section 3.4 (line 125) states "we use the CLIP text encoder, independently of the visual encoder integrated into the MLLM under consideration." For non-CLIP MLLMs like mPLUG-Owl2 (custom-trained ViT) and Osprey (CLIP ConvNeXt), the CE loss bridges to the CLIP text space even when the target MLLM may not share this space. The generalization results in Figure 8 show smaller gains for Osprey/POPE, which could partially reflect this mismatch, but the paper does not analyze this.
 
 ### Trivial
 None.
 
 ## Nice-to-Haves
 
-- An ablation of the progressive schedule vs. a fixed-weight combined loss to determine if the 3-stage training is truly necessary.
-- A rate-adaptive transform-neck (e.g., via conditional normalization or rate-conditioning) that handles multiple rate points without separate models.
-- Feature-space visualizations (e.g., t-SNE of C'(T(ȳ)) vs. C(x)) to directly confirm the distillation is working as intended.
-- A matched-capacity Post-processing baseline to isolate the latent-domain advantage from the capacity advantage.
-- Analysis of failure modes — when does adapting latents fail to help, particularly for fine-grained spatial tasks at very low bitrates?
+- A t-SNE or feature-space visualization comparing C'(T(ỹ)) vs. C(x) across the three scenarios, to directly show what the surrogate loss achieves in feature space and where it falls short.
+- Analysis of when/why the surrogate breaks down for certain architectures (e.g., the smaller gains on Osprey/POPE in Figure 8, right).
+- Comparison at moderate-to-high bitrates (0.3–0.5 bpp) where the Reconstruction baseline's degradation is less severe.
 
 ## Removed Points
 
-These points are flagged to be removed; treat them with caution.
+*These points are flagged to be removed, treat them with caution.*
 
-- **"The 95% complexity reduction claim is inflated (17× vs 20×)"** — The harsh reviewer argues the actual saving is (835.72+70.24)/52.795 ≈ 17× rather than 20×. However, Table 3 explicitly states it compares the full pipeline for each method (including decoder and first 2 CLIP layers for Post-processing, which are necessary costs that the transform-neck avoids). The comparison is fair as framed: total additional cost for Post-processing pipeline = ~970 kMAC/pixel vs. Ours = ~53 kMAC/pixel, giving ~94.6% reduction, which rounds to "nearly 95%." The 17× vs 20× quibble is numerically minor and doesn't change the conclusion.
+- **"Captioning (LPIPS)" metric labeling in Figure 3**: The harsh critic flagged that Figure 3 labels the captioning metric as "LPIPS," a perceptual image similarity metric. However, the ablation (Figure 6) uses "CIDF1r" for the same captioning task, suggesting this is likely a parser/OCR artifact from reading the figure axis label rather than the paper actually using LPIPS for captioning. Removed as likely parser artifact.
 
-- **"The universality claim is trivially true"** — The harsh reviewer argues that sharing a visual encoder trivially means a feature-space adapter transfers. While this is obvious in hindsight, the paper's contribution is demonstrating this transferability empirically across 4 different MLLMs and tasks (Figure 3), which is a non-trivial empirical result. The claim is not inflated; it is appropriately qualified.
+- **"95% kMAC/pixel reduction" comparison omitting shared components**: The critic argued the complexity comparison in Table 3 omits shared components. However, the table caption explicitly states: "The table omits the shared components of the two methods, i.e. the image encoder, the partial CLIP visual encoder, the connector, and the LLM." The comparison is specifically about the difference between the two methods, which is the fair comparison since shared components cancel out. Removed as the paper is transparent about what's included.
 
-- **"Overclaimed 'first-ever study'"** — The paper justifies this claim with specific references to the gap in coding-for-machines literature regarding MLLMs (Section 2.2). This claim appears accurate and well-supported.
+- **Demanding comparison with existing coding-for-machines methods on MLLM terms**: The critic suggested adapting prior coding-for-machines methods (Liu et al., 2022a) to the same surrogate-loss training regime. While a latent-domain baseline would be informative (and I kept a weakened version above), the critic's specific demand to re-implement prior methods with the surrogate loss conflates two separate contributions (architecture vs. training signal). Removed the specific demand; kept the general concern about lack of latent-domain baselines.
 
-- **"Format/presentation nitpicks about figure descriptions"** — Various style and formatting complaints are removed as parser artifacts per instructions.
+- **"60-80% bitrate reduction" claim is inflated**: The critic argued the claim is misleading because it's measured against human-perception codecs. However, the paper's entire contribution is about adapting compression for MLLMs, and comparing against the status quo (human-optimized codecs) is the most relevant comparison. The claim is qualified with "under the same recognition accuracy over existing image codecs (e.g. ELIC and VVC intra coding)." This is a valid comparison for showing the practical benefit. Removed as the claim is properly contextualized.
 
 ## Novel Insights
 
-The paper's most interesting insight is the asymmetric role of the two surrogate loss terms: the cross-entropy loss (bridging to text embeddings) improves foreground-specific alignment while the distillation loss improves global feature matching (Figure 7). This suggests that for MLLM-oriented compression, foreground semantic alignment is more efficiently learned through the text modality bridge, whereas spatial/perceptual fidelity requires pixel-level feature matching. This has implications beyond the specific method — it suggests that future coding-for-MLLM systems should explicitly decompose their objectives into foreground-semantic and global-fidelity components.
+The paper reveals an interesting decomposition of the surrogate loss contributions: the cross-entropy loss primarily reduces feature matching errors in foreground object regions while the distillation loss reduces global matching errors (Figure 7). This suggests that for MLLM tasks, foreground object information is more critical for text generation, and the CE loss provides the right inductive bias for this. This observation, combined with the Post-processing matching (d1)'s accuracy, implies that the surrogate loss training signal—not the transform-neck architecture—is the primary driver of task accuracy gains over the Reconstruction baseline. The transform-neck's contribution is primarily computational (95% complexity reduction), not representational.
 
 ## Suggestions
 
-- Correct the "LPIPS" label in Figure 3 to the appropriate captioning metric (likely CIDEr or CIDF1r) to match Figure 6's metric.
-- Move or duplicate the BD-rate/bit-rate reduction calculation from Appendix A.2 to the main paper (at least as a summary table) so the headline claim is directly verifiable.
-- Specify what text encoder (if any) is used for the CE loss when training for non-CLIP MLLMs (mPLUG-Owl2, Osprey) in Section 4.6.
-- Add an ablation comparing the progressive schedule against simpler alternatives (e.g., fixed-weight combined loss).
-
-## Evaluation
-
-**Originality:** The paper is the first to address neural image compression specifically for MLLMs, and the surrogate loss workaround for avoiding backpropagation through billion-parameter models is a novel and practical contribution. The transform-neck itself is a relatively straightforward adapter, but the combination and problem formulation are original.
-
-**Importance of research question:** High. As MLLMs proliferate in cloud-deployed services, efficient image transmission from edge devices to cloud MLLMs is an increasingly important practical problem.
-
-**Claims well-supported:** Mostly yes, with the notable exception of the 60-80% bit-rate reduction claim (deferred to appendix) and the mislabeled metric in Figure 3. The main empirical results (Figure 3) and complexity analysis (Table 3) are solid.
-
-**Soundness of experiments:** Good for the main results (4 tasks, 4 MLLMs, multiple rate points, 3 scenarios). The ablation is informative but incomplete on the training schedule. The non-CLIP MLLM generalization tests are too limited to be fully convincing.
-
-**Clarity:** Generally well-written and well-organized. The three-scenario framework (d1/d2/d3) is clearly presented. The labeling error in Figure 3 is a significant presentation gap.
-
-**Value to community:** High for both the compression and MLLM communities. Opens a new direction at the intersection of these fields.
-
-## Calibration
-
-| Anchor Paper | Avg Score | Comparison |
-|---|---|---|
-| AuxT (U67J0QNtzo) | 7.5 | Spotlight compression paper with clear practical improvement (2× training speedup, 1% BD-rate). More focused analysis, cleaner ablations, no labeling issues. Our paper addresses a more novel problem space but has more rough edges. |
-| SeTok (n64NYyc6rQ) | 6.2 | MLLM tokenizer with semantic grouping. Similar scope (vision tokens for MLLMs), poster-level contribution. Our paper has comparable novelty but more practical system-level impact. |
-| RL task-aware compression (aQ7qYnY2nF) | 4.0 | Coding-for-machines paper with task-aware QP optimization. Weaker experiments, unclear practical gains, more fundamental methodology questions. Our paper is clearly above this. |
-| PQ-VAE (BJ4WgPgFqJ) | 2.33 | Fundamentally flawed description and missing baselines. Our paper is far above this. |
-| DiffPC (RL7PycCtAO) | 5.75 | Learned compression integrating semantic features. Moderate contribution, poster-level. Our paper has a similarly positioned contribution. |
-
-Our paper sits above the medium-quality compression papers (4–5 range) due to its genuine novelty in addressing MLLM compression, practical training feasibility, and consistent empirical results. It sits below the high-quality Spotlight papers (7+) due to the Figure 3 labeling error, unverifiable headline claim, and incomplete ablation/specification. The paper is in the 5.5–6.5 range; I place it at 6 given the importance and novelty of the problem, the clean system design, and the practical training feasibility on a single GPU, while acknowledging the specification and presentation gaps.
+- Add a minimal latent-domain baseline (e.g., linear projection from compressed latents to visual encoder features, trained with the same surrogate loss) to isolate the transform-neck's architectural contribution from the surrogate loss's training signal contribution.
+- Conduct a small-scale oracle experiment: train a simplified version with actual MLLM task loss (e.g., using a smaller LLM like Phi-2 or a subset of data) to quantify how much performance the surrogate leaves on the table.
+- Explicitly acknowledge the server-side MLLM modification requirement as a limitation and discuss deployment scenarios where the method is/isn't applicable.
 
 ## Score and Decision
 
-MY FINAL SCORE: <pineapple>6</pineapple>
-MY FINAL DECISION: <orange>Accept</orange>
+**Calibration anchors used:**
+
+| Paper | Avg Score | Decision | Comparison |
+|-------|-----------|----------|------------|
+| /home/wg25r/review_agent/human_reviews/U67J0QNtzo.md (Disentangled LIC training) | 7.5 | Accept Spotlight | Stronger experimental methodology, clean analysis, multiple baselines; this paper under review is weaker in evaluation rigor |
+| /home/wg25r/review_agent/human_reviews/wH8XXUOUZU.md (DC-AE) | 6.8 | Accept Poster | Similar profile (lightweight adapter, efficiency gains); DC-AE had cleaner baseline comparisons |
+| /home/wg25r/review_agent/human_reviews/b57IG6N20B.md (BrainCodec) | 6.6 | Accept Poster | Similar (compression for downstream tasks); BrainCodec had SOTA baselines but some metric concerns |
+| /home/wg25r/review_agent/human_reviews/ulIW7Frjpn.md (LLM entropy models) | 4.75 | Reject | Novel LLM+compression idea but weaker execution; this paper is clearly stronger |
+| /home/wg25r/review_agent/human_reviews/cya3eEczAx.md (AProx surrogate loss) | 1.67 | Reject | Surrogate loss with missing baselines; this paper is far stronger |
+
+The paper under review has genuine novelty (first study of MLLM compression), creative design (surrogate loss + transform-neck), and substantial practical impact. It is clearly stronger than the rejected LLM+compression paper (4.75) and the failed surrogate loss paper (1.67). However, it falls below DC-AE (6.8) and BrainCodec (6.6) in evaluation rigor—those papers had stronger baseline comparisons despite having some weaknesses of their own. The two Major weaknesses (limited baselines and no oracle validation) are significant but not fatal; the paper's core contribution is valid and well-motivated. A score of 5.5 reflects a paper with real merit but evaluation gaps that prevent confident acceptance.
+
+MY FINAL SCORE: <pineapple>5.5</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>

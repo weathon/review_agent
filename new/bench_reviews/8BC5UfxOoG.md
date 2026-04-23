@@ -1,134 +1,107 @@
-Now I have enough information to write the final review. Let me carefully evaluate each harsh critic point against the paper.
-
-**Harsh Critic Point 1: Maximum bias vs. mean bias = variance, not amplification.**
-
-This is a substantive concern. The paper explicitly states (Section 3.3, lines 110): "Although example selections reduce the mean bias value, the LLMs tested exhibit varying degrees of increase in the maximum gender or race bias value with random-based example selection for ICL." The claim that this constitutes "amplification" is indeed potentially misleading. The simultaneous decrease in mean bias and increase in maximum bias is exactly what you'd expect from increased variance. However, the paper does emphasize "maximum" specifically—the concern about worst-case fairness is legitimate. The framing as "amplification" without acknowledging the variance explanation is a real weakness. This is a **major** issue, not fatal—the finding is real (maximum bias increases) but the "amplification" interpretation is debatable.
-
-**Harsh Critic Point 2: Spurious correlation attribution is not causally established.**
-
-The paper's logic (Section 3.4, line 160): null prompts show similar fear-label tendencies for male/female → therefore "example selection contributes to spurious correlations." This is a false dichotomy: the paper considers only two factors (parameters and prompt), and eliminates parameters, so concludes it must be the prompt. But the prompt includes both the content/structure of the ICL format and the specific examples selected. The paper concludes "example selection contributes" but doesn't isolate example selection from other prompt effects. This is a **major** concern—the causal claim is overstated.
-
-**Harsh Critic Point 3: ReBE worsens bias for Perplexity baseline.**
-
-Table 3 confirms this: for Perplexity, GPT-J-6B AvgGF increases (+0.024), MaxTG increases (+0.060), MaxFG increases (+0.079); OPT-13B AvgGF increases (+0.009), MaxTG increases (+0.019), MaxFG increases (+0.096). The paper says "the average gender bias of most LLMs decreases" (Section 5.1)—this is technically true but the Perplexity case is a meaningful failure. This is a **minor-to-major** issue.
-
-Let me assess the remaining harsh critic points:
-
-- Finding ❶ being "trivially true": While intuitive, it is still worth empirically demonstrating. Not a major weakness.
-- GPT-3.5-Turbo paraphrasing confound: Valid concern but speculative. **Minor**.
-- Number of random seeds not stated: True—the paper doesn't state the number of seeds in the main text. This matters for interpreting maximum statistics. **Minor** but worth noting.
-- Confusion matrices only for OPT-6.7B: Valid but the paper justifies this choice (it has the biggest fluctuation). **Minor**.
-- A(i) definition excludes same-label/same-demographic: Let me check the original equation more carefully. Looking at Equation 4: 𝒫(i) = {j ∈ ℐ : y_j = y_i, s_j ≠ s_i} is the positives, and 𝒜(i) = {k ∈ ℐ : y_k ≠ y_i, s_k = s_i} is the contrastive set. So the denominator only includes different-label/same-demographic examples. This means same-label/same-demographic are excluded from both numerator and denominator. This is a design choice that seems intentional—aligning same-label/different-demographic as positives and separating different-label/same-demographic as negatives. It's not necessarily "degenerate." The harsh critic's complaint about "degenerate training dynamics" is overstated. **Minor** at best.
-- L_bias alone drops accuracy to 0.26: True but this is expected—the ablation shows exactly what it should, that both losses are needed. Not a weakness of the paper.
-- ReBE's MaxFG Max worse than L_acc alone (0.284 vs 0.250): The values in Table 4 show ReBE's MaxFG Max is 0.284 and L_acc alone is 0.250. This is a genuine concern—the bias-aware embedding increases certain bias measures. **Minor**.
-- Debiasing baselines too thin: The paper justifies excluding FCG and compares with counterfactual and gender-balanced context. Only two baselines is indeed thin. **Minor-to-major**.
-- Parameter analysis limited: True but it's an ablation/analysis section, not the core contribution. **Minor**.
-
-Now let me consider the strength finder's claims:
-
-1. "Novel finding that example selection amplifies maximum bias while reducing mean bias" - This is the core finding but the "amplification" framing is questionable. I'll keep this but moderate it.
-2. "Causal attribution of spurious correlations" - The causal attribution is actually weak as discussed. I'll remove this as a strength.
-3. "Effectiveness of ReBE" - Partially valid but has the Perplexity failure. I'll keep but moderate.
-4. "EEC-paraphrase dataset" - Valid contribution. Keep.
-5-8. Supporting strengths: Generally valid. Keep.
-9. "ReBE compatible with existing methods" - Partially valid but Perplexity+ReBE worsens bias. Moderate.
-
-Now let me write the final review.</think>Now I have reviewed the paper thoroughly and checked all claims against it. Let me compile the final review.
+Now I have enough information to write the final consolidated review. Let me carefully synthesize all verified findings.
 
 ## Summary
 
-This paper investigates whether example selection for in-context learning (ICL) amplifies social biases in LLMs. It constructs a paraphrased version of the Equity Evaluation Corpus (EEC-paraphrase) and evaluates eight LLMs across four example selection methods, finding that: (❶) high accuracy does not guarantee low bias, (❷) example selection increases maximum bias values compared to zero-shot, and (❸) example selection contributes to spurious correlations (e.g., male pronouns → sadness misclassified as fear). To mitigate this, the paper proposes ReBE, a prompt-tuning-based method that uses a bias-contrastive loss to learn debiased virtual token embeddings while preserving accuracy.
+This paper investigates whether example selection for in-context learning (ICL) amplifies social biases in LLMs. Through experiments on 8 LLMs and 4 selection methods using a new EEC-paraphrase dataset, the authors claim that: (1) high accuracy does not imply low bias, (2) example selection amplifies biases (specifically maximum bias over random seeds), and (3) example selection contributes to spurious correlations. They propose ReBE, which uses prompt tuning with a bias-contrastive loss to mitigate these biases, and show it reduces maximum bias in many settings while preserving accuracy.
 
 ## Strengths
 
-- **Important and underexplored research question**: The interaction between ICL example selection and social bias is a genuinely important concern that prior example selection work has largely ignored. Identifying that ICL prompts serve as a channel through which biases can manifest is a valuable observation (Section 1, Section 3).
-- **Comprehensive empirical scope**: Evaluation across eight LLMs (LLaMA-2-7/13/70B, OPT-6.7/13/30B, GPT-J-6B, GPT-neo-2.7B) and four example selection methods (Random, Similarity, Perplexity, DPP) provides useful breadth for the bias analysis (Table 2, Figure 2).
-- **Useful observation about maximum vs. mean bias divergence**: The fact that ICL reduces mean bias but increases maximum bias (Figure 2) raises a legitimate concern about worst-case fairness outcomes, which is practically important even if the underlying mechanism is debated.
-- **Concrete spurious correlation identification**: The confusion matrix analysis (Figure 3) effectively reveals a specific, interpretable spurious correlation—male-pronoun sadness sentences misclassified as fear at 0.54 vs. 0.08 for female—and connects this to MaxTG/MaxFG metrics (Section 3.4).
-- **Useful construction of EEC-paraphrase dataset**: Paraphrasing EEC template sentences via GPT-3.5-Turbo to create more natural sentence structures is a reasonable contribution that enables more realistic bias evaluation (Section 3.1).
-- **Well-designed ablation study**: Table 4 cleanly demonstrates that L_bias drives bias reduction while L_acc preserves accuracy, confirming the complementary roles of the two loss components.
+- **Important and understudied problem**: The intersection of example selection and social bias in ICL is genuinely important for safe deployment. The paper explicitly identifies a gap in Section 6: "Although these methods stabilize the accuracy of ICL on downstream tasks to a certain extent, they ignore the potential bias risks." This is a previously underexplored intersection.
+
+- **Comprehensive empirical scope**: Table 2 provides an 8-model × 4-method comparison across accuracy and three bias metrics (AvgGF, MaxTG, MaxFG), lending credibility to the generality of the findings across model families (LLaMA-2, OPT, GPT-J/neo).
+
+- **Null prompt methodology for isolating parameter-level bias**: Section 3.4 uses content-free prompts to measure native bias from LLM parameters alone. Figure 4 shows that OPT-6.7B's fear-label tendency is nearly identical for female and male under null prompts, while Figure 3 shows a dramatic spurious correlation in actual predictions (male sadness→fear at 0.54 vs. female at 0.08). This is a useful diagnostic technique.
+
+- **ReBE is well-motivated and compatible with existing methods**: The combination of prompt tuning (preserving ICL flexibility) with a bias-contrastive loss (targeting demographic-label spurious correlations) is a reasonable approach. Table 5 shows DPP+ReBE achieves the best results across all metrics compared to counterfactual and gender-balanced baselines while matching DPP's accuracy of 0.87.
+
+- **Detailed spurious correlation analysis**: Figure 3's per-demographic-group confusion matrices for OPT-6.7B provide interpretable evidence of specific spurious correlations (e.g., male→sadness misclassified as fear at 0.54), connecting abstract bias metrics to concrete model behaviors.
 
 ## Weaknesses
 
 ### Fatal
-None.
+None
 
 ### Major
 
-- **The "amplification" framing is misleading—the observed increase in maximum bias is better explained by increased variance than by systematic amplification.** Figure 2 simultaneously shows that mean bias *decreases* under ICL while maximum bias *increases* across most models. This pattern is exactly what is expected when ICL introduces an additional source of variance (the randomly selected prompt), which naturally widens the distribution—raising maxima and lowering minima—without shifting the underlying distribution. The paper's central claim ❷ ("example selection for ICL amplifies the biases of LLMs") would require evidence that the *entire* bias distribution shifts upward (e.g., via quantile comparisons or distributional tests), not merely that its extreme values increase. The observation that maximum bias increases is worth reporting as a worst-case fairness concern, but the "amplification" terminology implies a systematic upward shift that the evidence does not support. This is especially important because the paper itself uses the word "amplifies" in its title and first finding, making this the paper's core claim.
+- **The "amplification" claim is misleadingly framed — mean bias decreases while maximum bias increases, and the maximum-bias comparison is not controlled for the number of random configurations.** The paper's central claim that "example selection for ICL amplifies the biases of LLMs" (abstract, Section 1) is contradicted by its own data. Figure 2 (right column) shows that mean bias *decreases* under ICL compared to zero-shot across most models and metrics. The "amplification" refers solely to the maximum bias over random seeds. Section 3.3 acknowledges this ("although example selections reduce the mean bias value, the LLMs tested exhibit varying degrees of increase in the maximum gender or race bias value"), but the abstract and title frame this as "amplification" without qualification. Moreover, the paper never specifies how many random seeds are used for ICL vs. zero-shot. Since ICL introduces an additional source of randomness (which training examples are selected), there are naturally more random configurations for ICL than zero-shot, and the maximum of N samples is stochastically increasing in N. Without controlling for the number of random configurations, the maximum-bias increase could be partially explained as a statistical artifact rather than a genuine amplification mechanism. While the magnitude of some increases (e.g., OPT-6.7B MaxTG at 0.47) suggests a real effect beyond pure statistics, the lack of this control undermines the strength of the claim. The paper should frame this as "increases worst-case variance" rather than "amplifies biases."
 
-- **The causal attribution of spurious correlations to "example selection" is not established.** Section 3.4 concludes that "example selection contributes to spurious correlations" by showing that null (content-free) prompts produce similar fear-label tendencies for male and female (Figure 4), thereby excluding LLM parameters as the sole cause. However, this is a false dichotomy: the difference between ICL and null-prompt behavior could be caused by any aspect of the ICL prompt—including the general format/structure of in-context examples, the emotional content of examples, or the interaction between test inputs and the prompt template—rather than specifically by the *selection* of examples. To establish that example *selection* (as opposed to ICL itself) causes spurious correlations, one would need to show that the spurious correlation varies systematically with the *choice* of examples (e.g., comparing demographic-balanced vs. imbalanced prompts). No such analysis is presented. Claim ❸ is therefore overstated.
+- **The spurious correlation analysis does not isolate example selection from ICL itself.** Section 3.4 shows that (a) ICL produces spurious correlations (e.g., male→fear in OPT-6.7B) and (b) null prompts do not. But this comparison is between *any ICL* and *no ICL* — it cannot distinguish whether the *selection method* causes the spurious correlation versus the ICL mechanism itself. To establish that example *selection* is causally responsible, the paper would need to show that different selection strategies produce systematically different spurious correlations, or that certain selected sets are more prone to them. The current evidence only shows that ICL (as a whole) can produce spurious correlations not attributable to native model bias, which is a weaker claim than "example selection contributes to spurious correlations."
+
+- **ReBE increases maximum bias in several experimental settings, and these failure cases are not analyzed.** Table 3 shows multiple red subscripts (increased bias after debiasing): e.g., Perplexity/OPT-13B MaxFG +0.157, DPP/OPT-13B MaxFG +0.217, Random/GPT-neo-2.7B MaxTG +0.055. The MaxFG increase of +0.217 under DPP/OPT-13B is larger than many of the claimed reductions. The paper acknowledges these with red notation but provides no analysis of when or why ReBE fails, whether these failures are systematic, or what they imply about the method's reliability. A debiasing method that can substantially increase worst-case bias is a serious concern for a paper centered on mitigating worst-case bias amplification.
 
 ### Minor
 
-- **ReBE worsens bias for the Perplexity baseline in several metrics.** Table 3 shows that for Perplexity+ReBE, all average bias metrics increase for both GPT-J-6B (AvgGF: +0.024, MaxTG: +0.060, MaxFG: +0.079) and OPT-13B (AvgGF: +0.009, MaxTG: +0.019, MaxFG: +0.096). The paper states "the average gender bias of most LLMs decreases" (Section 5.1), which is technically accurate but the Perplexity failure is a meaningful limitation that deserves explicit discussion. For a method claiming compatibility with existing example selection methods, one failure out of four baselines is non-trivial.
+- **Selection on the dependent variable inflates ReBE's apparent effectiveness.** Section 5.1 states "we select the two LLMs with the largest AvgGF in each baseline" for debiasing evaluation. Testing ReBE precisely on the models with the most room for improvement inflates apparent effectiveness. While this is a reasonable design choice for demonstrating potential, it should be acknowledged as a limitation, and ideally, ReBE should also be evaluated on models with moderate baseline bias.
 
-- **The number of random seeds is not reported in the main text**, making it difficult to interpret the maximum-bias comparisons. If zero-shot and ICL conditions use different numbers of seeds, the maximum comparison is biased since more seeds yield higher maxima by chance. This information is critical for the paper's central claim but is deferred to the appendix (which is stripped from this version). Section 3.3 mentions "various random seeds" without specifying the count.
+- **The bias-contrastive loss formulation (Eq. 4) deviates from standard SupCon without sufficient justification.** P(i) = {j: y_j = y_i, s_j ≠ s_i} and A(i) = {k: y_k ≠ y_i, s_k = s_i} exclude same-label-same-demographic pairs from both sets and restrict the denominator to only A(i) rather than all non-anchor samples. This means the loss does not enforce similarity for same-label-same-demographic representations, potentially creating demographic-separated subspaces within the same label. The ablation in Table 4 confirms this concern: L_bias alone collapses accuracy to 26% (random for 4 classes), indicating severe representation distortion. While the combined ReBE loss works in practice, the design choices deserve more theoretical or empirical justification.
 
-- **Debiasing baselines are thin**: Only counterfactual context and gender-balanced context augmentation are compared against ReBE (Table 5). While the paper justifies excluding FCG (requires explicit feature vectors), other debiasing approaches (e.g., self-debiasing, representation-based interventions, instruction-based debiasing) could potentially be adapted. Two baselines provide limited context for assessing ReBE's effectiveness.
-
-- **The ablation reveals that ReBE's MaxFG Max (0.284) is worse than L_acc alone (0.250)** for GPT-J-6B (Table 4). This suggests the bias-aware embedding can actually increase certain bias measures compared to vanilla accuracy-driven training—a limitation that the paper does not discuss.
-
-- **GPT-3.5-Turbo paraphrasing could introduce its own biases into the EEC-paraphrase dataset** (Section 3.1). The paraphrasing model may systematically produce more "fear"-associated language for sentences with certain demographic markers. While the paper mentions quality validation in Appendix A, it is important to verify that the paraphrasing preserves demographic neutrality in emotional content, not just fluency.
+- **Debiasing baselines are limited to simple heuristics.** The paper compares with counterfactual context and gender-balanced context, which are straightforward augmentation strategies. While the paper argues there are no other ICL-specific debiasing methods, the debiasing literature includes representation-level interventions and self-debiasing approaches that could potentially be adapted. The limitation to simple baselines makes it hard to assess ReBE's relative contribution.
 
 ### Trivial
-None.
+None
 
 ## Nice-to-Haves
 
-- **Distributional comparison of zero-shot vs. ICL bias**: Plot full distributions (overlaid histograms or CDFs) of each bias metric across random seeds, or conduct quantile-based comparisons (e.g., 90th percentile) and distributional tests (KS test). This would resolve the variance-vs-amplification question and strengthen or revise the central claim.
-- **Vary prompt demographic composition to isolate example selection effects**: Compare prompts with balanced vs. imbalanced demographic compositions to test whether the choice of examples systematically affects spurious correlations, providing the missing causal evidence for claim ❸.
-- **Evaluate on additional tasks beyond sentiment classification** (e.g., NLI, QA) where demographic attributes are less explicitly cued, to test generalizability of findings.
+- Control for the number of random seeds when comparing max bias between ICL and zero-shot — run zero-shot with the same number of random configurations as ICL to isolate the genuine amplification effect from the statistical artifact of taking maxima over different sample sizes.
+- Compare different selection methods directly on spurious correlation patterns (e.g., show whether DPP vs. similarity vs. random produce systematically different confusion matrices), which would genuinely isolate the effect of *selection* from ICL.
+- Evaluate on tasks beyond sentiment classification (e.g., NLI, QA) to strengthen generality claims.
+- Analyze ReBE's failure cases — why does it increase MaxFG by +0.217 under DPP/OPT-13B?
 
 ## Removed Points
 
 *These points are flagged to be removed, treat them with caution.*
 
-- **"Finding ❶ is trivially true"**: While the observation that "high accuracy does not mean low bias" may seem intuitive, it is still useful to empirically demonstrate it in the ICL context, and prior work on example selection has implicitly assumed otherwise. Downgraded from a weakness to a minor observation.
-- **"A(i) definition creates degenerate training dynamics"**: The exclusion of same-label/same-demographic samples from the denominator of the contrastive loss (Equation 4, Section 4.3) is a deliberate design choice that focuses the contrastive signal on cross-demographic alignment and intra-demographic separation. Claiming this creates "degenerate training dynamics" is speculative and not supported by the actual training results.
-- **"L_bias alone drops accuracy to 0.26—shows the contrastive loss is too aggressive"**: This is exactly what the ablation is designed to show—that both loss components are necessary. It is not a weakness of the paper but a confirmation of the design rationale.
-- **"Parameter analysis is preliminary"**: The robustness claims about example order (Table 4, Section 5.4) are based on limited evidence, but this is an analysis section, not the core contribution. Not a significant weakness.
-- **"Semantic similarity evaluation procedure is underspecified"** (Section 3.2): The evaluation of LLM outputs via semantic similarity is a common approach in LLM evaluation. While a more detailed description would be helpful, this is a minor clarity concern.
-- **Strength finder's claim about "causal attribution of spurious correlations"**: This was listed as a strength but conflicts with the verified major weakness that the causal attribution is not established. Removed from strengths.
+- **"High accuracy does not mean low bias" is trivially true**: The harsh critic argues this is not a novel discovery. However, while the principle is well-established in fairness literature, the paper provides concrete empirical evidence (Figure 1) showing this in the ICL context, which is a useful contribution even if the principle itself is not novel. This is a fair observation but not a significant weakness.
+
+- **GPT-3.5-Turbo may introduce biases during paraphrasing**: While a valid methodological concern about dataset construction, this is speculative without evidence and the dataset is a supporting contribution, not the core claim. Moved to nice-to-have territory.
+
+- **AvgGF metric is unusual**: The paper uses multiple metrics including per-class metrics (MaxTG, MaxFG), and AvgGF has precedent in fairness literature. The choice is reasonable for the stated purpose of capturing overall group fairness.
+
+- **Reproducibility concerns about prompt tuning details**: The paper describes the prompt tuning methodology (Section 4.2) with sufficient detail, including virtual token construction, Gaussian noise, and training procedure. Minor implementation details are not a substantive weakness.
+
+- **No confidence intervals/statistical tests for most experiments**: While Figure 7 shows confidence intervals and Table 4 reports standard deviations, the lack of statistical tests across all experiments is a field-norm issue rather than a specific paper weakness.
+
+- **Formatting/typo complaints**: Removed per rules — these are parser artifacts.
+
+- **Missing related works / appendix references**: Cannot verify existence of specific related works; removed per rules.
 
 ## Novel Insights
 
-The paper identifies a genuine tension in ICL fairness: example selection methods that improve average accuracy and even improve average fairness can simultaneously worsen worst-case fairness outcomes. This "variance-amplification" effect, where the distribution of bias across random prompt seeds widens rather than shifts, is a practically important observation—even if the paper misframes it as systematic "amplification." The insight that mean and maximum bias can diverge under ICL raises questions about which fairness guarantee matters for deployment: average-case fairness or worst-case fairness.
+The null prompt methodology is the paper's most insightful contribution: by using content-free prompts to measure native parameter bias, and comparing against ICL-induced bias, the paper provides a clean diagnostic for distinguishing parameter-level from prompt-level bias sources. However, the insight is undercut by the failure to further decompose the prompt-level contribution into "example selection method" versus "ICL mechanism" effects. The most honest reading of the evidence is that ICL increases worst-case bias variance (some random prompts produce much worse bias than zero-shot) while reducing average bias — a finding that is practically important for deployment but fundamentally about variance, not amplification of the underlying bias.
 
 ## Suggestions
 
-- Reframe the central claim from "amplification" to "increased variance in bias" or "worse worst-case bias," and explicitly acknowledge that mean bias decreases. This would make the finding more accurate and arguably more actionable (worst-case fairness is a real concern regardless of whether it's a distributional shift or variance increase).
-- Add an explicit analysis varying the demographic composition of in-context examples to test whether spurious correlations change systematically—this would provide the missing causal evidence for whether example *selection* vs. ICL *format* is responsible.
-- Discuss the Perplexity+ReBE failure case transparently and investigate why ReBE is incompatible with this particular selection method.
-
-## Calibration
-
-**Anchors used:**
-
-| Paper | Avg Score | Comparison |
-|-------|-----------|-----------|
-| `/home/wg25r/review_agent/human_reviews/oZtt0pRnOl.md` | 8.0 (Accept poster) | Privacy-preserving ICL with demonstrations. Stronger methodological contribution with clear experimental design. Our paper has weaker causal claims. |
-| `/home/wg25r/review_agent/human_reviews/TlAdgeoDTo.md` | 7.25 (Accept spotlight) | First-person fairness in chatbots with large-scale evaluation and human validation. Stronger empirical backing and more careful claims. Our paper has a similar fairness topic but overclaims. |
-| `/home/wg25r/review_agent/human_reviews/7GKbQ1WT1C.md` | 5.25 (Accept poster) | Causality-guided debiasing via prompting. Similar topic (LLM debiasing, prompting-based solution), similar level of empirical evidence. Our paper is comparable but has more significant framing issues with "amplification." |
-| `/home/wg25r/review_agent/human_reviews/FEDnzAhIT4.md` | 5.75 (Reject) | Test-time fairness via out-of-context prompting. Similar fairness/debiasing in LLMs, also with modest baselines. Rejected despite reasonable contributions. |
-| `/home/wg25r/review_agent/human_reviews/KX5hd1RhYP.md` | 4.67 (Reject) | Shows ACR metric is misleading (max-vs-mean statistics concern). Analogous to our paper's max-bias-vs-mean-bias issue. This paper was more rigorous in its critique but still rejected. |
-| `/home/wg25r/review_agent/human_reviews/M7CblLwJB8.md` | 2.6 (Reject) | AutoCustomization: overclaimed "super-human" metric, weak evidence, poor scientific contribution. Our paper's overclaiming is less severe but follows a similar pattern. |
-
-The paper is in a similar niche to the 5.25–5.75 debiasing papers but has a more significant central claim problem (the "amplification" framing) that undermines its main finding. It's not as weak as the 2.6 paper (it has real empirical content and a reasonable method), but its core claim is not well-supported. The paper sits below the borderline debiasing papers because of the framing issue and incomplete causal analysis, but above the clearly weak papers.
+- Reframe the central claim from "amplification" to "increased worst-case bias variance" — this is both more accurate and arguably more actionable for practitioners concerned about deployment safety.
+- Add a direct comparison of spurious correlation patterns across different selection methods (Random vs. DPP vs. Similarity vs. Perplexity) to genuinely isolate the selection mechanism's contribution.
+- Investigate and report why ReBE increases maximum bias in certain settings (Table 3 red subscripts) — understanding failure modes is essential for a debiasing method's reliability.
+- Control the number of random configurations for ICL and zero-shot comparisons to rule out the statistical artifact explanation for maximum bias increases.
 
 ## Score and Decision
 
-**Originality**: Moderate. The question about ICL example selection and bias is novel, but the methodology (contrastive learning for debiasing, prompt tuning) is adapted from existing work.
+**Calibration anchors used:**
 
-**Importance of research question**: High. Fairness in ICL is practically important and underexplored.
+| Paper | Path | Avg Score | Comparison |
+|-------|------|-----------|------------|
+| Effective Theory of Bias Amplification | `/home/wg25r/review_agent/human_reviews/VoI4d6uhdr.md` | 7.0 | This paper has rigorous theoretical grounding for bias amplification claims; the current paper has weaker claim substantiation and less rigorous methodology |
+| CEB Compositional Evaluation Benchmark | `/home/wg25r/review_agent/human_reviews/IUmj2dw5se.md` | 7.5 | Comprehensive standardized benchmark with broad coverage; the current paper has narrower scope and less methodological rigor |
+| First-Person Fairness in Chatbots | `/home/wg25r/review_agent/human_reviews/TlAdgeoDTo.md` | 7.25 | Large-scale real-world evaluation; the current paper has smaller-scale experiments and overclaimed findings |
+| Prompting Fairness: Causality-Guided Debiasing | `/home/wg25r/review_agent/human_reviews/7GKbQ1WT1C.md` | 5.25 | Similar topic (LLM debiasing via prompting); the current paper shares similar weaknesses (limited baselines) but also has misleading claim framing |
+| Topology Matters in Fair Graph Learning | `/home/wg25r/review_agent/human_reviews/lpyxWITF2c.md` | 4.33 | Gaps between claims and results, self-evident findings; the current paper has similar overclaimed findings but a more important research question |
+| Balancing the Picture: Debiasing VLMs | `/home/wg25r/review_agent/human_reviews/FwdnG0xR02.md` | 4.67 | Limited scope and unsubstantiated generalization; the current paper has analogous issues with its "amplification" claim |
+| FairLoRA | `/home/wg25r/review_agent/human_reviews/pB3KeBCnQs.md` | 4.67 | Overclaimed novelty, limited evaluation; the current paper also overclaims but on a more novel problem |
+| Neural Sandbox Framework | `/home/wg25r/review_agent/human_reviews/1tDoI2WBGE.md` | 2.0 | Unclear relevance, insufficient experiments; the current paper is clearly stronger with real empirical evidence |
+| AutoCustomization | `/home/wg25r/review_agent/human_reviews/M7CblLwJB8.md` | 2.6 | Selective finetuning; the current paper is clearly above this level |
+| SkewSize Metric | `/home/wg25r/review_agent/human_reviews/AKZtQO81GQ.md` | 6.0 | Novel metric with novelty concerns; the current paper has weaker methodology but addresses a more practical problem |
 
-**Claims well-supported**: Weak. The central "amplification" claim is misleading, and the causal attribution to example selection is not established.
+The paper is below the high-scoring anchors (7+) due to misleading claim framing and unanalyzed failure cases. It is comparable to or slightly above the rejected medium-range anchors (4.33-4.67) because it addresses a more novel and important problem. It is above the Prompting Fairness paper (5.25) in problem importance but below it in methodological rigor. The paper's core finding about worst-case bias is genuinely valuable, but the misleading "amplification" framing, the uncontrolled random-seed comparison, and the unanalyzed ReBE failures are significant enough to place it in the borderline-reject range.
 
-**Soundness of experiments**: Moderate. Eight models and four selection methods provide breadth, but distributional analyses are missing and the Perplexity failure case is not addressed.
+**Evaluation axes:**
+- **Originality**: Moderate — the problem is novel and important, but individual findings are less surprising than claimed
+- **Importance of research question**: High — ICL bias from example selection is practically important
+- **Claims well supported**: Weak — the central "amplification" claim is misleadingly framed and not well-controlled
+- **Soundness of experiments**: Moderate — comprehensive in scope but with methodological gaps (uncontrolled seed counts, unanalyzed failures)
+- **Clarity of writing**: Moderate — the paper is readable but the framing obscures the actual findings
+- **Value to research community**: Moderate — the null prompt methodology and worst-case bias finding are valuable, but the overclaimed framing could mislead
 
-**Clarity**: Moderate. Claims are stated with more certainty than the evidence supports.
-
-**Value to community**: Moderate. The empirical observations about max/mean bias divergence and spurious correlations are useful, even if the interpretation needs revision.
-
-MY FINAL SCORE: <pineapple>4.5</pineapple>
+MY FINAL SCORE: <pineapple>5.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

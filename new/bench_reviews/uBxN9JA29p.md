@@ -1,29 +1,14 @@
-Good — confirmed. SoloPose trained only on Human3.6M gets 38.9 MPJPE, while FinePOSE with CPN gets 31.9, KTPFormer with CPN gets 33.0. The harsh critic's claim is verified: under equal training data conditions, SoloPose underperforms FinePOSE and KTPFormer.
-
-Now let me also verify the paper's own claims about its H3.6M-only performance (section 5.4.2 claims it's 3.9% lower than "the two SOTA methods" — but which two?):
-
-The paper says: "Our results of MPJPE and P-MPJPE are still 3.9% and 5.9% lower than the two SOTA methods on the Human3.6M testing dataset." Looking at the table:
-- SoloPose only on H3.6M: MPJPE 38.9, P-MPJPE 29.9
-- P-STMO w/ CPN: MPJPE 42.1, P-MPJPE 34.4
-- STCFormer w/ CPN: MPJPE 40.5, P-MPJPE 31.8
-
-So 38.9 is indeed lower than 42.1 (P-STMO) and 40.5 (STCFormer). The paper compares against "the two SOTA methods" P-STMO and STCFormer — but NOT against FinePOSE (31.9) or KTPFormer (33.0), which are the actual top-performing methods. This is cherry-picking the baseline. The harsh critic is right to flag this.
-
-Now I have everything needed to write the final consolidated review.
-
 ## Summary
 
-SoloPose introduces a one-stage, many-to-many spatio-temporal transformer for 3D human pose estimation from monocular video, supported by two additional contributions: HeatPose (a GMM-based 3D heatmap encoding kinematic adjacency between keypoints) and the 3D AugMotion Toolkit (a coordinate-unification methodology for merging four existing pose datasets into a combined Human7.1M dataset). The paper reports strong results on both the augmented Human7.1M and standard Human3.6M benchmarks.
+SoloPose proposes a one-stage, many-to-many spatio-temporal transformer for 3D human pose estimation from monocular video, supported by two additional contributions: the AugMotion Toolkit for merging multiple 3D pose datasets into a universal coordinate system (yielding Human7.1M), and HeatPose, a kinematically-aware 3D GMM heatmap representation. The paper reports state-of-the-art MPJPE on both Human3.6M and Human7.1M testing sets.
 
 ## Strengths
 
-- **One-stage many-to-many architecture is a genuine conceptual advance over prior two-stage many-to-one paradigms.** Table 1 clearly shows SoloPose uniquely combines video input, one-stage processing, many-to-many output, data augmentation, and heatmap representation. This eliminates explicit dependency on 2D detector quality and avoids neglecting boundary frames (§1, §2.1.1).
+- **AugMotion Toolkit addresses a real and important problem**: Merging multiple 3D pose datasets with incompatible coordinate systems is a practical challenge. The pipeline of key-frame selection (k-means), universal coordinate definition via anatomical landmarks (Sec 3.2), and Kabsch alignment (Sec 3.3) is a reasonable engineering solution. The ablation in Table 2 quantifies its impact: removing AugMotion increases MPJPE by 12.9 on Human3.6M testing, confirming data augmentation as the largest contributor to performance.
 
-- **HeatPose kinematic GMM formulation is a principled way to inject skeletal priors.** Equations 6–8 model adjacent keypoints' probabilistic influence on a target keypoint using transitional Gaussian distributions with variance increasing as i²·σ_main (Eq. 7). The ablation shows removing HeatPose degrades MPJPE by 15.3% on Human3.6M (Table 2, §5.4.1), confirming it provides meaningful gains.
+- **HeatPose is a conceptually sound idea**: Incorporating kinematically adjacent keypoints as side Gaussian distributions in the heatmap target (Sec 4.2, Eq. 6–8) provides richer gradient signal. Table 2 shows removing HeatPose increases MPJPE by 4.7 on Human3.6M testing, demonstrating a measurable improvement.
 
-- **The AugMotion Toolkit addresses a real and underexplored problem.** Figure 1 concretely demonstrates coordinate misalignment in Human3.6M's global coordinate system, and the Kabsch-algorithm-based methodology (§3.3, Eqs. 2–4) provides a principled approach to unifying coordinate systems across datasets. The ablation confirms data augmentation is the single largest contributor to performance (Table 2: +12.9 MPJPE when removed vs. +4.7 for HeatPose).
-
-- **The paper is transparent about the GT comparison protocol.** Section 5.3 explicitly acknowledges that providing GT 2D input to two-stage methods is "an unfair advantage," and the paper correctly focuses its SOTA claims on CPN-input comparisons.
+- **The paper transparently includes the "SoloPose only trained on Human3.6M" ablation** (Table 2, 38.9 MPJPE), which allows readers to assess the model's standalone contribution separate from the data advantage—though the paper does not honestly interpret this result (see Weaknesses).
 
 ## Weaknesses
 
@@ -33,81 +18,81 @@ None.
 
 ### Major
 
-- **The headline "superior results over SOTA" claim conflates architectural contribution with training data advantage.** SoloPose is trained on Human7.1M (4 combined datasets); all baselines are trained only on Human3.6M. The paper's own ablation in Table 2 reveals that SoloPose trained only on Human3.6M achieves 38.9 MPJPE on Human3.6M testing, which is *worse* than FinePOSE with CPN (31.9) and KTPFormer with CPN (33.0). The architecture alone is not state-of-the-art under equal training data conditions. Furthermore, §5.4.2 cherry-picks the weaker baselines (P-STMO at 42.1, STCFormer at 40.5) to claim "3.9% lower than the two SOTA methods" — but omits FinePOSE and KTPFormer, the actual best performers. This framing obscures the fact that the performance advantage comes primarily from the augmented training data, not the architecture. The paper's own ablation honestly finds "our data quality improvement makes the biggest contribution for the results" (§5.4.1), but the abstract and conclusion still frame it as SoloPose demonstrating "superior results" and "improved performance over existing SOTA models." This overclaiming is a significant issue because it misattributes the source of the improvement.
+- **The central claim of "superior results" is confounded by training data**: SoloPose is trained on Human7.1M (four datasets combined), while all baselines (P-STMO, STCFormer, KTPFormer, FinePOSE) are trained only on Human3.6M. The paper's own ablation reveals that SoloPose trained on Human3.6M alone achieves 38.9 MPJPE on Human3.6M testing, which is **substantially worse** than FinePOSE w/ CPN (31.9) and KTPFormer w/ CPN (33.0). The headline numbers (26.0 MPJPE on H3.6M, 22.7 on Human7.1M) are primarily the product of training on 4–5× more data, not of a superior architecture. Without training baselines on Human7.1M as well, or comparing under matched training conditions, the claim of model superiority is unsupported.
 
-- **The HeatPose ablation confounds representation design with loss function change.** The "SoloPose w/o HeatPose" ablation (§5.4.1, Table 2) removes *both* the GMM-based kinematic heatmap representation *and* the cross-entropy loss, replacing them with a conventional heatmap and MSE loss. The 15.3% MPJPE improvement therefore cannot be attributed solely to the kinematic GMM modeling — part (or most) of this gain may come from switching from MSE to cross-entropy, which the paper itself notes "avoids non-convex problems" (§4.2). Without an ablation that uses cross-entropy loss with a standard single-Gaussian heatmap (i.e., keeping the loss change but removing kinematic side distributions), it is impossible to determine whether the kinematic adjacency modeling contributes meaningfully beyond the loss function switch.
+- **The ablation discussion in Section 5.4.2 cherry-picks baselines**: The paper states "Our results of MPJPE and P-MPJPE are still 3.9% and 5.9% lower than the two SOTA methods on the Human3.6M testing dataset," comparing SoloPose-H3.6M (38.9) only against P-STMO (42.1) and STCFormer (40.5)—the two weakest baselines. It omits KTPFormer (33.0) and FinePOSE (31.9), against which SoloPose-H3.6M loses by a large margin. This selective comparison misrepresents the model's standalone performance.
+
+- **Human7.1M testing comparison is inherently unfair to baselines**: Table 2 reports SoloPose at 22.7 MPJPE vs. FinePOSE w/ GT at 26.1 on Human7.1M testing, but baselines were never trained on data from this distribution (which includes MADS, AIST Dance++, and MPI INF 3DHP). Testing models on a distribution they were never trained on while the proposed model was does not constitute a valid benchmark. These numbers cannot support claims about model quality.
 
 ### Minor
 
-- **No evaluation of AugMotion alignment quality.** The Kabsch algorithm minimizes RMSD between reference keypoints (shoulders, pubis), but the alignment accuracy is never quantitatively verified. Reference keypoints in marker-free datasets like AIST Dance++ may be noisy, the key frame selection via k-means (§3.1) is not validated, and the fixed reference coordinates (−1,0,3), (1,0,3), (0,0,0.5) are derived from averages over all datasets — which collapses body proportion variation and may be a compromise fit for all subjects. Without reprojection error or visual inspection of aligned skeletons, there is no evidence that Human7.1M has higher-quality ground truth than the sum of its parts.
+- **HeatPose ablation confounds representation and loss function**: Section 5.4.1 removes HeatPose and simultaneously switches from cross-entropy to MSE loss. The 4.7 MPJPE improvement may come from the GMM structure, the cross-entropy loss, or both. A proper ablation would isolate each factor independently.
 
-- **No computational cost comparison despite repeated claims of "efficiency" and "cost-efficiency."** The abstract and §1 claim two-stage models are "inefficient" while SoloPose is "cost-efficient," but no FLOPs, parameter counts, or inference times are provided. SoloPose uses a CLIP backbone (pretrained on ~400M image-text pairs) plus a temporal transformer, so its computational cost may be substantial. This gap between claim and evidence weakens the efficiency narrative.
+- **"Cost-efficient" claim is unsupported**: The paper introduces SoloPose as a "cost-efficient" model (line 47) but reports no computational metrics (FLOPs, parameters, inference time). Without these, the efficiency claim cannot be evaluated. This is especially relevant because SoloPose uses a frozen CLIP model (a large pre-trained network) as its spatial backbone.
 
-- **SoloPose uses N=30 frames while baselines use N=243 frames — this discrepancy is never discussed.** More input frames generally help temporal models. It is unclear whether the baselines would perform better or worse with 30 frames, or whether SoloPose would benefit from more frames. This is a confound that the paper does not address.
+- **The "avoids non-convex problems" claim for cross-entropy loss is incorrect**: Section 4.2 states that "using a cross-entropy loss function methodology avoids non-convex problems." Cross-entropy over a discretized 3D volume with GMM targets is not convex; this claim is misleading.
+
+- **The one-stage advantage is asserted but not empirically demonstrated**: The paper argues that two-stage methods "pass on first stage errors," but SoloPose itself relies on frozen CLIP features—a pre-trained upstream module. No experiment isolates the benefit of one-stage processing (e.g., comparing SoloPose with a 2D detector upstream vs. CLIP, or analyzing how CLIP feature noise affects downstream performance).
 
 ### Trivial
 
-- The heatmap volume dimensions w×h×d are not specified (§4.2), which affects spatial resolution understanding but not the core results.
-- The specific CLIP model variant used (§4.1) is unspecified, which affects reproducibility of feature quality but is a standard practice when using pretrained models.
+- The universal coordinate system definition uses average body proportions (Eq. 1), which could introduce systematic scaling errors for individuals whose proportions differ significantly from the mean. This limitation is not acknowledged.
 
 ## Nice-to-Haves
 
-- An ablation isolating cross-entropy loss from kinematic GMM modeling (e.g., cross-entropy with single-Gaussian heatmap) would definitively validate HeatPose's core contribution.
-- Training FinePOSE or KTPFormer on Human7.1M data to establish whether the data augmentation alone can close the gap with SoloPose.
-- Quantitative alignment quality metrics for AugMotion (e.g., per-joint reprojection error before/after alignment).
-- A many-to-one variant of SoloPose (predicting only the center frame) to validate the many-to-many advantage claim.
+- Train existing baselines (especially FinePOSE, KTPFormer) on Human7.1M and compare—this would isolate the architectural contribution from the data contribution and substantially strengthen (or clarify) the paper's claims.
+- Report computational cost metrics (FLOPs, parameters, inference time) to support the "cost-efficient" framing.
+- Test on in-the-wild images/videos to support the motivation about real-world applications.
+- Disentangle the HeatPose ablation by testing: (a) standard heatmap + cross-entropy, (b) HeatPose + MSE, (c) HeatPose + cross-entropy.
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution:
+These points are flagged to be removed, treat them with caution.
 
-- **"One-stage vs. two-stage is apples-to-oranges comparison" (Harsh Critic Point 2):** The harsh critic argues that comparing a one-stage method (raw video + CLIP) with two-stage methods (2D keypoints as input) is fundamentally unfair. However, this *is* the point of the paper — proving that a one-stage approach can avoid the error propagation of 2D detectors and still achieve competitive or better accuracy. The paper is transparent about this distinction (§5.3), and the comparison against CPN-input results is the standard protocol in the field. The GT-input comparison is included only as reference. The paradigm difference is the motivation, not a flaw. WEAKENED — this is more of a scope distinction than a weakness, and the paper addresses it reasonably.
-
-- **"Many-to-many advantage is never experimentally validated" (Harsh Critic):** This is a valid suggestion for future work but not a weakness that undermines current claims. The paper does not rest its core claims on many-to-many being superior to many-to-one. It is presented as a design choice. Moved to Nice-to-Have.
-
-- **"CLIP can also produce erroneous features, so error propagation isn't eliminated" (Harsh Critic Point 2):** True in principle, but this is a generic argument that applies to any feature extractor. The paper's claim is that one-stage avoids *explicit* error propagation from a separate 2D detector, which is accurate. This is too generic to count as a substantive weakness.
-
-- **"SoloPose cannot be run with GT input to disentangle 2D vs. 3D quality" (Harsh Critic):** This is an inherent limitation of the one-stage paradigm, not an error in the paper. The paper already compares against baselines with CPN input for fairness. Not a substantive criticism.
-
-- **"No standard deviations reported" (Harsh Critic):** Single-run evaluation is standard practice in pose estimation papers. Removed as a nitpick about reproducibility conventions.
-
-- **"N=30 frame choice not experimentally justified" (Harsh Critic):** The paper states it is "based on the experiments" (§4.1). While showing the experiment would be better, this is a minor detail. Moved to Minor.
-
-- **"3D relative position embedding under-specified" (Harsh Critic):** The Swin-style 3D relative position bias is well-defined in Eq. 5 and standard in the Swin Transformer literature. Not a meaningful criticism.
-
-- **"Missing efficiency comparison" already captured above as Minor weakness.** The harsh critic makes this sound more severe than it is — the efficiency claim in the abstract is vague and the lack of numbers is a minor gap, not a fatal flaw.
-
-- **MSE to cross-entropy confound is already captured as Major weakness.** The harsh critic presents it as a "fundamental attribution problem"; while valid, it does not invalidate the existence of some contribution — it just means the specific attribution is unclear. Ranked as Major rather than Fatal.
+- **"SoloPose outperforms all two-stage methods even with GT input" (Strength Finder)**: This is based on the Human7.1M testing comparison where baselines were never trained on that distribution. It is an unfair comparison and cannot be claimed as a strength.
+- **Missing hyperparameters (constant c, volume dimensions w×h×d, CLIP variant, Swin configuration, learning rate, training schedule)**: These are reproducibility nitpicks about implementation details impractical to fully include in a submission. Per the rules, these are removed.
+- **No variance/std reported, no statistical significance tests**: Large-scale benchmark evaluation in this field typically reports single-run results; demanding confidence intervals is not standard practice.
+- **N=30 vs N=243 frames confounds the comparison**: This is a design choice difference, not an unfair advantage. SoloPose uses fewer frames; if anything, this makes the comparison harder for SoloPose, not easier. The harsh critic's framing of this as a confound that hurts the comparison is inverted.
+- **Human3.6M coordinate system misunderstanding (Figure 1)**: The harsh critic suggests Figure 1 may reflect the authors' incorrect data processing rather than an inherent dataset flaw. This is speculative and cannot be verified from the paper alone; the authors may have legitimate reasons for their observation.
+- **Formatting/style issues**: Removed per rules.
+- **Missing related works**: Cannot verify existence; removed per rules.
 
 ## Novel Insights
 
-The paper reveals a somewhat counter-intuitive finding: that simply combining diverse 3D pose datasets with coordinate system standardization provides a dramatically larger performance gain (12.9 MPJPE improvement) than architectural innovations like kinematically-aware heatmaps (4.7 MPJPE improvement). This suggests that the 3D pose estimation community may be underinvesting in data quality and diversity relative to model architecture design. However, the paper fails to fully embrace this finding, burying it in the ablation while continuing to frame the architectural contributions as primary.
+The paper's most revealing finding is an accidental one: the ablation in Table 2 functions as a natural experiment showing that data scaling (via AugMotion) contributes roughly 2.7× more to performance reduction than the architectural innovation (HeatPose). This quantifies what many in the community suspect—that data quality and diversity often dominate architectural choices in 3D pose estimation. A more honest framing around this finding, rather than overclaiming model superiority, would have strengthened the paper considerably.
 
 ## Suggestions
 
-- **Retitle the contribution hierarchy**: Center Human7.1M/AugMotion as the primary contribution (since the ablation shows it is), and present SoloPose + HeatPose as complementary architectural innovations that are validated *given* the augmented training data. This would align the paper's framing with its own evidence.
+- **Most important**: Re-run FinePOSE and KTPFormer (the strongest baselines) on Human7.1M training data. If these baselines also improve substantially, it confirms data is the main driver. If SoloPose still wins under matched training data, the architectural claim becomes credible.
+- Re-frame the contribution: center the paper on the AugMotion Toolkit as the primary contribution (since the ablation shows it is), and present SoloPose as a model designed to leverage this augmented data.
+- Fix the misleading statement in Section 5.4.2 to acknowledge that SoloPose-H3.6M does not beat the strongest baselines (KTPFormer, FinePOSE).
+- Remove or soften the "cost-efficient" claim until computational metrics are provided.
 
-- **Add a HeatPose isolation ablation**: Train SoloPose with cross-entropy loss on a standard single-Gaussian heatmap (no kinematic side distributions). If the gain persists, the loss function is the main driver; if it drops, the kinematic structure is validated. This single experiment would resolve the major attribution concern.
+## Evaluation
 
-- **Provide at least one quantitative alignment quality measure** for AugMotion (e.g., compare per-joint error before/after coordinate unification on a held-out subset with known camera parameters).
+**Originality**: Limited. SoloPose's architecture is a straightforward combination of frozen CLIP + Swin transformer blocks with 3D relative position embeddings. HeatPose (kinematically-aware GMM heatmap) is the most novel component but is incremental. AugMotion is engineering rather than scientific novelty.
 
-## Score and Decision
+**Importance of research question**: Moderate. 3D human pose estimation and dataset diversity are important problems, but the paper's approach does not convincingly advance the state of the art on the model side.
 
-**Calibration anchors:**
+**Claims well supported**: No. The central claim of "superior results" is confounded by training data differences. Under fair comparison, the model underperforms the best baselines.
 
-| Paper | Path | Avg Score | Comparison |
-|-------|------|-----------|------------|
-| PF-LRM (pose-free LRM) | noe76eRcPC | 8.0 | High anchor: Strong architecture + scaling; clean ablations; honest evaluation. SoloPose is well below this — confounded ablation, overclaimed SOTA, cherry-picked baselines. |
-| SEAL-Pose | KRqMfdwQaP | 3.5 | Low anchor: 3D HPE topic but incomplete paper, missing SOTA comparison. SoloPose is notably better — it has real experiments, valid architectural ideas, and honest ablation that reveals data contribution. |
-| 3D Compositional Models (scaling) | waGoVEQvT9 | 4.75 | Medium-low anchor: Confounded augmentation vs. architecture attribution, unfair comparisons, small improvements. Quite similar weaknesses to SoloPose. |
-| UniPose (unified keypoint) | v2J205zwlu | 5.0 | Medium anchor: Multi-dataset unification for pose, alignment challenges. SoloPose is comparable in quality — both unify datasets, both have alignment validation gaps. |
-| CAReNet (overclaimed SOTA) | MiMxv6ijvC | 2.5 | Low anchor: Overclaimed SOTA, no architectural novelty. SoloPose is better — it has genuine novelty in HeatPose and AugMotion, even if attribution is muddled. |
-| YOLOv6 (unfair training advantage) | 7c3ZOKGQ6s | 3.0 | Low anchor: SOTA claims driven by unfair training time advantage. SoloPose's data advantage is similar but more justifiable (new data ≠ just more compute). SoloPose is better. |
-| 8XgCH1ZLOI (augmentation vs architecture confound) | STxmh1ZLOI | 5.33 | Medium anchor: Augmentation vs architecture not separated, "hyperparameter tuning" criticism. Very similar to SoloPose's core weakness. |
+**Soundness of experiments**: Weak. The main comparison is unfair (different training data), the Human7.1M testing comparison is invalid for baselines, the ablation discussion cherry-picks baselines, and the HeatPose ablation confounds two variables.
 
-The paper sits in a similar weakness profile to the medium-scoring anchors (4.75–5.33 range): genuine novel ideas (AugMotion, HeatPose, one-stage many-to-many) but with significant overclaims and confounded attributions. It is clearly better than the low anchors (CAReNet at 2.5, YOLOv6 at 3.0) because it has real architectural novelty and honest ablation results that inadvertently reveal the truth. It falls well below the high anchor (8.0) because of the confounded ablation, cherry-picked baselines in the H3.6M-only comparison, and overclaimed framing. The AugMotion toolkit and Human7.1M dataset are valuable community contributions even with imperfect validation.
+**Clarity of writing**: Adequate. The paper is generally readable but makes several unsupported or incorrect claims (cost-efficient, avoids non-convex problems, superior results).
 
-Score: 4.5 — the overclaims on SOTA are significant (especially the cherry-picking in §5.4.2 and the abstract framing), and the HeatPose attribution is unresolved. However, the underlying contributions (one-stage many-to-many design, AugMotion toolkit, HeatPose concept) are genuine and the paper's own ablations honestly reveal the relative importance of each component. With reframing to align claims with evidence, this could be a solid paper.
+**Value to community**: Moderate potential. The AugMotion Toolkit could be useful if released, and HeatPose is a reasonable idea. But the evaluation problems undermine confidence in the reported results.
 
-MY FINAL SCORE: <pineapple>4.5</pineapple>
+## Calibration
+
+Anchors used:
+- **V-JEPA** (`/home/wg25r/review_agent/human_reviews/WFYbBOEOtv.md`, avg 4.0, Reject): Trained on more data than baselines, making fair comparison impossible. Very similar unfair-comparison pattern to SoloPose. SoloPose has a similar level of overclaiming but with a more legitimate toolkit contribution.
+- **LC-PCFG** (`/home/wg25r/review_agent/human_reviews/63r6HyqyRm.md`, avg 2.33, Reject): Imports billions of extra training data from LLM, making comparison unfair. More severe than SoloPose since the "contribution" is essentially just using an LLM.
+- **PF-LRM** (`/home/wg25r/review_agent/human_reviews/noe76eRcPC.md`, avg 8.0, Accept spotlight): Strong method with potential data confounding but overall solid evaluation. Far above SoloPose in methodology and fairness.
+- **WiMTR** (`/home/wg25r/review_agent/human_reviews/q3WzT2mrhB.md`, avg 4.0, Reject): Results cannot be compared to SOTA due to dataset differences. Similar fairness issue.
+- **UniPose** (`/home/wg25r/review_agent/human_reviews/v2J205zwlu.md`, avg 5.0, Reject): Dataset-merging for pose estimation with some methodological issues. SoloPose has a more serious overclaiming problem.
+- **Real3D** (`/home/wg25r/review_agent/human_reviews/Ffuw2ryqpz.md`, avg 5.0, Withdrawn): Potentially unfair comparison from more fine-tuning data, but the method has genuine architectural novelty.
+
+SoloPose sits between the 2.33 (LC-PCFG) and 5.0 (UniPose/Real3D) anchors. It has real contributions (AugMotion toolkit, HeatPose) that LC-PCFG lacks, but its overclaiming is more severe than UniPose's. The unfair comparison is the dominant issue, similar to V-JEPA (4.0). I place SoloPose slightly below V-JEPA because V-JEPA at least has more methodological novelty in applying JEPA to video, while SoloPose's architecture is a straightforward combination of existing components.
+
+MY FINAL SCORE: <pineapple>3.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

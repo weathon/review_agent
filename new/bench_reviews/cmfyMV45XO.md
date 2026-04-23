@@ -1,107 +1,90 @@
-Now let me write the final review.
-
 ## Summary
 
-This paper proposes feedback neural networks that incorporate a real-time state feedback loop into neural ODEs to correct learned latent dynamics and improve generalization. A linear feedback mechanism (structured as a Luenberger-like observer) is first presented with convergence guarantees (Theorem 1), then extended to a learnable nonlinear feedback form trained via domain randomization while freezing the base neural ODE, yielding a two-DOF architecture that preserves nominal-task accuracy. The method is evaluated on spiral trajectory prediction, irregular bottle trajectory prediction, and quadrotor MPC under parametric uncertainties and disturbances.
+The paper proposes feedback neural networks, which augment neural ODEs with an observer-based feedback loop that uses real-time state prediction errors to correct the learned latent dynamics. A linear feedback form with convergence guarantee (Theorem 1) is introduced first, followed by a nonlinear neural feedback learned via domain randomization within a "two-DOF" framework that freezes the pre-trained neural ODE and trains only the feedback module. Experiments include a spiral toy example, trajectory prediction of an irregular bottle, and model predictive control of a quadrotor under compound uncertainties.
 
 ## Strengths
 
-- **The two-DOF training framework (freeze f_neural, train h_neural separately via domain randomization) is a clean and practically effective design.** Figure 6 directly validates that this approach preserves nominal-task accuracy (6(b) matches Figure 5(c)) while naive full-model domain randomization degrades it (6(a)), circumventing the classic robustness–accuracy tradeoff. This is the paper's strongest contribution.
+- **Principled observer-based correction for neural ODEs**: The idea of using the tracking error between observer and true state to reveal and correct model mismatch is well-grounded in control theory (Luenberger observers) and novel in its application to neural ODE generalization. Eq. 7 provides a clean, interpretable mechanism: $\hat{f}_{neural}(t) = f_{neural}(t) + \mathbf{L}(\mathbf{x}(t) - \hat{\mathbf{x}}(t))$.
 
-- **Convergence guarantee (Theorem 1) provides formal bounds for the linear feedback form.** The error dynamics $\dot{\tilde{x}}(t) = -L\tilde{x}(t) + \Delta f(t)$ and its bounded convergence sets $B_1$ and $B_2$ give principled guidance on gain selection, which is more than most neural-ODE generalization methods offer.
+- **Convergence guarantee for the linear feedback form**: Theorem 1 proves that under Assumption 1 (bounded residual $\|\Delta f(t)\| \leq \gamma$), the observation error and its derivative exponentially converge to bounded sets whose size is regulated by feedback gain $\mathbf{L}$, with explicit bounds $\|\tilde{\mathbf{x}}(t)\| \leq \gamma/\lambda_m(\mathbf{L})$.
 
-- **Substantial empirical improvement on quadrotor MPC.** Under 37.6% mass uncertainty, 40% inertia uncertainty, and 0.3N disturbances (Figure 9), FNN-MPC achieves RMSE of 0.093m vs. 0.151m for the next-best adaptive method (AdapNN-MPC), a 38.4% improvement. This demonstrates real-world applicability beyond synthetic benchmarks.
+- **Two-DOF framework demonstrably preserves nominal-task accuracy**: Figure 6 directly shows that domain randomization applied to the entire neural ODE degrades nominal performance (Fig. 6a), while freezing the pre-trained model and training only the feedback part maintains the original accuracy (Fig. 6b) while enabling generalization to randomized cases (Appendix Fig. S10).
 
-- **Gain decay strategy (Eq. 11) addresses noise amplification in cascaded multi-step prediction.** Figure 5(g) provides concrete evidence that the exponential decay mitigates error accumulation, giving a practical solution to a real engineering problem.
+- **Substantial empirical improvement on quadrotor MPC under real-world uncertainties**: FNN-MPC achieves RMSE of 0.093m under 37.6% mass uncertainty, 40% inertia uncertainty, 14.3–25% drag coefficient uncertainty, and 0.3N disturbances — a 44% reduction over Neural-MPC (0.167m) and 38% over AdapNN-MPC (0.151m) (Figure 9). In this MPC setting, all methods have access to the current state at each receding-horizon step, making the comparison relatively fair.
+
+- **Systematic ablation linking theory to practice**: Figure 4's heatmap of prediction errors across feedback gain levels and uncertainty levels empirically validates Theorem 1's prediction that error decreases with gain up to a noise-amplification threshold.
 
 ## Weaknesses
 
 ### Fatal
-
 None.
 
 ### Major
 
-- **Missing observer baseline with equivalent information access makes it impossible to attribute improvement to the specific feedback architecture rather than to measurement access.** The core mechanism in Eq. (7), $\hat{f}_{neural}(t) = f_{neural}(t) + L(x(t) - \hat{x}(t))$, is structurally equivalent to a Luenberger observer — the paper itself cites Luenberger observers as inspiration (Sections 1 and 3.1). The baselines (Neural ODE, model-based methods in §5.1; Nomi-MPC, Neural-MPC in §5.2) do not exploit real-time state measurements. Without comparing against a standard observer (e.g., EKF or Luenberger observer applied to the same Neural ODE model), the paper cannot distinguish whether the performance gain comes from the feedback *architecture* or simply from *having access to real-time measurements*. The paper includes "FB-MPC" (feedback on nominal model), which partially addresses this, but a comparison where the Neural ODE baseline is augmented with a standard observer is the critical missing experiment. This directly impacts the core claim that the *proposed architecture* drives generalization improvement.
+- **Theorem 1 does not cover the cascaded multi-step prediction used in all experiments.** Theorem 1's convergence guarantee assumes the feedback term has access to the true state $\mathbf{x}(t)$ (the error dynamics in Eq. 9 derive from substituting the true dynamics Eq. 1 into Eq. 7). However, in the cascaded multi-step prediction (Section 3.3, Figure 3), only the first layer receives the true state; subsequent layers use *predicted* states as the input to the feedback term. The paper acknowledges this partially on line 127: "the convergence of $\hat{f}(t)$ can only be guaranteed as current $t$," but the assertion that "the prediction error will converge from top to bottom in order" (line 129) is made without proof or formal analysis. Since the multi-step cascaded prediction is the primary evaluation protocol across all experiments (Figures 5, 7, 9), this theory-experiment gap is significant. Even a bound on error accumulation in the cascaded setting would substantially strengthen the paper.
 
-- **Multi-step prediction is underspecified about how feedback operates beyond the first step when ground-truth states are unavailable.** Section 3.3 describes cascaded one-step prediction (Figure 3): the output of layer $i$ becomes the input of layer $i+1$. After the first step, the true state $x(t)$ is unavailable. The paper does not explicitly specify how $x(t_i) - \hat{x}(t_i)$ is computed for layers $i > 0$. If the predicted state from the previous layer is used as $x(t_i)$, then both $x(t_i)$ and $\hat{x}(t_i)$ derive from the same prediction chain, making their difference near-zero and rendering the feedback term ineffective. The gain decay strategy (Eq. 11) implicitly acknowledges this degradation but does not resolve the ambiguity. Since the quadrotor MPC results depend on multi-step predictions over a receding horizon, this affects whether the empirical claims reflect what the paper asserts.
+- **The nonlinear neural feedback — presented as a key contribution — is only evaluated on the toy spiral example.** Section 4 introduces the learnable nonlinear feedback $h_{neural}$ as the solution to the linear form's limitations (avoiding manual gain tuning, handling complex scenes). This is explicitly framed as advancing beyond the linear form. Yet the nonlinear feedback is tested only on the spiral example (Figure 6). The real-world experiments — bottle trajectory (Section 5.1) and quadrotor MPC (Section 5.2) — appear to use the linear feedback form, as the authors themselves acknowledge: "the presented nonlinear neural form is preliminarily tested in Section 4" (line 336-337). If the headline results rest on the linear form, then the nonlinear neural feedback is an unvalidated extension rather than a contribution the paper's claims can rest on.
 
 ### Minor
 
-- **Quadrotor flight test (§5.2) reports results on a single Lissajous trajectory, providing no estimate of variance across different initial conditions or uncertainty realizations.** While the uncertainties are substantial (37.6% mass, 40% inertia, etc.), single-trajectory evaluation without confidence intervals or multiple test runs limits the statistical strength of the claimed 38.4% improvement (RMSE 0.093m vs. 0.151m).
+- **Missing measurement re-initialization baseline for the bottle trajectory experiment.** In Section 5.1, the feedback NN uses intermediate measurements during its 0.5s prediction horizon, while the Neural ODE baseline performs a pure open-loop rollout. A simple Neural ODE with one-step re-initialization from each measurement would isolate whether the improvement comes from the observer mechanism specifically, or simply from having access to measurements that the vanilla rollout does not use. (This concern is less acute for the MPC experiment where all methods re-initialize at each receding horizon step.)
 
-- **Theorem 1's derivative error bound $B_2$ contains $\lambda_M(L)/\lambda_m(L)$ (the condition number of $L$), which is not discussed.** For practical gain matrices where the eigenvalues span a wide range, this bound can be arbitrarily large, suggesting that derivative accuracy may degrade even as state error improves. The paper should note this trade-off.
+- **The gain decay strategy (Eq. 11) is purely heuristic.** No theoretical justification is provided for why exponential decay $\mathbf{L}_i = \mathbf{L} \odot e^{-\beta i}$ is appropriate, how to choose $\beta$, or what the tradeoffs are. While Figure 5g shows the strategy works empirically, the lack of any analytical guidance limits the method's applicability to new systems.
 
-- **The claim that "the convergence of later layers will not affect the convergence of previous layers" (§3.3) is misleading in a cascaded architecture.** Errors from early layers propagate as inputs to later layers. The statement is technically true in the sense that each layer's convergence is computed independently, but the *prediction quality* of later layers absolutely depends on the errors from earlier ones. This should be stated more precisely.
+- **Only 9 test trajectories in the bottle experiment (Section 5.1), without statistical significance tests.** The shaded standard deviation regions in Figure 7 provide some indication of variability, but with only 9 trajectories, the reliability of the reported improvement is uncertain.
+
+- **Observer initialization $\hat{\mathbf{x}}(0)$ is not discussed.** Eq. 6 defines $\hat{\mathbf{x}}(t)$ but the initial condition is critical for the feedback mechanism's transient behavior and effectiveness. This omission affects reproducibility and understanding of the method.
 
 ### Trivial
-
-None.
+- None worth listing.
 
 ## Nice-to-Haves
 
-- A comparison against at least one modern online adaptation method (e.g., extended Kalman filter adaptation or gradient-based test-time adaptation) cited in §6.3, to position the method relative to the online adaptation literature.
-- Visualization of the learned $h_{neural}$ compared to the known residual $\Delta f$ on a synthetic example with known ground truth, to reveal whether the feedback has learned a meaningful correction or acts as a generic stabilizer.
-- Multiple test trajectories with variance reporting in the quadrotor experiment.
+- A theoretical characterization of error propagation in the cascaded multi-step prediction setting, even a loose bound, would significantly strengthen the paper.
+- Evaluate the nonlinear neural feedback on the quadrotor MPC experiment to validate whether the learnable feedback provides benefits over manual gain tuning in complex real-world settings.
+- Add a Neural ODE with measurement re-initialization baseline for the bottle trajectory experiment.
+- Visualize the feedback correction term $\|\mathbf{L}(\mathbf{x}(t) - \hat{\mathbf{x}}(t))\|$ over time during multi-step prediction to reveal whether the feedback is actively correcting or has collapsed.
+- Clarify upfront that the method requires real-time state measurements and is designed for closed-loop prediction/control settings rather than open-loop long-horizon forecasting.
 
 ## Removed Points
 
-These points are flagged to be removed; treat them with caution:
+*These points are flagged to be removed, treat them with caution.*
 
-- **"Generalization claim conflates online measurement exploitation with true generalization"**: The harsh critic's claim that this is *not* generalization is too strong. In real-time control and estimation systems, using measured state feedback to adapt predictions at test time is a recognized form of adaptation/generalization to unseen conditions (different from i.i.d. generalization, but valid in its own context). The paper's contribution of combining this with a two-DOF architecture that preserves nominal accuracy is real. The concern is better expressed as a *missing baseline* (kept as Major weakness above) rather than a category error.
+- **"Generalization" vs. "online correction" framing (Harsh Critic's structural issue #1)**: The harsh critic argues this is not "generalization in the standard ML sense." While the distinction is valid, the paper is clearly about closed-loop prediction/control settings where measurements are available — common in robotics/control. The term "generalization" is defensible in this context (performing well on unseen dynamics). This is more of a scoping/clarity issue (minor) than a structural flaw.
 
-- **"The linear feedback is just classical observer theory and not novel"**: The paper explicitly acknowledges the connection to Luenberger and Kalman observers (lines 43, 71). The contribution is the integration into a neural ODE with a specific two-DOF training framework, not the observer structure itself. Calling this lack of novelty a "Fatal" issue overstates the case; it's a fair observation that the paper should position more clearly, but the integration and training strategy add real value.
+- **Biological analogy overstated**: The harsh critic says the biological analogy is "overstated" because biological feedback operates in closed-loop sensorimotor circuits while the method adds an observer to an open-loop predictor. This is a style/presentation concern, not a substantive weakness.
 
-- **"Biological motivation connection is weak"**: This is a minor framing issue, not a substantive weakness. Motivational analogies need not be rigorous derivations.
+- **MLP-MPC single-step training as unfair comparison**: The harsh critic flags that MLP-MPC uses single-step training, disadvantaging it. The authors acknowledge this on line 308. The main comparison in the MPC experiment is between Neural-MPC (multi-step trained) and FNN-MPC, so the MLP-MPC issue is secondary. Also, per the rules, this asymmetry favors the author's method, but since it's not the primary comparison, it remains a minor note rather than a major weakness.
 
-- **"Two-DOF advantage is trivially true for any residual/additive approach"**: While the principle is well-known (residual learning), the specific application to neural ODE generalization with frozen-then-feedback training has practical value and is empirically validated.
+- **"Two-DOF" framing overlaps with adapters/LoRA**: The harsh critic claims the two-DOF concept is just the well-known frozen-encoder-plus-adapter strategy. While the general strategy is indeed well-known, its specific application to neural ODEs with observer-based feedback — where the feedback has a clear physical/control-theoretic interpretation — adds novelty beyond a generic adapter.
 
-- **"21 training / 9 test trajectories is thin evidence" (§5.1)**: For real-world bottle trajectory data, this is a reasonable scale. The standard deviations are reported.
+- **Assumption 1 excludes growing residuals**: The harsh critic says bounded $\Delta f$ excludes dynamics where the residual grows over time. This is a standard assumption in observer theory and the paper acknowledges it can cover "common step disturbances." It is a known limitation of Luenberger-type analysis, not a specific flaw of this paper.
 
-- **"MLP-MPC uses known poor practice / AdapNN-MPC adapts only the last layer"**: These are the methods as published and cited. Criticizing them as "deliberately limited" is speculative. Per the rules, if the asymmetry favors the baseline, the comparison is fair — the authors are showing their method beats established approaches.
+- **Missing comparison to EKF, test-time training, adaptive last-layer approaches**: These are requests for additional baselines outside the paper's primary scope. The paper already compares against AdapNN-MPC (Cheng et al., 2019), which is a representative adaptive last-layer approach.
 
-- **"No significance testing in §5.1"**: The standard deviations are shown in Figure 7(Right), which allows visual assessment. Formal significance testing is nice-to-have but not standard for this type of evaluation.
-
-- **"Missing comparison to test-time adaptation methods cited in §6.3"**: Downgraded to Nice-to-Have. These methods address related but distinct problems (distribution shift in classification/generation vs. online state estimation in control). The comparison would strengthen but is not essential.
+- **No convergence guarantee for the nonlinear case**: The paper explicitly positions Theorem 1 as covering the linear case. The nonlinear case is presented as a practical extension. Demanding theory for the nonlinear case is a nice-to-have, not a weakness.
 
 ## Novel Insights
 
-The paper's two-DOF framework — freezing the base neural ODE and training a separately parameterized feedback module via domain randomization — is a clean decomposition that merits attention beyond the specific observer-like mechanism. It suggests a general principle: in settings where both accuracy preservation and generalization are needed, decoupling the "accuracy module" and the "adaptation module" during training is more effective than joint training with domain randomization. This insight is relevant to any neural-network-in-the-loop control system.
+The paper reveals an interesting asymmetry between measurement access and model correction: simply re-initializing predictions from measurements (as baselines implicitly do in MPC) does not leverage the *error signal* between predicted and measured states to correct the underlying dynamics model. The observer structure extracts this information and feeds it back into the dynamics, which is a qualitatively different use of measurements. This distinction between "using measurements as initial conditions" versus "using measurement-prediction gaps as correction signals" is the core conceptual contribution, and it is most cleanly illustrated by the comparison between FB-MPC (0.203m RMSE, feedback on nominal model) and FNN-MPC (0.093m, feedback on neural ODE) in Figure 9 — the same observer mechanism produces different gains depending on the quality of the underlying model being corrected.
 
 ## Suggestions
 
-- Add a "Neural ODE + EKF" or "Neural ODE + Luenberger observer" baseline to the quadrotor MPC experiment. This is the single most important addition — it would either validate the architectural contribution or honestly reposition the paper as a practical integration of observer theory with neural ODEs.
-- Explicitly clarify in Section 3.3 how $x(t_i) - \hat{x}(t_i)$ is computed for multi-step prediction layers beyond the first step, and discuss the implications for feedback effectiveness.
-- Run the quadrotor experiment on multiple test trajectories and report variance to strengthen the empirical claims.
-
-## Evaluation
-
-**Originality**: The integration of observer-style feedback into neural ODEs with a two-DOF training scheme is novel, though the linear feedback mechanism itself is classical. Moderate originality.
-
-**Importance**: The problem (generalization of neural ODEs for control under uncertainty) is important and practical. The real quadrotor experiments demonstrate relevance.
-
-**Claims support**: Partially supported. The two-DOF advantage is well-validated; the attribution of MPC improvements to the specific feedback architecture is undermined by the missing observer baseline.
-
-**Experimental soundness**: The experiments demonstrate the method works, but the lack of an observer baseline and single test trajectory in the quadrotor experiment limit conclusiveness.
-
-**Clarity**: Generally well-written, though the multi-step prediction section could be clearer.
-
-**Community value**: The two-DOF training principle and the practical demonstration on real flight data are valuable for the learning-for-control community.
+- Add a brief theoretical analysis (even a loose bound) on how errors propagate in the cascaded multi-step prediction setting, or explicitly acknowledge this as an open problem with discussion of what makes it challenging.
+- Run at least one real-world experiment (ideally quadrotor MPC) with the nonlinear neural feedback form to validate whether learnable feedback provides practical benefits over manual gain tuning.
+- Add a one-sentence clarification in the introduction that the method requires real-time state measurements and targets closed-loop prediction/control settings.
 
 ## Score and Decision
 
 **Calibration anchors:**
 
-| Paper | Path | Avg Score | Comparison |
-|-------|------|-----------|------------|
-| Phy-DRL (spotlight) | /home/wg25r/review_agent/human_reviews/5Dwqu5urzs.md | 7.5 | Observer-like residual policy with safety guarantees, strong robot experiments. More novel theory, cleaner contribution. This paper is below Phy-DRL. |
-| AROS (poster) | /home/wg25r/review_agent/human_reviews/GrDne4055L.md | 6.25 | Neural ODE + Lyapunov stability for OOD detection. Similar pattern of applying control theory to neural ODEs, accepted as poster. This paper is comparable — similar integration of classical theory, similar empirical scope. |
-| FNSDA | /home/wg25r/review_agent/human_reviews/SXj1qjFEpQ.md | 5.75 | Domain adaptation for dynamics generalization. Rejected for incremental methodology and incomplete ablations. This paper is above FNSDA due to stronger theory and real experiments. |
-| Runtime Learning Machine | /home/wg25r/review_agent/human_reviews/KCTHM2Ffh3.md | 6.33 | Observer-like HA-Teacher correcting HP-Student for safety, evaluated on robots. Rejected despite 8/5/6 scores. More complex system, weaker presentation. This paper is comparable. |
-| CLIMODE (oral) | /home/wg25r/review_agent/human_reviews/xuY33XhEGR.md | 8.0 | Strong physics-informed neural ODE with value-conserving architecture. Far above this paper in novelty and experimental scope. |
-| Control-based ANNs | /home/wg25r/review_agent/human_reviews/7duh4Ml5rc.md | 1.67 | Deeply flawed control-theory-applied-to-NN paper. Far below this paper. |
+- **High band (>7):** AoraWUmpLU (8.0, Oral): Neural ODE global convergence — strong theory-experiment alignment, clean contribution. S5Yo6w3n3f (7.25, Spotlight): ODE-based smoothing for RL — control-theoretic approach with good theory+experiments. kNpSUN0uCc (7.33, Poster): Model correction for RL — strong theory-experiment match. This paper is clearly below these — its theory doesn't cover its experimental setting.
 
-This paper sits in the 5–6 range relative to anchors. The two-DOF framework and convergence guarantee are real contributions; the missing observer baseline and multi-step specification gap prevent it from being clearly above the acceptance bar. It is comparable to AROS (6.25, poster) and slightly below Runtime Learning Machine (6.33, rejected). The missing baseline that would control for information access is a significant methodological gap, but the paper does make a real contribution with the two-DOF training framework and real flight data.
+- **Medium band (4-6):** GrDne4055L (6.25, Poster): Lyapunov-stabilized neural ODEs — similar control-theory+neural ODE combination, similar weaknesses, scored 6.25. AMegoEnlpS (5.0, Reject): Kalman filtering for fine-tuning — observer-based correction for models, weaker practical validation, scored 5.0. WpQbM1kBuy (4.25, Reject): Strong empirical results but theory doesn't cover experimental setting + missing baselines — similar weakness pattern, scored 4.25. This paper is between AMegoEnlpS and GrDne4055L: it has better practical results than AMegoEnlpS but a worse theory-experiment gap than GrDne4055L.
+
+- **Low band (<3):** XQFSIdKMhJ (2.5, Withdrawn): Overclaimed contribution with single-sensor experiments for multi-sensor claims. 3ZdGSTxKuy (2.0, Withdrawn): Overclaimed "open-world" but only narrow OOD tested. This paper is clearly above these — it has real, substantial contributions, not just overclaimed ones.
+
+The paper sits around 5.0-5.5. Its core idea is genuine and the quadrotor MPC results are substantial, but the theory-experiment gap (Theorem 1 doesn't cover multi-step prediction) and the incomplete evaluation of the nonlinear feedback (the paper's most distinctive contribution over a simple Luenberger observer) are significant weaknesses that prevent confident acceptance. Compared to GrDne4055L (6.25), this paper has a larger theory-experiment gap. Compared to AMegoEnlpS (5.0), it has better practical results but similar observer-based correction novelty.
 
 MY FINAL SCORE: <pineapple>5.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

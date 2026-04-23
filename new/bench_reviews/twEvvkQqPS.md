@@ -1,22 +1,20 @@
-Now I have a thorough understanding of the paper and the calibration anchors. Let me synthesize the final review.
+Now I have a thorough understanding of the paper and the calibration anchors. Let me write the final review.
 
 ## Summary
 
-This paper introduces WALoss (Wavefunction Alignment Loss), a physics-informed loss function that aligns predicted Kohn-Sham Hamiltonians with ground-truth eigenspaces without backpropagation through eigensolvers, addressing the "Scaling-Induced MAE-Applicability Divergence" (SAD) phenomenon where elementwise losses yield catastrophically bad derived properties on large molecules. The paper also contributes PubChemQH, a 50K-molecule Hamiltonian dataset (40–100 atoms), and WANet, a modernized architecture for Hamiltonian prediction.
+This paper identifies a critical problem in deep-learning-based Kohn-Sham Hamiltonian prediction—Scaling-Induced MAE-Applicability Divergence (SAD)—where element-wise Hamiltonian MAE becomes a poor proxy for downstream physical accuracy as molecular size increases. To address this, the authors propose Wavefunction Alignment Loss (WALoss), which transforms the predicted Hamiltonian into the ground-truth eigenbasis to penalize deviations from correct eigenvalues without backpropagating through eigensolvers. They also introduce WANet, a modernized architecture using eSCN convolutions and sparse mixture-of-pair-experts, and PubChemQH, a dataset of 50K+ molecules with 40–100 atoms.
 
 ## Strengths
 
-- **WALoss is a creative and well-motivated solution.** The key insight—avoiding backpropagation through eigensolvers by using pre-computed ground-truth eigenvectors as a fixed basis change (Algorithm 1, Eq. 2)—is both novel and practically effective. Table 4 provides strong ablation evidence: naive eigenvalue loss (backpropping through eigensolver) yields HOMO MAE of 50.17 kcal/mol vs. 0.71 for complete WALoss, validating every design choice.
+- **The SAD observation is a genuine and important insight.** Figure 1 compellingly demonstrates that element-wise MAE is a misleading proxy for downstream accuracy on large molecules, with energy errors reaching ~1,000,000 kcal/mol at only 0.01% relative MAE. This is a finding the community needs to internalize, and the theoretical analysis in Theorem 1 and Corollary 1 provides a principled explanation via the κ(S)/‖S‖₂ ratio amplification.
 
-- **WALoss produces dramatic practical improvements on large molecules.** On PubChemQH, WANet w/ WALoss achieves HOMO MAE of 0.71 kcal/mol and LUMO MAE of 0.75 kcal/mol (near chemical accuracy), and reduces SCF iterations from 334% (without WALoss) to 82% (Table 1). These are meaningful, impactful results for the quantum chemistry community.
+- **WALoss is a clever and principled loss design.** Using ground-truth eigenvectors C* to transform the predicted Hamiltonian into the eigenbasis (Eq. 2–3), then penalizing deviations from diagonal ε*, elegantly avoids differentiating through eigensolvers while directly targeting eigenvalue accuracy. The perturbation theory connection (Section 3) provides sound motivation, and the model-agnostic nature is validated: applying WALoss to QHNet alone reduces System Energy MAE from 65,721 to 75.6 kcal/mol (Table 1).
 
-- **WALoss is architecture-agnostic.** Table 1 shows that applying WALoss to QHNet alone reduces System Energy MAE from 65,721 to 75.6 kcal/mol and SCF iterations from 371% to 90%, demonstrating generality beyond the proposed WANet architecture.
+- **PubChemQH is a valuable dataset contribution.** Moving from ≤31-atom molecules (QH9) to 40–100 atoms with Def2TZVP basis required ~1 month on 128 V100 GPUs (Section 5.1). This directly enables the SAD investigation and provides a training resource for the community.
 
-- **The SAD phenomenon identification is a valuable community contribution.** Figure 1 convincingly demonstrates that elementwise losses produce Hamiltonians with catastrophically bad derived properties on large molecules, and Theorem 1/Corollary 1 provide formal grounding for why κ(S)/‖S‖₂ scaling causes this divergence.
+- **The reweighting insight is practical and effective.** Table 4 shows that adding the ρ/ξ weighting (occupied+LUMO vs. virtual) reduces ε_HOMO MAE from 8.241 to 0.712 kcal/mol—a 11.6× improvement—demonstrating that prioritizing physically important orbitals is crucial.
 
-- **PubChemQH is a substantial dataset contribution.** 50K+ molecules with 40–100 atoms at Def2TZVP basis (one month on 128 V100 GPUs to generate) extends the scale of Hamiltonian datasets well beyond QH9's maximum of 31 atoms.
-
-- **Out-of-distribution scalability is demonstrated.** Figure 4 shows WANet w/ WALoss maintains low HOMO/LUMO MAE on carbon chains up to 182 atoms (3× the average training set size), while the model without WALoss degrades sharply.
+- **SCF acceleration is a meaningful practical outcome.** Table 1 shows 82% relative SCF iterations (18% speedup), and the model outperforms direct property regression on ε_LUMO by 88.88% (Table 1) while supporting any derived property from a single model.
 
 ## Weaknesses
 
@@ -25,72 +23,88 @@ None.
 
 ### Major
 
-- **The "1347×" improvement framing is structurally misleading and the "applicability" claim is overstated.** The abstract claims "a reduction in total energy prediction error by a factor of 1347," computed as WANet-without-WALoss's System Energy MAE (63,579 kcal/mol) divided by WANet-with-WALoss's (47.193 kcal/mol). This constructs a dramatic ratio against a catastrophically failing baseline, while the absolute system energy error of ~47 kcal/mol remains far above chemical accuracy (~1 kcal/mol). For molecules with 40–100 atoms, this corresponds to roughly 0.5–1 kcal/mol per atom—approaching but not reaching chemical accuracy per atom. The paper repeatedly frames this as "applicable" and "physically accurate" (abstract), but the remaining gap needs honest acknowledgment. The claim is partly supported: 82% SCF iterations is a genuine practical benefit as an SCF initializer, and HOMO/LUMO predictions are near chemical accuracy. However, the total energy and eigenspace accuracy remain insufficient for direct quantum chemistry use without SCF refinement. The paper should report absolute errors alongside ratios and discuss the remaining gap explicitly.
+- **The "1347× reduction" headline claim is misleading.** The abstract prominently states "a reduction in total energy prediction error by a factor of 1347." This is computed as WANet without WALoss (63,579 kcal/mol) vs. WANet with WALoss (47.2 kcal/mol). However, WANet without WALoss produces energy errors catastrophically worse than even the trivial `minao` initial guess (374 kcal/mol)—it is a broken baseline, not a meaningful comparison point. The fair baseline comparison is against the initial guess, yielding ~8× improvement. The 1347× figure systematically misrepresents the actual advance and sets reader expectations far above what the method delivers. This matters because it is the paper's headline number and shapes how the contribution is assessed.
 
-- **Eigenvector cosine similarity of 48% on PubChemQH indicates the eigenspace is only partially learned.** Table 1 shows the best C similarity on PubChemQH is 48.03%, meaning the predicted molecular orbitals share less than half their direction with ground truth. While this represents a dramatic improvement from ~2% (without WALoss), 48% C similarity is insufficient for downstream tasks that critically depend on eigenvectors (e.g., transition dipole moments, excited states). The paper does not benchmark any eigenvector-dependent downstream calculation. Note: on QH9 (small molecules), C similarity reaches 96–99% (Table 2), so this is a large-molecule scalability gap. The paper should discuss whether 48% C similarity is sufficient for the claimed "applicability" and what additional improvements would close this gap.
-
-- **The comparison with property regression baselines is apples-to-oranges.** In Table 1 and Section 5.3, Equiformer V2/UniMol regression models are compared on HOMO, LUMO, and gap MAEs against WANet-with-WALoss. WALoss explicitly optimizes orbital energies in its loss function (Eq. 3), while regression models are trained with standard property losses. The claim of "88.88% improvement in ε_LUMO MAE" (Section 5.3) inflates the apparent advantage. While the paper's higher-level argument—that Hamiltonian prediction provides access to all properties from a single model—is valid (and Table 3 partially demonstrates this with dipole moment and extent predictions), the specific percentage improvement claim over regression models should be contextualized.
+- **The claimed "applicability" of predicted Hamiltonians overstates what the results support.** The abstract concludes these improvements "set new benchmarks for achieving accurate and applicable predictions." Yet System Energy MAE remains 47.2 kcal/mol—~50× above chemical accuracy (~1 kcal/mol)—and C Similarity is only 48.03%. These Hamiltonians are not accurate enough for direct property extraction in most chemistry applications. The paper conflates "improvement over catastrophically broken predictions" with "applicable predictions." The honest framing is that WALoss substantially improves SCF initialization and eigenvalue prediction for large molecules, which is a meaningful but more modest contribution than "applicability" implies. The paper does partially acknowledge this (Section 5.1 notes the init guess has "improved utility"), but the abstract and conclusion do not reflect this nuance.
 
 ### Minor
 
-- **WALoss degrades elementwise Hamiltonian MAE on small molecules.** Table 2 shows on QH9-stable, adding WALoss increases Hamiltonian MAE from 0.0502 to 0.0914 (an ~82% increase). On QH9-dynamic, from 0.0469 to 0.0512 (a ~9% increase). The paper reports this but does not discuss implications: on small molecules where SAD is not severe, WALoss trades elementwise accuracy for modest eigenspace improvements (C similarity goes from 96.86% to 96.95%). This suggests WALoss should perhaps only be applied when system size warrants it.
+- **WALoss increases Hamiltonian MAE on QH9, and this trade-off is not discussed.** On QH9-stable, adding WALoss to QHNet increases H-MAE from 0.0513 to 0.0780 (Table 2). On QH9-dynamic, QHNet goes from 0.0471 to 0.0495. The paper acknowledges the H-MAE increase on PubChemQH (Section 5.1: "Despite a higher Hamiltonian MAE"), but the QH9 trade-off goes unmentioned. Since WALoss explicitly optimizes for eigenvalue accuracy at the cost of element-wise accuracy, this trade-off should be characterized: under what conditions does degraded H-MAE matter, and when is it acceptable?
 
-- **Table 1 column labeling ambiguity.** Two columns are both labeled "ε_occ MAE" with different values (e.g., 2067.45 vs. 1532.672 for QHNet). One is presumably "ε_orb" (all orbital energies), per the metric definitions in Section 5. This makes the table ambiguous for readers.
+- **The SCF speedup evaluation (Figure 3a) lacks specification.** The wall-clock comparison (DFT: 392.9s vs. WANet-augmented: 302.8s) does not specify whether this is averaged over the full test set, computed for a specific molecule, or stratified by size. The 18% speedup is meaningful but without variance or size-dependent breakdown, it is unclear how representative this number is.
 
-- **The theoretical bounds in Theorem 1 use the L1,1 norm rather than the spectral norm.** For Hamiltonian matrices of dimension O(1000), the L1,1 norm can substantially exceed the spectral norm, making these bounds very loose. The theorem provides valuable qualitative insight about the role of κ(S)/‖S‖₂, but the paper should acknowledge that the quantitative bounds are not tight enough for practical prediction.
+- **The ρ and ξ hyperparameters lack principled guidance.** Section 3 states only "ρ, ξ are hyperparameters where ρ ≫ ξ." No sensitivity analysis or theoretical guidance is provided for setting these values, which are crucial to WALoss's effectiveness as shown in the ablation (Table 4).
 
-- **Extrapolation test is limited to homogeneous carbon chains.** Figure 4 tests elongated alkanes up to 182 atoms, but these repetitive chain structures have highly degenerate orbital structures that may inflate performance. Heterogeneous OOD tests (e.g., mixed-element molecules larger than training) would be more convincing for the scalability claim.
-
-- **Corollary 1's parametric assumption for λ_min(S) = c + A/(1 + (B/N₀)^α) is not justified in the main text.** The discussion is deferred to an appendix, making the corollary's connection to the SAD phenomenon opaque in the main body.
+- **Table 1 has duplicate column labels.** Two columns are both labeled "ε_occ MAE ↓" with different values (18.835 and 7.330 for WANet w/ WALoss). One should be labeled differently (e.g., ε_all or ε_vir), which obscures what is actually being reported.
 
 ### Trivial
-
-- The abstract's phrasing "SCF calculation speed-up by a factor of 18%" is ambiguous between multiplicative and additive interpretations; it means 18% fewer iterations.
+None.
 
 ## Nice-to-Haves
 
-- Benchmark downstream tasks that depend critically on eigenvectors (transition dipoles, excited states) to assess whether 48% C similarity is sufficient for any practical eigenvector-dependent application.
-- Reporting variance or confidence intervals for key metrics; with 50K molecules this is feasible.
-- A per-molecule energy vs. Hamiltonian MAE plot for WALoss-trained models (a version of Figure 1 computed for WALoss models) to directly show whether WALoss changes the SAD curve or merely shifts models along it.
-- Sensitivity analysis for hyperparameters ρ and ξ; the ablation in Table 4 shows reweighting matters enormously, but no ρ/ξ sensitivity analysis is provided.
+- Ablation isolating "MAE loss + reweighting" from "WALoss without reweighting" to disentangle whether the basis-change alignment or the occupied-orbital reweighting is the primary driver of improvement. The current ablation (Table 4) shows both contribute but doesn't isolate the reweighting alone paired with standard MAE loss.
+
+- Reporting what fraction of test molecules have predicted total energies within 1 kcal/mol of the ground truth (chemical accuracy rate), which would quantify the practical meaning of "applicability" for the chemistry community.
+
+- Heatmap visualization of (C*)^T Ĥ C* matrices to make the WALoss mechanism tangible and reveal where off-diagonal errors cluster.
+
+- Breakdown of SCF speedup by molecule size with confidence intervals.
 
 ## Removed Points
 
 These points are flagged to be removed, treat them with caution:
 
-- **"H̃ is undefined in Equation 2, affecting reproducibility":** The paper clarifies H̃ = H* + ΔH in the perturbation theory paragraph immediately following Eq. 2 ("for a Hamiltonian H̃ = H* + ΔH, where ΔH is the perturbation"). While notation could be more consistent (Ĥ vs H̃), the meaning is clear from context and the derivation. This is a minor notational inconsistency, not a reproducibility gap.
+- **Harsh critic: "the architecture contribution is secondary" / "modest" (QHNet+w/WALoss 0.5307 vs WANet+w/WALoss 0.4744 = ~10% relative improvement).** While the architecture improvement is indeed modest compared to WALoss's contribution, this is not a weakness—it is simply the nature of the paper's dual contribution. The paper makes both a loss function and architecture contribution, and the architecture is presented as complementary, not primary. Removed as it's not a substantive criticism.
 
-- **"Preprocessing cost of Algorithm 1 is not discussed":** Algorithm 1 (Cholesky + symmetric QR) is a one-time O(B³) preprocessing step per training sample, not per training iteration. This is standard in Hamiltonian learning pipelines and not a meaningful omission. Removed as a nitpick.
+- **Harsh critic: Claim 1 is trivially true.** While Claim 1 is indeed straightforward (it states that perfect predictions yield zero loss), it serves as a formal statement connecting the loss design to the optimization objective. It's a minor presentational issue, not a substantive weakness. Moved to trivial/removed as it doesn't affect the paper's contributions.
 
-- **"SAD is not a novel discovery—it's just perturbation theory":** The paper does not claim theoretical novelty for the SAD observation; it uses Theorem 1 to formalize what the community implicitly knows and then identifies the practical ML consequence. The contribution is in surfacing the problem, measuring it (Figure 1), and proposing a solution. Removed as a strawman.
+- **Harsh critic: "The regression baselines are trained to predict specific properties, making the comparison category-inappropriate."** The paper explicitly acknowledges this difference in scope (Section 5.3), stating that Hamiltonian prediction supports computing any derived property while regression is limited to specific ones. This is not an unfair comparison—it's a comparison of different approaches with different scopes, and the paper handles it appropriately.
 
-- **"No architectural ablation isolating contribution of each WANet component":** The paper references Table 9 for ablation, which is in the appendix. This is a missing-appendix concern, not a missing experiment. Removed per rule (appendix references stripped by parser).
+- **Harsh critic: "MoE pair expert is underspecified: how many experts, what is K in top-K, what is the load balancing weight?"** Removed as a nitpick about implementation details that would be in the appendix (stripped by parser). The paper describes the MoE architecture in reasonable detail in Section 4.2.
 
-- **"Unfair comparison with baselines because WALoss was given more training budget":** The critic speculates about training budget without evidence. The paper states "using identical training and test sets" (Section 5.3). Removed as speculative.
+- **Harsh critic: "Carbon chain extrapolation results are still moderate (HOMO MAE ~0.03-0.06 eV, LUMO MAE ~0.01-0.025 eV)."** These are actually reasonable errors for extrapolation to 3× the training size. The model without WALoss degrades catastrophically in comparison. This is not a weakness of the paper.
 
-- **"No variance/confidence intervals reported":** This is a nice-to-have rather than a weakness; single-run evaluation is the norm in this community for large-scale DFT benchmarks. Downgraded to nice-to-have.
+- **Strength finder: "WALoss provides a principled solution to the SAD phenomenon with theoretical grounding. Theorem 1 and Corollary 1 prove that elementwise losses can produce unbounded eigenvalue errors as basis size grows."** The theoretical grounding is a valid strength, but the claim that Theorem 1/Corollary 1 "prove" this is overstated—they provide upper bounds on eigenvalue perturbation sensitivity, which motivates but doesn't directly prove that SAD will occur in practice. The empirical evidence (Figure 1) is the stronger argument. Downgraded from a core strength.
 
-- **Strongth: "Advantage over property regression models" with 88.88% improvement**: Downgraded from a strength to a weakness (see Major #3 above), since the comparison is apples-to-oranges.
+- **Strength finder: "Dramatic reduction in system energy prediction error on large molecules… 1347× reduction."** Removed as this repeats the misleading claim. The valid version of this strength (substantial improvement over init guess) is already captured above.
 
 ## Novel Insights
 
-The paper's most important insight is that elementwise Hamiltonian losses produce predictions that are qualitatively useless on large molecules despite low MAE—a phenomenon the authors call SAD. While the underlying perturbation theory is well-understood, the practical ML consequence has not been clearly articulated or empirically demonstrated before. WALoss's clever trick of using ground-truth eigenvectors as a fixed basis transformation to avoid backpropagation through eigensolvers is a design pattern that could transfer to other domains where backpropagation through iterative solvers is numerically unstable.
+The SAD phenomenon—the observation that element-wise Hamiltonian MAE becomes catastrophically misleading as a quality metric for large molecules—deserves broader recognition beyond this paper. The insight that optimizing for the wrong metric can produce models that are simultaneously "better" by H-MAE but "worse" by every practical measure (energy, SCF convergence) has implications for any domain where surrogate losses don't align with downstream utility. The WALoss approach of using ground-truth eigenvectors as a fixed basis transformation rather than differentiating through eigensolvers is a transferable design pattern for other spectral learning problems.
 
 ## Suggestions
 
-- Report the 47 kcal/mol System Energy MAE alongside the 1347× ratio in the abstract, and explicitly discuss the remaining gap to chemical accuracy vs. the utility as an SCF initializer. This would make the claims more honest and credible without diminishing the real contribution.
-- Rename the duplicate "ε_occ MAE" column in Table 1 to "ε_orb MAE" (or clarify the distinction in the caption).
-- Contextualize the "88.88% improvement over Equiformer V2" comparison by noting that WALoss directly optimizes orbital energies while regression models do not, or run regression models with property-specific loss weighting for a fairer comparison.
+- Revise the abstract to replace "a factor of 1347" with the comparison against the init guess baseline (~8× improvement in System Energy MAE) or at minimum clearly contextualize the 1347× figure as relative to the same model without WALoss rather than as an absolute improvement over existing methods.
+
+- Add an honest assessment paragraph in Section 5.1 or the conclusion explicitly stating that predicted Hamiltonians with WALoss are effective for SCF initialization but not yet accurate enough to bypass SCF for property prediction (47 kcal/mol vs. ~1 kcal/mol chemical accuracy).
+
+- Report the QH9 H-MAE trade-off in Section 5.2 and discuss when the eigenvalue-vs-MAE trade-off is or isn't desirable.
+
+## Evaluation Axes
+
+- **Originality**: The SAD observation and WALoss design are genuinely original. The WANet architecture is more incremental (combining existing components). Overall: above average.
+
+- **Importance of research question**: The scalability of Hamiltonian prediction to large molecules is an important open problem. High.
+
+- **Claims well supported**: The relative improvements are well supported by experiments, but the headline claims (1347×, "applicability") are not supported by the evidence at face value. Below average for claim framing, average for underlying evidence.
+
+- **Soundness of experiments**: Experiments are reasonably comprehensive (two datasets, ablations, extrapolation, property regression comparison), though the SCF speedup evaluation could be more rigorous. Average.
+
+- **Clarity of writing**: Generally clear, though Table 1 has labeling issues and the abstract overclaims. Average.
+
+- **Value to research community**: The PubChemQH dataset, the SAD observation, and the WALoss design all provide value. Above average.
 
 ## Score and Decision
 
-**Calibration anchors:**
-- SLEM (avg 7.33, Spotlight): Predicts quantum operators with novel architecture; cleaner claims, validated novelty but weaker experimental breadth. This paper is below SLEM due to overclaiming and the 47 kcal/mol absolute gap.
-- ECD (avg 6.5, Accept Oral): New DFT dataset contribution with benchmark. Similar dataset-scale contribution, but ECD makes more careful claims. This paper is comparable in dataset contribution but weaker in claims precision.
-- Physics-Informed Weakly Supervised Learning for MLIPs (avg 5.0, Reject): Novel loss functions for ML potentials with modest improvements. This paper has much more dramatic improvements and a more important problem identification.
-- One-step Retrosynthesis with misleading ratio metrics (avg 2.33, Reject): Ratio metrics misleading and actual performance weak. This paper is far above this—its improvements are real and the ratio is not fabricated, just overframed.
+Calibration anchors used:
+- `/home/wg25r/review_agent/human_reviews/kpq3IIjUD3.md`: SLEM for Hamiltonian prediction, avg 7.33 (Spotlight). Topically closest high-scoring paper; has a novel architecture with strong, honestly presented results and new datasets. The current paper's contributions are comparable in scope but less rigorously evaluated and more overclaimed.
+- `/home/wg25r/review_agent/human_reviews/tpYeermigp.md`: Physics-informed diffusion with "two orders of magnitude" claim, avg 5.75 (Poster). Similar pattern of physics-informed loss with large improvement claims and limited evaluation depth. The current paper has a more important problem setting and a more impactful dataset contribution.
+- `/home/wg25r/review_agent/human_reviews/qfU5S4cddQ.md`: Physics-informed loss for MLIPs with "factor of two" improvement, avg 5.0 (Reject). Similar idea of physics-informed loss with modest actual improvements. The current paper's contributions (SAD observation, WALoss, PubChemQH) are substantially more significant.
+- `/home/wg25r/review_agent/human_reviews/J4V3lW9hq6.md`: NeuralMD with "2000× speedup" claim, avg 5.0 (Reject). Overclaimed speedup numbers with weak empirical results. The current paper has a stronger underlying contribution but similarly inflated headline.
+- `/home/wg25r/review_agent/human_reviews/o6aUi3ukdd.md`: Overclaimed dataset paper with no novelty, avg 2.5 (Reject). The current paper is clearly above this—its contributions are real even if overframed.
+- `/home/wg25r/review_agent/human_reviews/0aaaM31hLB.md`: Equivariance loss function, avg 5.25 (Reject). Novel loss function idea with limited empirical validation. The current paper has stronger empirical results and a more impactful domain.
 
-This paper sits above the borderline: WALoss is a meaningful, well-validated contribution that addresses a genuine and important problem; PubChemQH is a substantial data contribution; the SCF acceleration results (82% iterations) are compelling. The overclaiming via the 1347× ratio and the incomplete "applicability" discussion are significant but do not invalidate the core contributions—a reader can evaluate the absolute numbers in Table 1. Score: 6.0, borderline accept.
+The paper sits above the rejected physics-informed loss papers (5.0–5.25) because of the genuinely important SAD observation, the effective WALoss design, the model-agnostic validation, and the valuable PubChemQH dataset. It sits below SLEM (7.33) because of the misleading headline number and overclaimed "applicability." It's comparable to the physics-informed diffusion paper (5.75) that received a poster, but with a more important problem setting. The overclaiming is a significant issue but doesn't invalidate the core contributions.
 
-MY FINAL SCORE: <pineapple>6.0</pineapple>
-MY FINAL DECISION: <orange>Accept</orange>
+MY FINAL SCORE: <pineapple>5.5</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>

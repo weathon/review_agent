@@ -1,20 +1,20 @@
-Now I have a thorough understanding of the paper and the calibration anchors. Let me write the final review.
+Now I have all the information needed. Let me write the final consolidated review.
 
 ## Summary
 
-This paper proposes and studies *benign relearning attacks* on approximately unlearned LLMs, showing that finetuning on loosely related data (not containing direct answers to evaluation queries) can "jog the memory" of unlearned models and recover unlearned knowledge. The attack is demonstrated across three benchmarks—WMDP (harmful knowledge), TOFU (fictitious author facts), and WHP (copyrighted Harry Potter text)—using multiple unlearning methods and models. A synthetic experiment provides mechanistic intuition that inter-token correlations drive relearning vulnerability.
+This paper introduces benign relearning attacks on unlearned LLMs, demonstrating that finetuning an unlearned model on data that does not contain direct answers to evaluation queries can nevertheless recover unlearned knowledge. The attack is studied across three tasks (WMDP harmful knowledge, WHP copyrighted text, TOFU keyword recovery) with five unlearning methods (GA, GD, KL, NPO, SCRUB), and a simplified toy experiment provides mechanistic intuition about why correlated tokens recover together during relearning.
 
 ## Strengths
 
-- **Methodologically rigorous relearn set construction that distinguishes "relearning" from "learning":** The paper enforces that relearn data $D'$ does not contain direct answers to evaluation queries (Section 2.2), and formalizes this through disjoint partitions $D_u^{(1)}$ and $D_u^{(2)}$ in Section 3. This addresses a real blind spot in prior relearning work (e.g., Lynch et al., 2024, who used first three Harry Potter books as relearn data, which could directly answer evaluation queries—footnote 1).
+- **Well-differentiated threat model from prior work**: Unlike prior relearning studies (e.g., Lynch et al. 2024, which used the first three Harry Potter books as relearn data—directly answerable by evaluation queries), this paper constrains the relearn set D' to not contain direct answers to evaluation queries (Section 2.2). This is a meaningful methodological improvement that ensures the attack tests "jogging memory" rather than "learning from scratch."
 
-- **Broad empirical demonstration across three distinct unlearning applications and five unlearning methods:** Figure 4 shows that across GA, GD, KL, NPO, and SCRUB, and two models (Zephyr-7b-beta and Llama-3-8b), relearning on public articles recovers forget-set scores close to the original model levels (e.g., GA: 1.27 → 6.2 on Zephyr, vs. original 5.92). The WHP results (Figure 5) similarly show Rouge-L recovery from 0.19 to 0.78 (GA). This breadth strengthens the claim that the vulnerability is general.
+- **Broad empirical scope**: The paper tests relearning attacks across three distinct unlearning applications (harmful knowledge, copyrighted text, keyword suppression) with five unlearning methods and multiple base models (Phi-1.5, Zephyr-7b-beta, Llama-2-7b, Llama-3-8b). Figure 4 shows WMDP forget scores recovering from ~1–2 to ~5–6 after relearning; Figure 5 shows Rouge-L recovering from ~0.03–0.23 to ~0.44–0.78. The consistency across tasks and methods strengthens the generality of the vulnerability finding.
 
-- **Mechanistic insight via controlled synthetic experiment:** Section 5 and Figure 6 show that NLL loss on the never-optimized token "Mark" drops as loss on "Anthony" drops during relearning—a clear demonstration of correlation-driven recovery. Table 4 further shows relearn success rate scales with correlation strength (7 repetitions → 100% deep relearn ASR vs. 1 repetition → 0%).
+- **WHP verbatim text recovery is compelling evidence (Section 4.2)**: Demonstrating that GPT-generated character facts (which do not contain any text from the excerpt) can trigger verbatim memorized text recovery (Rouge-L from 0.03→0.72 for NPO) is hard to explain by pure reconstruction from the relearn data alone and provides the strongest support for the memory-jogging hypothesis.
 
-- **Practically important finding that PEFT-based unlearning increases susceptibility:** Table 2 shows LoRA unlearning on Zephyr yields forget scores (GA: 1.67→5.2, NPO: 1→5.08 after relearning) comparable to full-weight unlearning despite modifying fewer parameters—a cautionary result for practitioners using PEFT for unlearning.
+- **Clean mechanistic insight from the toy experiment (Section 5)**: Figure 6 shows that during relearning on data containing "Anthony" but not "Mark," the NLL of "Mark|Anthony" drops as the NLL of "Anthony" drops—even though "Mark" is never optimized. Table 4 further shows that stronger token correlations yield higher relearn success rates (7 repetitions → 100% at deep relearning vs. 1 repetition → 0%). This provides direct evidence that unlearning fails to remove internal token associations.
 
-- **Clear and explicit threat model:** Section 2.1 formalizes both weight-access and API-access adversary scenarios, making assumptions transparent.
+- **Practical finding about PEFT unlearning vulnerability**: Table 2 shows LoRA-unlearned models are even more susceptible to relearning attacks, with GA relearn scores matching the original model (5.2 vs. 5.92). This is an important practical caution given the popularity of PEFT for unlearning.
 
 ## Weaknesses
 
@@ -23,86 +23,75 @@ None.
 
 ### Major
 
-- **Missing "never-learned" control experiment for the public information attack (WMDP, Section 4.1):** The paper's central interpretive claim is that benign relearning "jogs" residual *memory* of unlearned knowledge rather than simply *teaching* a capable model to synthesize answers from related but non-identical information. For WMDP, the relearn set contains GPT-generated paragraphs from public articles about influenza, hemagglutinin, and virulence—topics that any capable LLM could plausibly synthesize into weaponization-relevant answers through generalization, regardless of whether it ever saw the WMDP-specific training articles. Without a control experiment—finetuning a base model that was *never trained* on the WMDP forget set using the same relearn set $D'$ and measuring whether it can also answer the evaluation queries—the "memory jogging" mechanism cannot be distinguished from "learning from related data" for WMDP. This gap is most acute for the paper's headline scenario ("public medical articles can lead an unlearned LLM to output harmful knowledge about bioweapons"). The TOFU experiments (fictitious authors) and the WHP experiments (specific proper nouns) are more compelling in isolating memory recovery because the knowledge is either wholly synthetic or highly specific—but the paper's strongest rhetorical claim depends on WMDP where the control is missing.
+- **Missing retrain-from-scratch control to distinguish memory recovery from new learning**: The paper's central conceptual claim is that unlearning methods "simply obfuscate the model outputs instead of truly forgetting the information" (Abstract, Section 1, Section 9). The key evidence is that finetuning on related data recovers unlearned knowledge. However, this evidence is also consistent with the alternative explanation: the model partially forgot, but the relearn data combined with remaining pretraining knowledge was sufficient to reconstruct plausible answers. Without a control—a model retrained from scratch without the forget data, subjected to the same relearning procedure—it is impossible to definitively distinguish "jogging memory" from "learning anew." The WHP verbatim text recovery experiment partially addresses this (verbatim text is harder to reconstruct), but for WMDP—the most policy-relevant experiment—the boundary is porous. The paper itself recognizes this distinction in Section 8, noting that prior work's relearn data "might contain direct answers to the evaluation queries, making it unclear whether relearning occurs simply due to learning the knowledge again from scratch," but the same ambiguity applies to the current paper's WMDP results.
 
-- **The LLM-as-Judge metric for WMDP measures topical relevance, not recovery of specifically unlearned harmful knowledge:** In Table 3, the original Zephyr-7b-beta model provides general virology information with a partial refusal ("I am not capable of engineering viruses, but I can provide you with some information...") and scores 8, while the relearned model provides detailed step-by-step weaponization instructions and also scores 8. These are qualitatively very different outcomes—only the latter constitutes specifically harmful unlearned knowledge. The "relevance to the question" scoring conflates safe topic-adjacent information with dangerous specific instructions. While Table 3's qualitative example does show the difference, the quantitative results in Figure 4 rely solely on these relevance scores, which do not distinguish between the two outcomes. This partially undermines the WMDP quantitative evidence. (The WHP results using Rouge-L and TOFU results using binary prediction accuracy are more directly appropriate.)
-
-- **The "simply obfuscating" framing is stronger than the evidence supports:** The abstract states that "current approximate unlearning methods simply suppress the model outputs" and Section 1 claims they are "simply obfuscating." However, Figure 3's heatmaps show that for deeply unlearned checkpoints, relearning attack success rate drops substantially (often below 30–40% even with many relearning steps). This is more consistent with *partial forgetting*—some knowledge is removed, making recovery harder though not impossible—than with "simple obfuscation" (which would imply near-perfect recovery is always achievable). The paper does present this evidence in Section 3 but does not reconcile it with the strong framing language. A more nuanced conclusion—distinguishing shallow from deep unlearning, and partial forgetting from mere obfuscation—would be better supported by the paper's own data.
+- **The "obfuscation vs. forgetting" distinction is never operationalized**: The paper repeatedly claims that unlearning methods "obfuscate" or "suppress" outputs rather than "truly forgetting" (Abstract, Section 1, Section 9), but no formal or empirical criterion is given for what would constitute "true forgetting" as distinct from "obfuscation." The toy experiment (Section 5) demonstrates that token correlations drive relearning effectiveness, which is useful mechanistic insight, but it does not define a testable boundary between the two mechanisms. Without such a criterion, the central claim becomes difficult to falsify: any successful relearning is interpreted as evidence of obfuscation, when it could equally indicate partial forgetting plus reconstruction. A concrete standard—e.g., a model where no linear probe can extract forgotten information above chance—would make the claim testable.
 
 ### Minor
 
-- **Retain set results for WMDP deferred to appendix:** The paper notes "We defer the retain MT-Bench results to Appendix C.4 due to space constraint." While retain set evaluation is a standard check to ensure unlearning doesn't catastrophically harm model utility, and the paper does run this evaluation, including at least a summary in the main text would strengthen confidence that the relearning attack reveals unlearning-specific vulnerability rather than just generic finetuning effects.
+- **WMDP relearn data boundary is porous**: The relearn set for WMDP is constructed from "public online articles related to q" plus GPT-generated paragraphs (Section 4.1). Table 3's example shows the relearned model outputting specific bioweapon engineering steps involving HA and NA genes—knowledge that, while not a "direct answer" to the evaluation question, sits at the boundary of what could reasonably be reconstructed from publicly available virology information. The paper's constraint that D' "does not contain direct answers" is reasonable but somewhat loose; the jump from "general influenza knowledge" to "introduce HA and NA genes from highly pathogenic avian influenza" is smaller than the "loosely related" framing in the abstract suggests.
 
-- **Small sample sizes in some experiments:** WHP uses 15 text-completion queries; WMDP uses 70. While variance/confidence intervals are not reported, this is consistent with community norms for these benchmarks.
+- **LLM-as-Judge metric measures relevance, not specific knowledge recovery**: For WMDP, the evaluation uses GPT-4 to score answer relevance on a 1-10 scale (Section 4.1). A model generating plausible but fabricated biological details could score highly without actually recovering the specific unlearned knowledge. This makes the WMDP results harder to interpret than the WHP results (which use Rouge-L against ground truth text).
+
+- **Abstract overstates the "loosely related" constraint**: The abstract claims the attack uses "only a small and potentially loosely related set of data," but the actual experiments use data that is sometimes quite directly related—WHP uses GPT-generated facts about the exact characters (Harry, Ron, Hermione), TOFU uses books by the same fictitious author, and WMDP uses articles specifically about influenza virology. The attack is stronger and more practically relevant than the abstract framing suggests, but the "loosely related" characterization somewhat undersells the data requirements.
+
+- **Zephyr relearn scores suspiciously close to original**: In Figure 4, the Zephyr-7b-beta relearn scores appear to nearly match the original model scores across all unlearning methods (e.g., GA: original 5.92, relearn 5.92; GD: original 6.2, relearn 6.2). While this could reflect genuinely effective relearning, the near-identical values raise questions about evaluation sensitivity and whether the metric can meaningfully distinguish degrees of recovery.
 
 ### Trivial
 None.
 
 ## Nice-to-Haves
 
-- A never-learned control experiment for WMDP (finetune a base model without WMDP training data on the same relearn set) would directly test whether the mechanism is memory jogging vs. learning, and would substantially strengthen or qualify the paper's central claim.
-- A more targeted evaluation metric for WMDP that distinguishes recovering specifically harmful unlearned knowledge from producing topically relevant but safe information.
-- Study of how attack effectiveness scales with relearn set size or quality, which would clarify the practical threat surface.
+- A retrain-from-scratch control experiment would significantly strengthen the paper's core claim and is the single most impactful addition the authors could make.
+- Linear probing of intermediate representations (e.g., probing whether unlearned knowledge is still linearly accessible in hidden states) would directly test the obfuscation hypothesis and provide the operationalized criterion the paper currently lacks.
+- Token-level comparison of relearned vs. original model outputs for WMDP would clarify whether the model recovers the same knowledge or merely produces similar-looking outputs.
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with cautious consideration:
+These points are flagged to be removed; treat them with caution.
 
-- **"No variance or confidence intervals" as a substantive weakness:** Single-run evaluation without confidence intervals is the norm in the LLM unlearning/alignment safety community. With 15 (WHP) and 70 (WMDP) samples, computing variance would not change the large score differences observed. Downgraded from major to trivial, then removed as trivial in evaluation context.
+- **"The relearn data is not truly benign for WMDP"** (Harsh Critic point 2): The paper explicitly constrains that D' does not contain direct answers to evaluation queries. While the boundary is porous (addressed in Minor weaknesses), claiming the relearn data is "not benign" goes beyond what the evidence supports—the data is publicly available general knowledge about influenza.
 
-- **"RMU absent from main experiments":** RMU is discussed in Section 7 with key insights (layer knowledge matters, evaluation metric sensitivity), and detailed results are in the appendix. The main results cover 5 unlearning methods—this is a reasonable scope choice. The paper's key finding that RMU is attackable under MCQ but not completion evaluation is preserved in the discussion.
+- **"The paper has no formal definition of true forgetting, making claims unfalsifiable"** (Harsh Critic point 3, full version): While partially valid and retained as a Major weakness, the extreme version claiming this makes the paper entirely unfalsifiable is overstated. The toy experiment (Section 5) does provide some testable implications (correlated tokens should recover together), and the WHP verbatim text recovery provides a concrete empirical standard that reconstruction alone cannot easily meet.
 
-- **"Missing related works" criticism:** Not verifiable without external sources; removed per rules.
+- **"Gibberish text providing any recovery deserves more investigation"** (Harsh Critic, Section 6): The 9% ASR from gibberish text in Table 5 is noted in the paper. While interesting, this is a minor observation that doesn't undermine the core findings—it likely reflects that any finetuning partially reverses unlearning's output suppression, which is consistent with the paper's argument.
 
-- **Formatting/presentation nitpicks from the harsh critic (e.g., "hard to follow," figure readability):** Generic presentation comments without specific, actionable fixes; removed per rules.
+- **"Llama-3-8b-Instruct resisting unlearning raises questions about whether attacks work better when unlearning is shallow"** (Harsh Critic, Section 7): The paper discusses this clearly in Section 7, explaining it as a format mismatch issue rather than deep unlearning. This is a known limitation, not an unaddressed weakness.
 
-- **"Retrain-from-scratch comparison" as a major weakness:** While interesting, this would be a separate paper's worth of contribution and is outside the stated scope. The paper studies *approximate* unlearning methods' vulnerability to benign relearning. Comparing against retrained models is a nice-to-have, not a core flaw.
+- **"Request for safety training (RLHF) isolation experiments"** (Harsh Critic, Missing Experiments): The paper already tests on instruction-tuned models (Zephyr, Llama-2-7b-chat) and discusses the Llama-3-8b-Instruct case. Requesting additional isolation of safety training effects is scope creep beyond the paper's stated focus on approximate unlearning methods.
+
+- **"Request for confidence intervals / significance testing"** (Harsh Critic, Section 6): For LLM benchmark evaluations of this nature, single-run average scores are the community norm. Requesting error bars on 5-condition experiments is a nice-to-have, not a substantive weakness.
 
 ## Novel Insights
 
-The paper's synthetic experiment (Section 5) reveals a genuinely interesting mechanism: when unlearning operates token-by-token on a loss function, it reduces the conditional probability $p_w(x_i | x_{<i})$ for each token individually but does not remove the *inter-token associations* learned during pretraining. This means relearning on correlated tokens can "drag" the probability of unlearned tokens back down through shared representations. The implication is that token-level unlearning objectives are fundamentally insufficient for knowledge removal——one would need to disrupt the inter-token correlation structure itself, which points toward representation-level or circuit-level interventions as more promising directions.
+The paper's most insightful contribution is the toy experiment's demonstration that the NLL of an unoptimized token ("Mark") drops during relearning of a correlated token ("Anthony"), providing direct evidence that current unlearning methods operate at the token level without disrupting inter-token associations. This is a clean mechanistic result that generalizes the intuition beyond just showing "relearning works"—it shows *why* it works, and the correlation-strength analysis (Table 4) provides an actionable lens for predicting which unlearned knowledge is most vulnerable.
 
 ## Suggestions
 
-- Run the never-learned control for WMDP: Take a Zephyr or Llama-3 model that was never trained on WMDP bio-attack articles, finetune it on the same public influenza articles, and measure whether it achieves similarly high LLM-as-Judge scores. If it does, the "memory jogging" mechanism for WMDP is unsupported; if it doesn't, the paper's claim is significantly strengthened.
-- Soften the framing language: Replace "simply obfuscating" with a gradient characterization (e.g., "shallow unlearning amounts to obfuscation while deeper unlearning achieves partial but incomplete forgetting") to better reflect Figure 3's evidence.
-- For WMDP, add a metric that specifically measures recovery of harmful weaponization steps (not just topical relevance), or at minimum annotate the qualitative examples distinguishing "safe relevant information" from "specifically recovered harmful knowledge."
-
-## Evaluation
-
-**Originality:** The benign relearning attack formalization—with the explicit constraint that relearn data does not contain direct answers—is a genuine advance over prior relearning work. The partition into $D_u^{(1)}$ and $D_u^{(2)}$ for clean testing is creative. The synthetic experiment provides novel mechanistic insight.
-
-**Importance:** The research question is highly important for the practical deployment of unlearning methods. If approximate unlearning is merely obfuscating (even partially), this has serious implications for safety and compliance use cases.
-
-**Claim support:** The claims are partially but not fully supported. The TOFU and WHP evidence is strong; the WMDP evidence is weakened by the missing control experiment and the coarse evaluation metric. The "simply obfuscating" conclusion is stronger than the evidence warrants.
-
-**Experimental soundness:** Broad across benchmarks and methods. The synthetic experiment is well-designed. Key gap is the never-learned control for WMDP.
-
-**Clarity:** Well-structured paper with clear threat model, algorithmic description (Algorithm 1), and takeaways at the end of each section.
-
-**Community value:** High——this exposes a fundamental weakness in widely-used unlearning approaches and provides a practical evaluation methodology that future work should adopt.
-
-## Calibration Anchors
-
-| Paper | Path | Avg Score | Comparison |
-|-------|------|-----------|------------|
-| Safety Alignment Should Be Deep | /home/wg25r/review_agent/human_reviews/6Mxhg9PtDE.md | 9.5 (Oral) | Much stronger: deep mechanistic insight, novel defenses, excellent writing. Our paper doesn't approach this bar. |
-| Probabilistic Unlearning Evaluation | /home/wg25r/review_agent/human_reviews/51WraMid8K.md | 8.0 (Oral) | Stronger: novel evaluation framework with theoretical grounding. Our paper is less principled in its evaluation methodology. |
-| Catastrophic Jailbreak | /home/wg25r/review_agent/human_reviews/r42tSSCHPh.md | 7.0 (Spotlight) | Comparable: strong empirical attack demonstration, also criticized for hyperbolic title. Our paper has similar overclaiming issue but broader experimental coverage. |
-| Safeguard Durability (fXJCqdUSVG) | /home/wg25r/review_agent/human_reviews/fXJCqdUSVG.md | 6.5 (Poster) | Comparable: similar topic area (vulnerability of LLM safeguards), also cautious about claims. Our paper is more systematic in attacks but less cautious in claims. |
-| G-Effect Unlearning (huo8MqVH6t) | /home/wg25r/review_agent/human_reviews/huo8MqVH6t.md | 6.0 (Poster) | Comparable: gradient-based analysis of unlearning objectives, also flagged for overclaimed conclusions. Our paper has more direct practical impact. |
-| SimNPO (Pd3jVGTacT) | /home/wg25r/review_agent/human_reviews/Pd3jVGTacT.md | 5.25 (Reject) | Slightly below: proposed a new unlearning method but limited technical novelty and overclaimed. Our paper has clearer practical contribution as an attack/evaluation paper. |
-| Mechanistic Unlearning (vsU2veUpiR) | /home/wg25r/review_agent/human_reviews/vsU2veUpiR.md | 5.25 (Reject) | Similar score range: strong results but presentation issues and cherry-picking concerns. Our paper has broader experiments but a key control experiment missing. |
-| Concept Resurgence (0OB3RVmTXE) | /home/wg25r/review_agent/human_reviews/0OB3RVmTXE.md | 4.0 (Reject) | Weaker: only one baseline tested, no theoretical insights. Our paper has broader coverage and mechanistic insight via synthetic experiment. |
-| Playing Language Game (BeOEmnmyFu) | /home/wg25r/review_agent/human_reviews/BeOEmnmyFu.md | 2.5 (Reject) | Much weaker: missing baselines, missing control experiments, hard to reproduce. Our paper is far above this bar. |
-
-The paper sits above the rejected medium anchors (4-5 range, which have fundamental experiment gaps or lack of novelty) but below the accepted high anchors (7+ range, which have deeper mechanistic insight or more principled evaluation). The closest accepted comparables are the safeguard durability paper (6.5) and the G-effect paper (6.0), both of which made solid contributions with acknowledged limitations. Our paper has a comparable profile: important contribution, broad experiments, but a key control experiment missing and overclaimed framing.
+- Add a retrain-from-scratch control: take a model never trained on D_u, apply the same relearning procedure, and compare recovery scores. If the control model also recovers similar scores, the "jogging memory" interpretation is weakened; if not, it is strongly supported.
+- Replace or supplement LLM-as-Judge for WMDP with a metric that measures specific knowledge recovery (e.g., accuracy on key factual claims extracted from the original model's outputs).
+- Tone down the "loosely related" language in the abstract to more accurately reflect the actual data constraints used in experiments, or add an experiment with genuinely loosely related data to demonstrate the boundary.
 
 ## Score and Decision
 
-Score: **6.0**
+**Originality**: The paper makes a meaningful contribution by constraining the relearn set to exclude direct answers, differentiating it from prior relearning work. The mechanistic analysis in Section 5, while simplified, adds genuine insight. However, the "obfuscation vs. forgetting" framing is not new—similar concerns have been raised in the unlearning literature—and the paper does not operationalize the distinction.
 
-This paper makes a genuine and important contribution by formalizing benign relearning attacks with the constraint that relearn data does not contain direct answers—addressing a real blind spot in the unlearning evaluation literature. The experiments across three benchmarks and five unlearning methods demonstrate a broadly applicable vulnerability. However, the "simply obfuscating" conclusion is stronger than the evidence warrants (Figure 3 itself shows partial forgetting at depth), and the WMDP section—the paper's headline scenario—lacks a never-learned control experiment that would establish the "memory jogging" mechanism over the "learning from related data" alternative. The evaluation metric for WMDP further conflates safe topical information with recovered harmful knowledge. These are addressable gaps rather than fatal flaws, and the paper's core finding—that approximate unlearning is vulnerable to even weak relearning attacks—is well-supported by the TOFU and WHP evidence and has high practical significance.
+**Importance of research question**: High. The vulnerability of approximate unlearning methods is a critical question for AI safety and policy, and demonstrating practical attack scenarios has real-world implications.
+
+**Claim support**: The empirical finding that relearning attacks work with constrained data is well-supported. The stronger conceptual claim about obfuscation vs. forgetting is only partially supported—the WHP verbatim recovery and toy experiment provide good evidence, but the WMDP results (the most policy-relevant) are ambiguous due to the porous data boundary and relevance-based evaluation metric. The missing retrain-from-scratch control is a significant gap.
+
+**Experimental soundness**: Good scope across methods and tasks, but the WMDP evaluation metric (LLM-as-Judge relevance scoring) is less discriminating than needed. The near-identical relearn/original scores for Zephyr raise evaluation sensitivity concerns.
+
+**Clarity**: Well-structured and clearly written. The pipeline formalization (Figure 2, Algorithm 1) is clean and reproducible.
+
+**Community value**: The paper provides an important practical warning about unlearning fragility and will likely motivate more robust unlearning methods. The PEFT vulnerability finding is particularly actionable.
+
+**Calibration comparison**:
+- *High anchors*: Safety Alignment Deep (avg 9.5, Oral) — deeper mechanistic insight with concrete defense proposals, significantly stronger. SalUn (avg 7.5, Spotlight) — principled method narrowing gap with exact unlearning, stronger technical contribution. Fine-tuning Compromises Safety (avg 7.0, Oral) — similar practical vulnerability finding but with more carefully scoped claims.
+- *Medium anchors*: Durability of Safeguards (avg 6.5, Poster) — shows evaluation difficulty without proposing solutions; this paper has stronger empirical evidence but overclaims. Rethinking Unlearning (avg 6.0, Poster) — metric-focused contribution; comparable contribution level.
+- *Low anchors*: Concept Resurgence in Diffusion (avg 4.0, Withdrawn) — similar phenomenon but tested on only one baseline; this paper is clearly stronger. AutoCustomization (avg 2.6, Reject) — shallow analysis; this paper is much stronger.
+
+This paper sits above the medium-low boundary. It makes a solid empirical contribution (demonstrating a practical vulnerability across multiple settings with some mechanistic insight) but the central conceptual claim about "obfuscation" is not fully earned by the experimental design. Compared to the fine-tuning compromises safety paper (7.0), which made similar vulnerability findings but with more carefully scoped claims, this paper overreaches interpretively. Compared to the durability of safeguards paper (6.5), it has stronger empirical breadth but shares the limitation of not proposing solutions. The paper is stronger than the 4-5 range papers due to its multi-method, multi-task scope and mechanistic analysis.
 
 MY FINAL SCORE: <pineapple>6.0</pineapple>
 MY FINAL DECISION: <orange>Accept</orange>

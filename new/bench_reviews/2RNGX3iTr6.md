@@ -1,22 +1,22 @@
-Now I have enough calibration. Let me synthesize the final review.
+Now I have all the information I need. Let me synthesize the final review.
 
 ## Summary
 
-The paper introduces Tabby, a post-training architecture modification for transformer-based LLMs that applies Mixture-of-Experts (MoE) layers—either to the transformer MLP blocks (MMLP), the language modeling head (MH), or both (MMLP-MH)—to dedicate expert parameters per tabular column. The core idea is that MoE specialization enables better modeling of individual column distributions and cross-column relationships. The paper also introduces "Plain" training as a simple baseline, compares across GAN, VAE, diffusion, and LLM-based methods on 6 datasets, and highlights per-column loss monitoring as a diagnostic benefit.
+Tabby proposes a post-training architectural modification for transformer-based LLMs that applies Mixture-of-Experts (MoE) layers to dedicate expert parameters to each tabular data column, either in the MLP layers (MMLP) or the LM head (MH). The paper evaluates across 6 datasets, 3 training paradigms (Plain, GReaT, GTT), and 4 Tabby variants, finding that Plain-trained Tabby MH achieves the strongest results among LLM methods, particularly on regression datasets (House, Rainfall).
 
 ## Strengths
 
-- **The MH variant consistently improves over the non-Tabby (NT) baseline across most datasets.** Table 2 shows Plain Tabby MH outperforms Plain NT on Travel (87.7 vs 85.5), Rainfall (0.58 vs 0.41), and House (0.75 vs 0.70), while matching on Adult (84.5) and Diabetes (74.3 vs 75.3). This demonstrates the MH design provides genuine gains over the non-Tabby LLM baseline.
+- **Identifies a real architectural gap and proposes an intuitive solution.** The observation that LLM architectures lack column-specific inductive biases for tabular data is well-motivated, and applying MoE with per-column experts is a clean, interpretable design choice (Section 1, 3.1).
 
-- **Effective on the challenging Rainfall dataset where prior LLM methods fail.** Table 2 shows GReaT NT fails to produce valid samples in any run (N/A*), while Plain Tabby MH achieves the best MLE among LLM approaches (0.58) — demonstrating the architecture modification enables modeling of distributions that break prior LLM-based approaches.
+- **Plain MH achieves strong practical results, especially on regression datasets.** On House, Plain MH achieves 0.75 R² (vs. 0.81 original), outperforming all other methods including Tab-DDPM (0.59). On Rainfall, Plain MH (0.58) produces valid samples in all runs where many prior LLM methods fail entirely (Table 2, Section 4.1).
 
-- **Per-column loss tracking provides genuinely useful diagnostic information.** Figure 4 shows that the MoE training formulation natively yields per-column validation loss curves (e.g., revealing that Median Income barely improves while Occupancy converges), which is not available from standard LLM training or GAN/diffusion approaches. This supports Claim 3.
+- **Thorough experimental grid.** The paper evaluates across 6 datasets, 3 training paradigms, 4 Tabby variants, and multiple baselines (CTGAN, TVAE, Tab-DDPM), providing a useful empirical landscape (Tables 2, 3).
 
-- **Valuable community observation about benchmark limitations.** Section 4.4 candidly notes that Plain training with Distilled-GPT2 achieves near-optimal MLE on several standard benchmarks (Adult, Diabetes), calling for more challenging evaluation datasets. This honest assessment is useful for the field.
+- **Per-column loss decomposition yields useful diagnostics.** Figure 4 reveals that Occupancy dominates early loss while Median Income plateaus — information that could guide preprocessing or data collection decisions (Section 4.3).
 
-- **Qualitative analysis of competing methods' failure modes.** Figure 2 provides a concrete, informative visualization showing Tab-DDPM only generates integer-valued regression targets on the House dataset — a clear artifact of that method's design.
+- **Honest discussion of baseline findings.** Section 4.4 candidly notes that the simple Plain NT baseline achieves near-optimal MLE on several standard datasets and recommends the community identify harder benchmarks — showing intellectual honesty about the evaluation landscape.
 
-- **The architecture modification is modular and composable.** Section 3.1 describes that Tabby replaces designated blocks after pretraining but before finetuning, making it compatible with any transformer-based LM and composable with existing training techniques (GReaT, TapTap, Tabula).
+- **Figure 2 provides a meaningful qualitative comparison.** The scatter plots clearly show that Tabby generates continuous-valued distributions matching real data, while Tab-DDPM is limited to integer-valued targets.
 
 ## Weaknesses
 
@@ -26,91 +26,86 @@ None.
 
 ### Major
 
-- **Claim 1 is overclaimed relative to Table 2's full results.** The paper states "Tabby models achieve the highest MLE in 4 out of 6 datasets" (Section 4.1) and Claim 1 explicitly compares against "pre-existing tabular synthesis approaches" — which includes Tab-DDPM, CTGAN, and TVAE. However, looking at Table 2 comprehensively: Tab-DDPM achieves the highest MLE on Travel (88.9 vs. 87.7), Abalone (0.52 vs. 0.47), and Rainfall (0.60 vs. 0.58). Plain NT (not Tabby) achieves the highest on Diabetes (75.3 vs. 74.3). Tabby MH is the clear winner only on House and ties at ceiling on Adult. The "4 out of 6" figure only holds among LLM-based approaches, not against all methods as Claim 1 asserts. The paper should either revise Claim 1 to reflect the actual scope of the comparison or acknowledge the cases where diffusion-based methods remain competitive. This matters because the central claim's credibility is undermined by the gap between what is claimed and what the data shows.
+- **Parameter count confound undermines the core mechanistic claim.** Table 3 reveals that Tabby MH on Distilled-GPT2 has 270M parameters versus 80M for the NT baseline — a 3.4× increase. The paper's central claim is that "column-specific MoE routing improves tabular synthesis" (Section 1, contributions), but no parameter-matched non-MoE control is provided. A standard Distilled-GPT2 with a widened (non-MoE) LM head at ~270M parameters would be the natural control; without it, the improvement could simply come from having more parameters rather than from the MoE routing mechanism. This problem pervades Tables 2 and 3. The paper even contains a factual error in the Figure 3 caption: it claims "a similar parameter count (270M) to NT DGPT2 (80M)," which is clearly incorrect — 270M is 3.375× larger than 80M.
 
-- **The parameter-count comparison in Section 4.2 lacks a parameter-matched non-Tabby baseline, undermining Claim 2.** Table 3 compares 80M NT DGPT-2, 270M Tabby MH DGPT-2, 8B NT Llama, and 10.5B Tabby MH Llama. The Tabby MH DGPT-2 has 3.4× more parameters than the NT DGPT-2 — the MoE head expansion *is* the parameter increase. Claim 2 states Tabby "allows smaller LLMs to achieve synthetic data fidelity more similar to that of LLMs with higher parameter counts," but without a wider/deeper ~270M non-Tabby DGPT-2, one cannot distinguish the effect of the MoE architecture from the effect of simply adding more parameters. That a 270M model performs between an 80M and an 8B model is expected regardless of architecture. This matters because it directly undermines the paper's argument that the architectural modification itself is responsible for the gains.
+- **The generation-time expert routing mechanism is entirely unspecified.** Section 3.3 describes training-time routing (column *i* → expert *i*), but the paper never explains how expert selection works during autoregressive generation. For Plain training with fixed column order, deterministic routing by counting `<EOC>` tokens is possible, but this is never stated. For GReaT-trained models with shuffled column order (included in Table 2), the routing mechanism is genuinely unclear. This is a reproducibility-blocking gap and a conceptual one: if routing is simply deterministic/positional, the "expert specialization" framing is misleading, as there is no learned routing.
 
-- **The MMLP variant — one of the two core architectural contributions — frequently fails catastrophically, with no diagnosis.** Table 2 shows MMLP produces disastrous results on regression datasets: R² = 0.00 on House, 0.11 on Rainfall, 0.28 on Abalone (vs. NT at 0.70, 0.41, 0.46). The MMLP-MH combination also produces 0.00 on House. On classification, MMLP drops Adult accuracy from 84.5 (NT) to 77.4. The paper presents MMLP as a co-equal contribution alongside MH in Figure 1 and Section 3.1, but does not explain *why* adding column-dedicated experts to the MLP layer destroys performance. This matters because half the proposed architecture is actively harmful on multiple datasets, and the absence of any hypothesis or investigation into this failure undermines confidence in the paper's understanding of when and why the MoE approach works.
+- **Key claims are overstated relative to the evidence.** (1) The abstract claims "up to 7% improvement compared to previous tabular dataset synthesis methods," but this 7% figure traces to comparing Plain MH against Plain NT (the paper's own baseline) on the House dataset — not against previous methods like CTGAN, TVAE, or Tab-DDPM. (2) The contributions state "higher-quality synthetic data for 4 out of 6 datasets," but among ALL methods (including Tab-DDPM), Tabby MH is the clear MLE leader on only 2 of 6 datasets (House and Rainfall). The "4 out of 6" holds only among LLM methods, a scope not stated in the contributions. (3) The table caption claims "reaching upper-bound performance on 4/6 datasets," but only 3 datasets (Diabetes, Travel, Adult) have Tabby MH at or above the Original row. (4) The conclusion says "parity in two out of three," conflicting with other claims of 3/6 or 4/6.
 
 ### Minor
 
-- **The "up to 7%" improvement in the abstract is cherry-picked.** The abstract claims "up to 7% improvement compared to previous tabular dataset synthesis methods." This 7% appears to come from Tabby MH over NT on House (0.75 vs 0.70 ≈ 7%), which is a comparison against the authors' own baseline, not "previous methods." Against Tab-DDPM on other datasets, Tabby is worse. The framing is misleading.
+- **MMLP consistently hurts performance, and this is unanalyzed.** Across Table 2, MMLP degrades results in nearly every configuration compared to NT. MMLP-MH (combining both modifications) also performs poorly. This pattern is more consistent with "a wider output layer helps but column-specific routing in intermediate layers hurts" than with the paper's framing of MoE as uniformly beneficial. The paper should analyze why this occurs — it is one of the most informative findings.
 
-- **Incompatibility with GReaT training is inadequately explained.** Table 2 shows GReaT + Tabby MH drops Diabetes MLE from 74.3 (Plain) to 63.7 and crashes Rainfall (0.00 on some runs). This incompatibility with the primary existing LLM training method is noted but not investigated, which limits the practical applicability of Tabby beyond Plain training.
+- **Tabby provides negligible benefit for larger models.** On Llama 3, MH improves MLE from 0.560 to only 0.562 while worsening discrimination from 24.2 to 25.3 (Table 3). This suggests the modification does not scale meaningfully to larger architectures, limiting the generality of the approach.
 
-- **The conclusion contains factually incorrect claims.** Section 5 states "Tabby reaches parity with non-synthetic data in two out of three evaluated datasets, according to machine learning efficacy with a Decision Tree Classifier." In reality: (a) 6 datasets were evaluated, not 3; (b) Random Forest was used, not Decision Tree; (c) parity was achieved on 3 classification datasets (Diabetes, Travel, Adult), not 2.
-
-- **Section 4.2 uses only 5 epochs on a dataset subset, and compares LoRA (Llama) vs. full fine-tuning (DGPT-2).** These design choices limit the strength of the scaling analysis. The discrimination scores for Llama (24-25%) are much worse than DGPT-2 (16%), which is acknowledged but not adequately explained.
+- **Claim 3 (per-column loss tracking) is not an architectural contribution.** Per-column loss can be trivially computed for any autoregressive model by masking the loss per column segment — it does not require the Tabby architecture. This is a convenient side-effect of the training procedure, not a meaningful architectural contribution.
 
 ### Trivial
 
-- Presenting "Plain training" as a contribution (Section 3.2 / 4.0.1) is unusual — it is standard autoregressive fine-tuning without any special tabular technique. However, the paper's observation that this simple baseline was absent from prior work is a valid point.
+- **Figure 3 caption contains a factual error.** It states Tabby MH DGPT-2 has "a similar parameter count (270M) to NT DGPT2 (80M)." 270M is not similar to 80M — it is a 3.375× increase.
 
 ## Nice-to-Haves
 
-- A parameter-matched non-Tabby baseline (~270M DGPT-2) would directly test whether the MoE architecture design rather than parameter count drives the improvement in Claim 2.
-- Per-column generation quality analysis (beyond just loss) comparing Tabby MH vs. NT would directly test whether expert specialization improves column-specific modeling.
-- Investigation into why MMLP fails catastrophically on regression datasets — even a hypothesis and preliminary experiment — would substantially strengthen or honestly limit the paper's scope.
-- Evaluation on more challenging datasets where Plain NT clearly fails would make the benchmarks more discriminative.
+- A parameter-matched non-MoE baseline (e.g., a Distilled-GPT2 with a wider LM head at ~270M parameters) would definitively test whether the improvement comes from MoE routing or from parameter scaling alone.
+- Analysis of expert utilization/activation patterns during generation to verify that different experts actually specialize in different columns.
+- Qualitative comparison of generated rows (not just aggregate metrics) to illustrate what Tabby captures and misses.
 
 ## Removed Points
 
 These points are flagged to be removed, treat them with caution:
 
-- **"The Plain training baseline often matches or beats Tabby"** — While Plain NT does beat Tabby MH on Diabetes (75.3 vs 74.3) and matches on Adult, this is framed by the harsh critic as undermining the paper's contribution. However, Tabby MH still consistently improves over NT across most datasets (Travel, Rainfall, House). The observation about benchmark difficulty is already acknowledged by the paper (Section 4.4) and is a valid finding, not a weakness of the method itself. WEAKENED to minor.
+- **Harsh Critic's Claim 2 "only 28% of the way" calculation is mathematically wrong.** The reviewer states Tabby MH DGPT-2 is "only 28% of the way from NT DGPT-2's 0.474 to NT Llama's 0.560." The actual calculation is (0.525−0.474)/(0.560−0.474) = 0.051/0.086 = 59.3%, which is more than "splitting the difference." The paper's Claim 2 language is approximately correct on this point — though the Figure 3 caption's "similar parameter count" statement is still wrong.
 
-- **"Presenting Plain training as a contribution is unusual"** — The paper positions it as a useful baseline that prior work overlooked, not as a major technical contribution. This is a presentation nitpick. MOVED to Trivial.
+- **Harsh Critic's criticism of the "Plain training" contribution.** Calling standard fine-tuning a "contribution" is indeed overblown, but this is a trivial issue, not a substantive weakness. The paper's own results show Plain NT already performs well, which somewhat undermines Tabby's own motivation — but this is more a self-critical finding than a flaw.
 
-- **"Paper should show generated sample rows"** — A nice-to-have visualization request but Table 2 and Figure 2 already provide quantitative and qualitative evidence respectively. MOVED to Nice-to-Have.
+- **Strength Finder's claim "Tabby achieves state-of-the-art MLE on 4/6 datasets."** This is misleading — Tabby is SOTA only among LLM methods, not over all methods including Tab-DDPM. Moved to Removed Points because it conflicts with the verified Major weakness about overclaimed results.
 
-- **"Test on full GPT-2 (not Distilled-GPT-2)"** — Generic "evaluate on more models" request. The paper already tests two very different model families/sizes. MOVED to Nice-to-Have.
+- **Strength Finder's claim "MoE architecture modification provides disproportionate gains for smaller models — architecture change, not just raw parameter count."** This directly conflicts with the verified Major weakness about the parameter confound. The strength finder asserts what the paper fails to prove.
 
-- **"Per-column MoE might prevent cross-column learning"** — This is speculative and not supported by evidence. The MH variant works well, suggesting cross-column learning via attention is preserved. MOVED to Nice-to-Have.
-
-- **The Strength Finder's claim that Tabby MH "achieves the highest MLE among all methods on 4/6 datasets"** conflicts with verified Major weakness about Tab-DDPM outperforming on 3/6 datasets. REMOVED from strengths.
+- **Strength Finder's claim about "Low discrimination scores indicate high-fidelity."** Tab-DDPM achieves better discrimination scores on 4/6 datasets (e.g., Adult: 0.9 vs 9.8; Travel: 1.4 vs 3.0), so this strength is misleading.
 
 ## Novel Insights
 
-The paper reveals an interesting asymmetry: applying MoE to the LM head (MH) consistently helps, while applying it to the MLP layers (MMLP) catastrophically fails on regression tasks. This suggests that dedicating expert parameters at the output stage (where column-specific decoding happens) is beneficial, but dedicating parameters at the intermediate representation stage (MLP) may isolate column representations too early, preventing the cross-column attention from building useful joint features. This is a finding that could inform future work on MoE-based architectures for structured data, though the paper itself does not investigate this hypothesis.
+The most revealing pattern in the data is the divergence between MLE and discrimination: Tabby MH tends to win on MLE (especially for regression tasks), while Tab-DDPM tends to win on discrimination. This tension is underexplored in the paper but suggests that Tabby may be better at preserving downstream predictive utility while Tab-DDPM better avoids detectable distributional artifacts. Understanding this tradeoff — and whether the MLE metric alone is sufficient for evaluating tabular synthesis quality — would be a more valuable contribution than the current MoE framing.
 
 ## Suggestions
 
-- Revise Claim 1 to clearly state the scope: "Tabby models achieve the highest MLE among LLM-based approaches on 4 out of 6 datasets, and outperform Tab-DDPM on 2 out of 3 regression datasets." Acknowledge Tab-DDPM's superiority on Travel, Abalone, and Rainfall MLE explicitly.
-- Add a parameter-matched non-Tabby baseline (wider DGPT-2 at ~270M parameters) to Table 3 to isolate the architectural effect from the parameter-count effect for Claim 2.
-- Investigate and discuss the MMLP failure mode — at minimum, offer a hypothesis for why column-dedicated MLP experts hurt regression performance while column-dedicated LM heads help. This could be the paper's most insightful contribution if properly analyzed.
-- Correct the factual errors in the conclusion (number of datasets, classifier used, and number of parity-achieving datasets).
+- **Add a parameter-matched non-MoE control.** Train a standard Distilled-GPT2 with a widened LM head (no MoE structure) at ~270M total parameters on the same datasets. If it matches Tabby MH, the "column-specific expert" framing collapses; if it underperforms, the MoE routing claim is validated. This single experiment would dramatically strengthen (or invalidate) the paper.
 
-## Evaluation Axes
+- **Explicitly describe the generation-time routing.** At minimum, state whether routing is deterministic (counting `<EOC>` tokens) or involves a learned gating function, and explain how GReaT-shuffled column orders are handled during sampling.
 
-**Originality:** The idea of applying per-column MoE experts to the LM head for tabular synthesis is clean and reasonably novel. However, MMLP (the other contribution) fails, and the parameter-efficiency claim is undermined by missing controls. Moderate originality.
+- **Temper claims to match the evidence.** Replace "4 out of 6 datasets" with "4 out of 6 datasets among LLM methods" in the contributions. Correct the "up to 7%" abstract claim to accurately reflect what is being compared. Fix the Figure 3 caption.
 
-**Importance of research question:** Tabular data synthesis is practically important, and improving LLM-based approaches is a relevant direction. The observation about benchmark inadequacy is valuable.
+## Evaluation
 
-**Claim support:** Claim 1 is overclaimed relative to full results. Claim 2 lacks necessary controls. Claim 3 is well-supported but minor. Claims are partially but not fully supported.
+**Originality:** The idea of applying per-column MoE to LLMs for tabular synthesis is straightforward and intuitive, but the novelty is limited — MoE has been extensively studied, and the application to tabular columns is a relatively direct mapping. The MMLP variant (which doesn't work) and the Plain training baseline (which is standard fine-tuning) add little novelty.
 
-**Experimental soundness:** Comprehensive comparison across method families, but key methodological gaps (no parameter-matched baseline, MMLP failure unexplained, limited scaling analysis).
+**Importance of research question:** Important — tabular data synthesis is practically valuable, and architectural improvements for LLMs in this domain are needed. However, the paper's own results show that simple baselines already perform well on standard benchmarks, somewhat diminishing the urgency.
 
-**Clarity:** Generally well-written with clear figures, but the conclusion contains errors and Claim 1's scope is ambiguous.
+**Claims support:** The core mechanistic claim (MoE routing improves synthesis) is poorly supported due to the parameter confound. The practical claim (Tabby produces better data) is better supported but limited to LLM-method comparisons and regression datasets.
 
-**Community value:** The per-column MoE head idea, the Plain training baseline observation, and the benchmark critique are all useful contributions, but the overclaimed results reduce trust.
+**Soundness of experiments:** Reasonable breadth but a critical missing control (parameter-matched baseline). The missing generation procedure is a reproducibility concern.
 
-## Calibration Anchors
+**Clarity:** Generally clear writing, but the method section has a significant gap (generation procedure), and claims are inconsistent across abstract, contributions, and conclusion.
 
-- **TabSyn** (4Ay23yeuz0, avg 6.75, Accept oral): Tabular synthesis with strong, clearly best results across all baselines and metrics. This paper is weaker because its main claim doesn't hold against all baselines, and TabSyn has cleaner experimental methodology.
-
-- **TabDAR** (kkGIbmpCHU, avg 4.75, Reject): Diffusion-nested autoregressive tabular synthesis with overclaimed results ("18-45% improvement") that doesn't consistently beat baselines. Similar pattern to this paper — strong claims undermined by own tables. Slightly higher than TabDAR due to Tabby having more honest discussion of limitations.
-
-- **TAEGAN** (pBqOH2g6K1, avg 4.5, Reject): Tabular GAN for small datasets that doesn't beat all methods and has missing baselines. Similar level of overclaiming.
-
-- **TabFMs** (hz2zhaZPXm, avg 3.5, Reject): LLM-based tabular foundation model with underperforming results and lacking baselines. This paper is better than TabFMs because it has clearer gains on some datasets and more honest discussion.
-
-- **TDTransformer** (r8tMECbxOl, avg 5.0, Reject): Tabular domain transformer with overclaimed statements and questionable baseline fairness. Similar positioning.
-
-- **MG-NeRF** (WKfMFtlz5D, avg 2.5, Reject): Proposed variant performs worse than baselines yet claims "appreciable achievement" — catastrophic failure of variant. This is an extreme; Tabby's MH variant works, only MMLP fails.
-
-This paper sits in the 4.0–5.0 range based on anchors: clearly above the low-tier papers (~2.5-3.5) that have fundamental failures across the board, but below the medium-tier accepts (~6-7) where methods clearly beat all baselines. The MMLP failure and overclaimed results position it alongside TabDAR/TAEGAN rather than TabSyn.
+**Value to community:** The paper provides a useful empirical comparison of tabular synthesis methods and highlights the surprising strength of Plain training. The MoE approach, if validated with proper controls, could be practically useful.
 
 ## Score and Decision
+
+**Calibration anchors used:**
+
+| Paper | Path | Avg Score | Comparison to Tabby |
+|-------|------|-----------|-------------------|
+| PTaRL | G32oY4Vnm8.md | 8.0 | Much stronger: clear theoretical motivation, well-validated claims, consistent improvements. Tabby is well below this. |
+| DynMoE | T26f9z2rEe.md | 7.0 | Stronger: novel auto-tuning MoE mechanism, complete method description. Tabby's method is less complete. |
+| ProgSyn | KTL534o7Ot.md | 5.33 | Similar overclaiming pattern, but ProgSyn has a clearer method. Tabby has a more serious parameter confound. |
+| TabDAR | kkGIbmpCHU.md | 4.75 | Close topic (autoregressive tabular synthesis), similar incomplete description issues. Tabby has a worse parameter confound but better empirical coverage. |
+| TAEGAN | pBqOH2g6K1.md | 4.5 | Overclaimed tabular synthesis results. Similar quality tier. |
+| Hyper-UT | tI3eqOV6Yt.md | 5.0 | Same parameter confound pattern — "improvements from architecture or just more parameters?" Tabby has more experiments but also overclaims more. |
+| MoDE | VAqRZIuW8m.md | 3.5 | MoE with parameter scaling and unclear inference. Tabby is somewhat better — more experiments, clearer motivation. |
+| LCN | wYVP4g8Low.md | 3.0 | Severe parameter confound with unfair comparisons. Tabby is better than this. |
+
+Tabby sits in the lower-medium range. It is better than the clearly broken papers (LCN at 3.0, MoDE at 3.5) but worse than papers with clearer methods and more honest claims (ProgSyn at 5.33, TabDAR at 4.75). The parameter confound is a serious issue that directly undermines the paper's central claim, and it is combined with an incomplete method description and overclaimed results. These are not fixable in a rebuttal — they require new experiments.
 
 MY FINAL SCORE: <pineapple>4.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

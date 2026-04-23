@@ -1,105 +1,80 @@
-Now I have a solid calibration basis. Let me write the final review.
+Now I have all the information I need. Let me compose the final review.
 
 ## Summary
 
-The paper studies gradient methods for optimizing $(L_0, L_1)$-smooth functions, deriving tighter first-order characterizations of this function class (Lemma 2.2) and using them to construct principled stepsize formulas via Fenchel conjugate minimization. It provides convergence rates for gradient descent (GM) with optimal/simplified/clipping stepsizes in both nonconvex and convex settings, analyzes parameter-free methods (NGM and PS-GM), and develops an accelerated method (AGMsDR) that eliminates the exponential dependence on $L_1 R$ present in prior work.
+This paper develops gradient methods for optimizing $(L_0, L_1)$-smooth functions by first deriving tighter first-order characterizations of this function class (Lemma 2.2, Corollary 2.5), then using these to design and analyze gradient methods with principled stepsizes. For convex problems, the gradient method with the proposed stepsizes achieves $\mathcal{O}(\frac{L_0 R^2}{\epsilon} + L_1 R \ln \frac{F_0}{\epsilon})$ complexity (Theorem 3.2), improving over prior $\mathcal{O}(\frac{L_0 R^2}{\epsilon} + [L_1 R]^2)$ when $F_0$ is bounded. The strongest result is Theorem 6.2, which gives an accelerated method (AGMsDR) with complexity $\nu\mathcal{O}(\sqrt{\frac{L_0 R^2}{\epsilon}} + (L_1 R)^{2/3}\ln\frac{F_0}{\epsilon})$, eliminating the exponential $\exp(\mathcal{O}(L_1 R))$ dependency present in all prior accelerated methods for this class.
 
 ## Strengths
 
-- **Fenchel conjugate stepsize derivation provides genuine structural insight (Section 3):** The optimal stepsize (9) is derived by minimizing the upper bound from Lemma 2.2, and the chain $\eta_k^{\text{cl}} \leq \eta_k^{\text{si}} \leq \eta_k^{\text{opt}}$ (Eq. 14) shows that clipping stepsizes are principled approximations of the optimal, not just heuristics. This is a clean insight that unifies several prior ad-hoc analyses.
+- **The principled stepsize derivation (Section 3) is a genuine conceptual contribution.** By showing that the optimal stepsize (eq. 9) arises naturally from minimizing the tighter upper bound from Lemma 2.2, and that clipping stepsizes (eq. 13) and simplified stepsizes (eq. 12) are approximations of this optimal choice with the ordering $\eta_k^{\text{cl}} \leq \eta_k^{\text{si}} \leq \eta_k^*$ (eq. 14), the paper provides a new and clean unifying explanation for why gradient clipping works — it approximates the minimizer of the local model, rather than merely controlling gradient magnitude.
 
-- **Tighter first-order characterizations (Lemma 2.2, Eqs. 3–4):** The exponential-corrected bounds on gradient difference (3) and function value growth (4) are provably tighter than those in Zhang et al. (2020) and Hübler et al. (2024), and directly enable all subsequent convergence results.
+- **The accelerated method (Theorem 6.2) eliminates exponential dependency on $L_1 R$, which is a qualitative improvement over all prior accelerated methods for this class.** Gorbunov et al. (2024) obtain $\mathcal{O}(1)\exp(\mathcal{O}(L_1 R))\sqrt{\frac{L_0 R^2}{\epsilon}}$ and Li et al. (2023) have quadratic $L_1^2 R^2$ inside a square root. The present bound $\nu\mathcal{O}(\sqrt{\frac{L_0 R^2}{\epsilon}} + (L_1 R)^{2/3}\ln\frac{F_0}{\epsilon})$ is polynomial in $L_1 R$, making the method viable for large $L_1 R$ without catastrophic complexity blowup. This is the paper's strongest result.
 
-- **Accelerated rate eliminates exponential dependence on $L_1 R$ (Theorem 6.2):** The AGMsDR bound $\nu\mathcal{O}(\sqrt{L_0 R^2/\epsilon} + (L_1 R)^{2/3}\ln(F_0/\epsilon))$ is qualitatively better than Gorbunov et al. (2024)'s $\mathcal{O}(1)\exp(\mathcal{O}(1)L_1 R)\sqrt{L_0 R^2/\epsilon}$ and improves over Li et al. (2023)'s polynomial-in-$L_1$ rate. This is a meaningful advance.
+- **Tighter first-order bounds (Lemma 2.2, Corollary 2.5) directly enable the improved convergence analyses.** Lemma 2.2 provides bounds (3) and (4) that are tighter than those in Zhang et al. (2020) and Hübler et al. (2024). Corollary 2.5 generalizes Nesterov (2018, Theorem 2.1.5) to $(L_0, L_1)$-smooth functions, recovering the classical result when $L_1 = 0$.
 
-- **No dependence on initial gradient norm (Theorems 3.1, 3.2, 4.1, 5.1, 6.2):** All complexity bounds avoid dependence on $\|\nabla f(x_0)\|$, unlike Li et al. (2023), which is a practical advantage since this quantity can be arbitrarily large for $(L_0, L_1)$-smooth functions.
+- **Parameter-free methods (NGM, PS-GM) achieve $\mathcal{O}(\frac{L_0 R^2}{\epsilon} + [L_1 R]^2)$ without knowing $(L_0, L_1)$, and automatically adapt to the best parameter pair** (Theorems 4.1, 5.1). This improves over Takezawa et al. (2024) and Koloskova et al. (2023), who require additional $L$-smoothness assumptions.
 
-- **Parameter-free methods adapt to the best $(L_0, L_1)$ pair (Sections 4–5):** NGM and PS-GM achieve $\mathcal{O}(L_0 R^2/\epsilon + [L_1 R]^2)$ without knowing $(L_0, L_1)$, and automatically minimize over all valid parameter pairs, improving over Takezawa et al. (2024).
+- **All complexity bounds avoid dependency on the initial gradient norm $\|\nabla f(x_0)\|$**, in contrast to Li et al. (2023) whose rates polynomially depend on this quantity, which can be arbitrarily large for functions like $f(x) = \frac{1}{p}\|x\|^p$ with $p > 2$.
 
 ## Weaknesses
 
 ### Fatal
-
 None.
 
 ### Major
 
-- **The nonconvex rate in the abstract, contributions, and conclusion is factually incorrect.** The paper claims (lines 59, 67, 328) a nonconvex complexity of $\mathcal{O}(\frac{L_0 F_0}{\epsilon} + \frac{L_1 F_0}{\epsilon})$, but Theorem 3.1 clearly states $K+1 \geq \frac{2L_0 F_0}{a\epsilon^2} + \frac{3L_1 F_0}{a\epsilon}$, giving actual complexity $\mathcal{O}(\frac{L_0 F_0}{\epsilon^2} + \frac{L_1 F_0}{\epsilon})$. The $L_0$ term requires $\epsilon^2$ in the denominator, not $\epsilon$—the claimed $\mathcal{O}(1/\epsilon)$ for the $L_0$ component would imply finding stationary points of $L_0$-smooth nonconvex functions in linear iterations, which contradicts the well-known $\Omega(1/\epsilon^2)$ lower bound. The same error is propagated when citing Koloskova et al. (2023) on line 67. The theorem is correct; the presentation is wrong at the paper's most visible points (abstract, contributions, conclusion). This is a major issue because it misstates the paper's own primary result, though the actual theorem is sound.
-
-- **The convex GM improvement over prior work is conditional on bounded $F_0$, substantially underplayed.** Theorem 3.2 gives $\mathcal{O}(\frac{L_0 R^2}{\epsilon} + L_1 R \ln\frac{F_0}{\epsilon})$, presented as "significantly improving existing results." However, since $F_0$ can be as large as $\exp(L_1 R)\frac{L_0 R^2}{2}$ (from Lemma 2.2), the $L_1 R \ln\frac{F_0}{\epsilon}$ term can degrade to $\mathcal{O}([L_1 R]^2)$, matching prior bounds like Gorbunov et al. (2024). The paper mentions this (line 211) but the abstract, contributions, and comparison tables present the $\ln(F_0/\epsilon)$ rate as the primary result without flagging this worst-case equivalence. The improvement is real but not universal—it holds when $F_0$ is "reasonably bounded" (a condition never formally stated as a theorem assumption).
+- **The convex GM improvement over Gorbunov et al. (2024) is conditional on $F_0$ being bounded, but the abstract and conclusion present it as an unconditional "significant" improvement.** Theorem 3.2 gives $\mathcal{O}(\frac{L_0 R^2}{\epsilon} + L_1 R \ln \frac{F_0}{\epsilon})$ as the primary bound. In the worst case, $F_0$ can be $\Theta(\exp(L_1 R) \cdot L_0 R^2)$ (as the paper itself notes via Lemmas 2.2 and 2.3), making $\ln\frac{F_0}{\epsilon} = \Theta(L_1 R + \ln\frac{1}{\epsilon})$ and degrading the bound to $\mathcal{O}(\frac{L_0 R^2}{\epsilon} + [L_1 R]^2)$ — matching, not improving, Gorbunov et al. (2024). The paper does state this worst-case bound explicitly in the theorem and discusses it in Section 3.2, but the abstract claims "significantly improves the best-known complexity bounds for convex objectives" without this crucial qualification, and the conclusion (Section 7) repeats the improved bound as the primary result without mentioning the worst case. This matters because a reader relying on the abstract alone would overestimate the generality of the improvement. The theorem statement itself is transparent, so this is an issue of framing rather than a technical error, but it remains a significant overclaim in the paper's most visible sections.
 
 ### Minor
 
-- **The accelerated method requires one-dimensional line search ($\nu$ factor), and no $F_0$-free pessimistic bound is provided for it.** Theorem 6.2's rate includes $\nu$ from the line search oracle, making this not a purely first-order method. The paper acknowledges this openly (line 324) as an open question, which is fair. The same $F_0$-dependence caveat as the convex GM result applies—in the worst case, $\ln(F_0/\epsilon)$ introduces an additional $(L_1 R)$ factor—but unlike Theorem 3.2, no secondary pessimistic bound is explicitly stated for AGMsDR.
+- **The $\nu$ factor in AGMsDR's complexity bound is not quantified.** Theorem 6.2's total oracle complexity is $(\nu+1)k$, where $\nu$ is the number of oracle queries needed for the one-dimensional line search in Step 4 of Algorithm 1. The paper states this is "negligible for practical problems" (Section 6) but provides no analysis or empirical evidence for this claim. Since the accelerated result is the paper's strongest contribution, quantifying or bounding $\nu$ even for simple function classes (e.g., logistic regression) would strengthen it. The paper does acknowledge that eliminating line search is an "important open question" (Section 7), which partially mitigates this concern.
 
-- **The assumption of twice continuous differentiability in Definition 2.1 is restrictive.** The paper notes equivalence with Chen et al. (2023)'s $\alpha$-symmetric class (which relaxes this to once differentiability) but does not discuss whether all results extend without twice differentiability.
+- **No numerical experiments.** The paper studies optimization methods with clear ML motivations (citing Zhang et al. (2019)'s neural network observations), yet includes no empirical validation — even on simple convex problems like logistic regression where the improved bounds should be testable. While pure theory papers can be accepted without experiments, even basic numerical illustrations would help assess whether the theoretical improvements translate to practice, especially given the conditional nature of the convex GM improvement.
+
+- **No lower bounds or optimality discussion.** Without lower bounds, it is unclear whether $\mathcal{O}(\frac{L_0 R^2}{\epsilon} + L_1 R \ln \frac{F_0}{\epsilon})$ for convex GM or $(L_1 R)^{2/3}\ln\frac{F_0}{\epsilon}$ for the accelerated method are tight. The paper acknowledges this as an open question in the conclusion, but a brief discussion of what is known about lower bounds in related settings (e.g., the classical $L$-smooth case) and how the current bounds relate would help the reader gauge room for improvement.
 
 ### Trivial
-
 None.
 
 ## Nice-to-Haves
 
-- Explicit worst-case bound for AGMsDR without $F_0$ (analogous to the secondary bound in Theorem 3.2) so readers can assess worst-case complexity directly.
-- Formalize the $F_0$-boundedness condition as a corollary rather than leaving it as informal discussion.
-- Empirical validation of the convex GM improvement on problems where $F_0$ is bounded, showing the $\ln(F_0/\epsilon)$ term is practically relevant.
-- Visualization comparing $\eta_k^{\text{opt}}, \eta_k^{\text{si}}, \eta_k^{\text{cl}}$ trajectories on a concrete $(L_0, L_1)$-smooth function.
+- Stochastic extensions (SGD, clipped-SGD) under $(L_0, L_1)$-smoothness would significantly increase impact, as this is the setting where clipping is most used in practice.
+- Strongly convex analysis would complete the picture, as Gorbunov et al. (2024) provide such results.
+- Discussion of whether the gap between parameter-dependent ($L_1 R \ln\frac{F_0}{\epsilon}$) and parameter-free ($[L_1 R]^2$) convex GM rates is inherent to parameter-free methods or could be closed.
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution:
+*These points are flagged to be removed, treat them with caution.*
 
-- **Harsh critic's claim that the paper "overstates" its framework as "principled framework" vs. "single technique":** This is a subjective presentation preference. The paper does provide a coherent framework connecting optimal, simplified, and clipping stepsizes with explicit hierarchical relationships. Calling it a "framework" is reasonable.
+- **Harsh Critic: "The gap between parameter-dependent and parameter-free methods is unexplained."** The paper does discuss this gap in Section 4 (lines 243-247), noting that NGM's complexity is "generally worse than that of the previously considered GM" and explaining the tradeoff (parameter knowledge vs. automatic adaptivity). Demanding a determination of whether this gap is inherent goes beyond the paper's stated scope; this is a nice-to-have, not a weakness.
 
-- **Harsh critic's demand for experiments as a weakness:** The paper is a theory paper; experiments are not standard in this venue for pure optimization theory contributions. Moved to Nice-to-Have.
+- **Harsh Critic: "Stochastic extensions" as a weakness.** The paper explicitly scopes itself to deterministic gradient methods. Criticizing the absence of stochastic extensions is scope creep. Moved to nice-to-have.
 
-- **Harsh critic's concern about missing appendix examples/operations:** The parser strips appendix content. These exist in the original submission. Removed.
+- **Harsh Critic: "Strongly convex analysis" as a weakness.** Similarly outside the paper's stated scope. Moved to nice-to-have.
 
-- **Harsh critic's concern about "$R_k$ is nonincreasing" stated without proof:** This is proved in the appendix, which was stripped by the parser. Removed.
-
-- **Harsh critic's demand for AGMsDR worst-case bound without $F_0$:** This would strengthen the paper but is a Nice-to-Have, not a critical flaw. Demoted.
-
-- **Strength finder's claim about "new convexity-specific structural results" as a "core" strength:** While technically correct, the convex lower bounds (Lemma 2.4, Corollary 2.5) are supporting results rather than core contributions—they facilitate proofs but don't constitute the paper's main advance. Kept as a supporting strength under point 2.
+- **Strength Finder: "Clean, modular proof structure" as a presentation strength.** While accurate, this is too generic — it doesn't cite a specific structural feature that distinguishes the paper from other well-organized theory papers. Removed as insufficiently specific.
 
 ## Novel Insights
 
-The Fenchel conjugate connection between the upper bound on function growth and the optimal stepsize provides a unifying explanation for why clipping works—it's not a hack but an approximation of the stepsize that minimizes the tightest available one-step progress bound. This insight, combined with the hierarchy $\eta^{\text{cl}} \leq \eta^{\text{si}} \leq \eta^{\text{opt}}$, reframes clipping as arising naturally from the structure of $(L_0, L_1)$-smoothness rather than being an external trick.
+The paper's most novel insight is the principled connection between optimal stepsizes and gradient clipping: by deriving the exact minimizer of the local upper bound on $f$, the authors show that the "optimal" stepsize (eq. 9) is naturally a function of $L_0$, $L_1$, and $\|\nabla f(x_k)\|$, and that clipping stepsizes (which have been used heuristically in prior work) are simply coarse approximations of this optimal choice. This reframes clipping not as an ad hoc gradient-magnitude control mechanism, but as a principled optimization step arising from the structure of $(L_0, L_1)$-smooth functions. This perspective could inform future stepsize designs in more complex settings (stochastic, distributed).
 
 ## Suggestions
 
-- Fix the nonconvex rate in the abstract, contributions, and conclusion: replace $\mathcal{O}(\frac{L_0 F_0}{\epsilon} + \frac{L_1 F_0}{\epsilon})$ with $\mathcal{O}(\frac{L_0 F_0}{\epsilon^2} + \frac{L_1 F_0}{\epsilon})$.
-- Either make the $F_0$-boundedness condition explicit in theorem statements (e.g., as a corollary with the assumption $F_0 \leq \text{poly}(L_0, L_1, R)$) or prominently flag the worst-case equivalence in the contributions section.
-- Fix the citation of Koloskova et al. (2023)'s nonconvex rate on line 67, which has the same $\epsilon$ vs. $\epsilon^2$ error.
+- Qualify the "significant improvement" claim in the abstract and conclusion by noting that the convex GM improvement holds when $F_0$ is reasonably bounded, with the worst-case matching prior art. Even a parenthetical remark would suffice.
+- Add even a single figure showing convergence behavior of the proposed stepsizes vs. baselines on a logistic regression problem, to demonstrate that the theoretical improvements manifest empirically.
+- Provide at least a crude bound on $\nu$ for a simple problem class (e.g., univariate or separable objectives) to give readers a concrete sense of the line search cost.
 
-## Evaluation
+## Calibration
 
-**Originality:** The Fenchel-conjugate stepsize derivation and the structural characterizations are original and insightful. The AGMsDR extension is a novel application of an existing scheme. The nonconvex rate matches Koloskova et al. (2023).
+Anchors used:
+- **High (8.0)**: /home/wg25r/review_agent/human_reviews/xGvPKAiOhq.md — Matrix sensing GD convergence with novel lower bounds + empirical validation. Avg 8.0. The current paper lacks the surprising findings and empirical validation that earned this paper its score.
+- **High (7.5)**: /home/wg25r/review_agent/human_reviews/e4xS9ZarDr.md — Lion optimizer Lyapunov analysis. Avg 7.5. Deep theoretical insight into a popular optimizer with experiments. The current paper's contributions are more specialized and lack empirical validation.
+- **Medium (6.75)**: /home/wg25r/review_agent/human_reviews/YwJkv2YqBq.md — Nesterov acceleration in benignly non-convex. Avg 6.75. Theoretical improvements in convergence analysis for non-standard settings, similar profile to the current paper. The current paper arguably has stronger novel insights (stepsize derivation) but no experiments and some overclaiming.
+- **Medium (6.0)**: /home/wg25r/review_agent/human_reviews/BdPvGRvoBC.md — Improved analysis of clipping in FedAvg. Avg 6.0. Clean improved convergence analysis for clipping, similar theoretical flavor but with experiments.
+- **Medium (4.25)**: /home/wg25r/review_agent/human_reviews/O2GBkHujdP.md — Independently-normalized SGD for generalized-smooth. Avg 4.25. Much weaker contribution than the current paper.
+- **Low (2.5)**: /home/wg25r/review_agent/human_reviews/PwoplYNsBI.md — Weak SGD convergence. Avg 2.5. Trivial/incremental results.
 
-**Research question importance:** Understanding gradient methods under $(L_0, L_1)$-smoothness is important for modern ML, and improving complexity bounds—especially eliminating exponential dependencies—is valuable.
-
-**Claims support:** The theorems are sound (as far as can be verified from the main text), but the nonconvex rate is misstated in the abstract/conclusion, and the convex improvement is conditional on $F_0$ in a way that is underemphasized.
-
-**Experimental soundness:** N/A—pure theory paper.
-
-**Clarity:** The paper is well-structured and generally clear, with a clean narrative from definitions to stepsizes to convergence analysis.
-
-**Value to community:** The stepsize derivation insight, the improved convex rates, and the accelerated method's qualitative improvement from exponential to polynomial in $L_1 R$ are all valuable.
-
-## Score and Decision
-
-**Calibration anchors:**
-
-- **High (>7):** e4xS9ZarDr (Lion optimizer Lyapunov analysis, avg 7.5, Accept spotlight) — Novel structural insight applied to an important practical method; xGvPKAiOhq (GD lower bounds in matrix sensing, avg 8, Accept spotlight) — Strong, novel theoretical result; h7GAgbLSmC (sharper gradient method guarantees for NNs, avg 7, Accept poster) — Improved bounds with technical depth.
-
-- **Medium (4–6):** O2GBkHujdP (normalized GD under generalized smoothness, avg 4.25, Reject) — Similar topic but weaker contribution and incremental; 2ev44Srmt9 (shuffling gradient methods, avg 5.75, Reject) — Improved convergence rates but with caveats; mEBSeSk49H (Adam convergence under $(L_0,L_1)$-smoothness, avg 4.25, Reject) — Similar topic but with mathematical errors.
-
-- **Low (<3):** 5nldnvvHfw (AdamE with incorrect $O(\sqrt{T})$ claim actually $O(T)$, avg 2.5, Reject) — Core claim in abstract is wrong; 1NYhrZynvC (adaptive GD with "exact linear convergence" claim, avg 2.5, Reject) — Core claim is wrong.
-
-The paper under review has a significant factual error in its abstract/conclusion (nonconvex rate stated as $\mathcal{O}(1/\epsilon)$ instead of $\mathcal{O}(1/\epsilon^2)$ for the $L_0$ term), similar in spirit to the low-scoring anchors (5nldnvvHfw, 1NYhrZynvC) where abstract claims didn't match theorems. However, the error here is more benign: the theorem itself is correct, the error is only in the presentation (abstract/conclusion restating the rate incorrectly), and it doesn't invalidate any proof—the nonconvex rate still matches the best-known from Koloskova et al. (2023). The paper also has genuine substantive contributions: the Fenchel-conjugate stepsize derivation, the improved convex rates (conditionally), and the accelerated method eliminating exponential dependence.
-
-Compared to the medium-scoring anchors (O2GBkHujdP at 4.25, similar topic but weaker contributions), this paper has considerably more substance. Compared to the high-scoring anchors (e4xS9ZarDr at 7.5, Lion analysis), this paper has comparable structural insight but the abstract error and $F_0$ caveat pull it down. The incorrect abstract rate is a serious presentation flaw but is easily correctable in a camera-ready version. The $F_0$-conditional improvement is honestly discussed, just not prominently enough.
-
-I place this paper above the medium anchors (which were rejected for being incremental) and below the high anchors (which had no presentation errors). The abstract error is a real concern but doesn't undermine the actual theorems.
+The current paper is clearly above the 4-5 range (incremental contributions) and below the 7-8 range (deep novel insights with empirical validation). It sits around the 6.5 mark: the accelerated method eliminating exponential dependency is unambiguously a real advance, and the stepsize derivation is a genuine conceptual contribution, but the conditional nature of the convex GM improvement (with overclaiming in the abstract/conclusion), lack of experiments, and unquantified $\nu$ factor prevent it from scoring higher.
 
 MY FINAL SCORE: <pineapple>6.5</pineapple>
 MY FINAL DECISION: <orange>Accept</orange>

@@ -1,86 +1,78 @@
-Now I have all the information I need to write the comprehensive final review. Let me also check one more thing - does the paper mention the ablation study details about reconstruction error quantitatively?
-
-The ablation study (Section 6.4) mentions comparing H^{(L)} "generated without sampling" to Ĥ^{(L)} "produced by YOSO's sampling-reconstruction process" with "differences visualized with heatmaps." This is interesting — the paper does partially address the full-batch comparison through its ablation, but the quantitative details are sparse (no pun intended) in the main text.
-
-Now let me write the final review.
-
 ## Summary
 
-YOSO proposes applying compressed sensing (CS) to GNN training by sampling nodes once at the input layer and reconstructing embeddings at the output layer. The key idea is to treat the embedding matrix as a multi-channel signal with a sparse representation in some orthonormal basis U, then use a CS measurement matrix Φ to compress the signal to M ≪ N nodes during forward propagation and reconstruct the full N-node output after the final layer. This eliminates per-epoch resampling overhead, which the paper shows can account for up to 64% of training time in existing methods.
+YOSO proposes applying compressed sensing (CS) to GNN node sampling: sample nodes once at the input layer into an M-dimensional measurement space (M ≪ N), propagate through the network using ΦÂΦ^T in this reduced space, and reconstruct the full N-dimensional output embedding at the final layer. The method jointly optimizes the GNN parameters Θ, a sparsifying basis U (with Stiefel manifold orthogonality constraints), and a sparse representation Ĥ^(L) via a combined reconstruction + task loss. Experiments across 5 datasets on node classification and link prediction report ~75% average training time reduction with competitive accuracy.
 
 ## Strengths
 
-- **Clear empirical motivation (Figure 1):** The paper provides a compelling breakdown showing sampling overhead accounts for 35.7%–64% of total training time across seven GNN sampling methods on Reddit, making a strong case that sampling—not computation—is the primary efficiency bottleneck.
-- **Substantial training time reduction (Figure 2, Table 1):** YOSO achieves ~75% average training time reduction across 5 datasets, with sampling time reductions up to 99% on Reddit (1149s → 15s). Accuracy remains competitive with the best sampling baselines within ~0.005 on most datasets.
-- **Novel application of CS to GNN sampling:** Framing GNN node sampling as a compressed sensing problem is genuinely creative. The identification of two concrete obstacles (unknown U, universal Φ) with corresponding solutions in Sections 5.2–5.3 provides a clear technical roadmap.
-- **Evaluation across two tasks:** The paper validates on both node classification (3 datasets) and link prediction (2 datasets), demonstrating generality beyond a single task type.
+- **Substantial and consistent training time reduction**: Figure 2 demonstrates ~75% average training time reduction across all 5 datasets and both tasks. For example, on Reddit, YOSO takes 213.63s vs. 376.5s for the next-best (FastGCN); on ogbn-products, 498.8s vs. 1054.45s (GraphSage). The time breakdown shows the reduction comes primarily from near-elimination of per-epoch resampling overhead.
+- **Competitive accuracy maintained**: Table 1 shows YOSO matches or closely approaches top baselines — 0.967 on Reddit (matching GraphSAINT-RW), 0.72 on ogbn-arxiv (matching GraphSage), 0.787 on ogbn-products (within 0.005 of GraphSAINT-EDGE).
+- **Genuinely novel framing**: The application of compressed sensing theory to GNN sampling is creative and opens a new direction. The idea of one-time sampling at the input layer with output-layer-only reconstruction is a distinctive architectural contribution.
+- **Graph-aware sampling matrix construction**: Section 5.3 designs Φ = S̃ ⊗ Σ using eigenvalue-weighted sampling probabilities derived from the graph Laplacian, combined with Gaussian randomness for RIP satisfaction. This structurally incorporates graph information into the CS framework.
 
 ## Weaknesses
 
 ### Fatal
+
 None.
 
 ### Major
 
-- **Overclaimed "lossless" and "near-zero bias and variance" guarantees (Abstract, Section 4, Eq. 8–9):** The paper's central theoretical claim of "lossless reconstruction" depends on ΦU satisfying the RIP (Eq. 4). Standard CS theory requires U to be a *fixed, known* basis. In YOSO, U is a *learned parameter updated every epoch* (Algorithm 1, Lines 15–16). Gradient updates to U will generally not preserve the RIP of ΦU, and the joint loss (Eq. 9) includes no explicit RIP constraint. The paper provides no mechanism to maintain RIP during optimization. Calling this "lossless" or "equivalent to full node participation" (Abstract, Section 1) is therefore a significant overclaim. The method may learn something useful empirically, but invoking CS reconstruction theory to describe what it does is not justified. This overclaim directly undermines the paper's central selling point.
+- **Overclaimed "lossless reconstruction" undermines the paper's central thesis**: The abstract and Section 4 prominently claim "lossless reconstruction" equivalent to "full node participation." Standard CS lossless recovery guarantees require a fixed, known sparsifying basis U (Candes & Tao, 2006). In YOSO, U is a free optimization variable jointly learned with GNN parameters (Algorithm 1, Lines 12, 15–16; Eq. 9). When U is free, the sparsity constraint ‖Ĥ^(L)‖_{2,1} can be trivially satisfied — for any H^(L), one can choose U and a sparse Ĥ^(L) such that H = UĤ (e.g., any matrix can be decomposed to have a single non-zero row in some orthonormal basis). The paper cites graph signal processing literature (Isufi et al., 2024; Bo et al., 2023) proving U *exists* for graph data, but existence of a fixed U derived from graph structure is fundamentally different from freely optimizing U. This gap invalidates the direct application of RIP-based "lossless" guarantees to YOSO's learned U. The method may work well in practice, but calling it "lossless" is misleading. This matters because the "lossless" claim is the paper's primary differentiator from other sampling methods.
 
-- **Inconsistent dimensionality of U creates ambiguity between theory and practice (Section 3, Eq. 8, Algorithm 1):** The paper states U^{(l)} ∈ R^{M×N} in Section 3 (which is dimensionally incompatible with H = UĤ where H ∈ R^{N×d}), while Eq. 8 imposes UU^T = U^T U = I (requiring a square N×N matrix), and Algorithm 1 Line 16 enforces only U^T U = I (compatible with a rectangular N×K Stiefel manifold matrix). If U is truly N×N, learning and projecting it is infeasible at scale (ogbn-products has N ≈ 2.4M nodes). If U is N×K with K ≪ N, the constraint UU^T = I_N cannot hold. The paper never clarifies the actual dimensions of U in the implementation, leaving a critical gap between the theoretical framework and the reported experiments on million-node graphs.
+- **Inconsistency in U's dimensionality and unaddressed scalability concerns**: The paper states UU^T = U^TU = I (Eq. 8, 9), which requires U ∈ R^{N×N}. However, Algorithm 1 (Line 16) enforces only U^TU = I, consistent with U ∈ R^{N×K}. If U is N×N, then for ogbn-products (N=2.4M), storing U requires ~23 TB and each Stiefel projection via SVD costs O(N³) — clearly infeasible, yet the paper reports experiments on this dataset. If U is N×K (with K < N), the orthogonality constraint UU^T = I in the equations is incorrect (since UU^T ≠ I_N for K < N), and the paper's CS proofs (referenced in Appendices D.2, D.3) that assume UU^T = I would not directly apply. This dimension inconsistency is not discussed anywhere, and the paper never clarifies what size U is actually used, how it is stored, or how Stiefel projection is performed for large graphs. This is a critical gap between the presented theory and the practical implementation.
 
-- **Missing full-batch GCN baseline (Table 1):** The paper claims YOSO achieves results "equivalent to full node participation" and "near-zero bias and variance," yet never reports accuracy for full-batch (unsampled) GCN training. All comparisons are against other sampling methods. While the ablation (Section 6.4) mentions comparing the reconstructed H^{(L)} with a version "generated without sampling," no quantitative comparison of final test accuracy against full-batch training appears in the main text. Without this baseline, the "lossless" claim is empirically unverified.
+- **Intermediate-layer computation (ΦÂΦ^T) is an unverified approximation, not CS-based reconstruction**: In the forward pass (Eq. 7, Lines 4–7), YOSO computes T^(l) = σ(ΦÂΦ^T T^(l-1) W^(l)), operating entirely in the M-dimensional measurement space. This is NOT equivalent to the original GNN computation H^(l) = σ(ÂH^(l-1)W^(l)) because Φ^T Φ ≠ I when M < N (Φ^T is not an inverse of Φ). The paper acknowledges this tradeoff as "Obstacle II" and claims the error is "controllable with a known upper bound" (Section 4), deferring the proof to Appendix D.4. However, this bound cannot follow from standard CS theory because the intermediate computations do not satisfy CS's requirements (no sparsity constraint, no RIP guarantee for Φ^T as a "reconstruction" operator). Without the appendix available for verification, this is a significant unsupported claim. The paper's own motivation — that YOSO is equivalent to full-batch training — rests on this bound being meaningful.
 
 ### Minor
 
-- **ΦĀΦ^T as a compressed graph operator lacks analysis (Eq. 7):** The forward propagation T^(l) = σ(ΦĀΦ^T T^(l-1) W) replaces the full adjacency Ā ∈ R^{N×N} with ΦĀΦ^T ∈ R^{M×M}. Since Φ^T Φ cannot approximate I when M ≪ N, this substitution introduces unanalyzed spectral distortion. The paper acknowledges this trade-off as Obstacle II and defers a bound to Appendix D.4, but the severity of this approximation directly affects the method's viability and is not adequately discussed in the main text.
+- **Questionable baseline accuracy for some methods**: In Table 1, FastGCN achieves only 0.438 on ogbn-arxiv and 0.404 on ogbn-products, which are substantially below typical reported results (usually 0.65–0.70 on ogbn-arxiv). AS-GCN at 0.51 on ogbn-products is also low. The paper notes "several baseline models lacked implementations for link prediction, prompting us to modify them accordingly" (Section 6.1), raising questions about whether these are fairly tuned implementations. While this doesn't invalidate YOSO's own results, it makes the relative comparison less convincing for these baselines.
 
-- **"You-Only-Sample-Once" branding is somewhat misleading:** Algorithm 1 Line 3 re-computes T^(0) = ΦUĤ every epoch inside the while loop. Since U is updated each iteration, the effective information passing through the sampling process changes every epoch. What is computed once is Φ (the sampling matrix structure), not the actual sampling operation. The branding obscures this distinction.
+- **No reconstruction quality evidence in the main text**: The core claim of the paper is "lossless" or "near-zero bias and variance" reconstruction. Section 6.4 promises heatmaps comparing H^(L) and H̄^(L), but these are deferred to the appendix. Quantitative reconstruction error (e.g., ‖H^(L)_full − H̄^(L)_YOSO‖) is not reported in the main text. This is the most direct evidence for the paper's central claim and should be in the main text.
 
-- **Storing Ĥ^(L) ∈ R^{N×d} partially negates memory savings:** Algorithm 1 Line 17 updates Ĥ^(L) via gradient descent, requiring storage and updates of an N×d matrix — the same size as the full embedding matrix. If N is very large (e.g., 2.4M for ogbn-products), this memory footprint may be problematic.
-
-- **Preprocessing cost for eigenvalue computation not included in timing:** The construction of Φ requires computing all N eigenvalues of the normalized Laplacian (Section 5.3). For large graphs (e.g., ogbn-products with 2.4M nodes), this is a non-trivial one-time cost that is not reflected in the reported "sampling time" in Figure 2.
-
-- **Weak baseline tuning for some methods:** In Table 1, FastGCN achieves 0.438 on ogbn-arxiv while GraphSAGE achieves 0.72 — a gap far larger than typically reported for these methods on this dataset. This raises concerns about whether all baselines were competitively tuned.
+- **Suspiciously identical baseline training times for ogbl-ppa**: In Figure 2(d), five baselines report nearly identical training times (43.67–45.45s), suggesting sampling overhead is negligible for this dataset. YOSO's speedup on ogbl-ppa (21.42s vs ~44s) likely stems from computing on fewer nodes rather than from the CS framework's one-time-sampling advantage, making the speedup claim for this dataset less informative.
 
 ### Trivial
-None.
+
+- Convergence analysis (Figure 3) shows training loss curves, but validation/test accuracy would be more informative for generalization assessment.
 
 ## Nice-to-Haves
 
-- Report reconstruction error ‖H^(L) − Ĥ^(L)‖_F / ‖H^(L)‖_F per epoch during training to verify whether reconstruction quality degrades as U drifts from initialization.
-- Include a full-batch GCN baseline in Table 1 to directly test the "lossless" claim.
-- Clarify the actual dimensions of U used in the implementation (N×K? N×N?) and analyze the corresponding scalability implications.
+- An ablation removing the reconstruction loss (α = 0) would reveal whether the CS component actually contributes or whether YOSO's success is mainly due to training on a fixed sampled subset with the GNN loss.
+- Compare against full-batch GCN on graphs where it fits in memory — if YOSO truly achieves "equivalent to full node participation," this is the most natural baseline.
+- Report actual sparsity levels of Ĥ^(L) at convergence. If ‖Ĥ^(L)‖_{0,row} is not much smaller than N, then CS cannot work with M ≪ N, and the method's success must be attributed to other factors.
+- Include the eigenvalue preprocessing time for S̃ construction in timing comparisons, or clarify that approximate eigendecomposition is used.
 
 ## Removed Points
 
 These points are flagged to be removed, treat them with caution:
 
-- **"U is N×N making Stiefel projection O(N³) and completely infeasible" (Harsh Critic Issue 1):** The critic assumed U must be N×N based on the double-sided orthogonality constraint UU^T = U^T U = I. While the paper does state both constraints in Eq. 8, Algorithm 1 Line 16 only enforces U^T U = I, which is compatible with U ∈ R^{N×K} on the Stiefel manifold (projection cost O(NK²), not O(N³)). The dimensionality inconsistency is real (and noted as a Major weakness above), but the critic's conclusion that the implementation "must do something fundamentally different" is overstated — a rectangular U with K ≪ N is a plausible and feasible implementation that simply contradicts one part of the stated constraint.
-
-- **"Forward propagation equation is mathematically inconsistent with the CS measurement model" (Harsh Critic Issue 2):** The paper explicitly designed ΦĀΦ^T as a compressed-domain operator and acknowledges this as Obstacle II (Section 4), trading per-layer reconstruction (faithful but slow) for output-layer-only reconstruction. This is a methodological design choice, not an error. The concern about unanalyzed spectral distortion is valid and included as a Minor weakness, but calling it "mathematically inconsistent" with the CS model treats the per-layer reconstruction approach as the only valid option, when the paper explicitly discusses and motivates the alternative.
-
-- **"Storing Ĥ^(L) has the same memory footprint as the full embedding matrix, negating memory advantage" — kept as Minor since it does partially negate memory savings, but removed the implication that it negates *all* advantages. The memory savings from not storing intermediate H^(l) for l=1,...,L-1 still apply.
-
-- **RIP violations from changing U (Harsh Critic Issue 3):** Kept as Major overclaim, but removed the implication that this makes the entire CS framework "decorative." The CS framing still motivates the sampling design (Φ construction) and provides useful inductive biases, even if the theoretical lossless guarantee does not formally transfer.
+- *Harsh Critic Claim: "U is N×N requiring 23TB for ogbn-products"* — While the dimension inconsistency is real (see Major weakness above), the paper DOES run on large graphs, suggesting a practical N×K implementation exists. The issue is the lack of clarity, not necessarily that the method is impossible.
+- *Harsh Critic Claim: "Figure 1(b) undermines the need for YOSO since simple methods like GraphSAGE have low sampling overhead"* — This misreads the paper. Figure 1(b) shows that methods achieving high accuracy (GraphSAINT, ClusterGCN) DO have high sampling overhead. YOSO targets the accuracy-efficiency tradeoff, not just efficiency.
+- *Harsh Critic Claim: "Section 3 presents U as known, then Section 4 reveals it's unknown — this obscures the inconsistency"* — This is a deliberate pedagogical choice (present the ideal CS framework, then address practical obstacles), not obfuscation. The paper is transparent about the transition.
+- *Harsh Critic Claim: "No convergence analysis for joint non-convex optimization"* — Convergence proofs for non-convex Stiefel optimization are not standard in empirical ML papers. This is a nice-to-have, not a weakness.
+- *Harsh Critic Claim: "Eigenvalue computation for S̃ is O(N³)"* — For sparse Laplacians, iterative eigendecomposition methods (Lanczos) are much more efficient than O(N³), and this is a one-time preprocessing cost. This is a nice-to-have, not a weakness.
+- *Harsh Critic Claim: "Missing full-batch GCN baseline is conspicuous"* — Full-batch GCN may not fit in memory for large graphs; this is a valid suggestion but not a critical omission.
+- *Strength Finder Claim: "Principled solution to the unknown orthonormal basis problem"* — This conflicts with the verified Major weakness that making U learnable undermines CS guarantees. The "solution" creates a new theoretical gap.
+- *Strength Finder Claim: "Faster and more stable convergence"* — Training loss convergence (Figure 3) does not directly demonstrate better generalization; this strength is weakened by the lack of validation accuracy curves.
 
 ## Novel Insights
 
-The paper reveals an interesting tension in applying compressed sensing to learned representations: CS theory assumes fixed, known bases, but GNN embeddings evolve during training, making the sparse representation basis inherently dynamic. YOSO's solution — learning U jointly with GNN parameters — is an elegant way to align representation sparsity with the model's needs, but it fundamentally breaks the CS contract that guarantees lossless recovery. This suggests that "compressed sensing-inspired GNN sampling" and "theoretically lossless CS reconstruction" are two separate goals that cannot be simultaneously achieved with the current formulation, and future work would need to either constrain U's evolution or develop new CS-style guarantees for jointly optimized bases.
+The paper's most interesting contribution — beyond the CS framing — may be the observation that message passing can be effectively approximated in a low-dimensional measurement space via ΦÂΦ^T. This is essentially a graph-structure-aware dimensionality reduction for GNNs, where Φ acts as a structured projection and ΦÂΦ^T captures the essential message-passing dynamics. Whether this works because of CS theory or simply because the graph's information is low-rank (as spectral GNN theory would suggest) is an open question that the paper does not disentangle.
 
 ## Suggestions
 
-- Replace "lossless" with "near-lossless" or "high-fidelity" throughout, and explicitly state that the CS reconstruction guarantee motivates but does not formally ensure the method's accuracy preservation, since U is learned rather than fixed.
-- Add a full-batch GCN baseline (even on smaller datasets) to directly validate accuracy preservation claims.
-- Explicitly declare the dimensions of U used in experiments (presumably N×K for some K) and discuss how K affects the accuracy-scalability tradeoff.
-- Report the Laplacian eigenvalue computation time as a separate preprocessing line in Figure 2's timing breakdown.
+- Replace "lossless reconstruction" with "approximate reconstruction" or "bounded-error reconstruction" throughout the paper. The current claim is the most prominent and most problematic overstatement.
+- Explicitly state the dimensions of U used in practice (N×K), clarify that U^TU = I_K is the enforced constraint (not UU^T = I_N), and discuss how this affects the CS guarantees. This would resolve the dimension inconsistency.
+- Add a single table or figure in the main text showing reconstruction error ‖H^(L) − H̄^(L)‖ across datasets and sampling sizes M. This is the most direct evidence for the paper's core claim.
 
 ## Score and Decision
 
-**Calibration comparison:**
+**Calibration anchors:**
+- **High (7+)**: ScaleGUN (8.0, rigorous theory + billion-edge experiments), MAST (7.0, sound sparsification theory + convergence proofs) — YOSO is well below these due to significant theoretical gaps.
+- **Medium (4–6)**: SEIGNN (5.75, honest claims + practical scalability), StructDrop (4.25, simple but consistent), S3 (4.0, limited gains + flawed theorem) — YOSO has a more novel idea and stronger speedups than most, but also more serious theoretical overclaims.
+- **Low (<3)**: HashGIN (2.67, plagiarism), FlashSampling (2.50, weak contribution) — YOSO is well above these; it has real empirical results and a genuine contribution.
 
-- **High anchors (avg > 7):** pPyJyeLriR (7.50, scalable graph propagation), SG1R2H3fa1 (7.50, random walks for efficient GNNs), C61sk5LsK6 (7.00, lossless data pruning). These papers have clear theoretical grounding matching their empirical claims, with no gap between theory and implementation. YOSO is significantly weaker on theoretical soundness.
-- **Medium anchors (avg 4–6):** 2soZBUoG3n (4.25, StructDrop GNN sampling — split reviews between theoretical novelty concerns and practical efficiency), ghH6YYDs15 (4.67, CS theory applied to sparse autoencoders — similar pattern of CS theory overclaimed given evolving bases), QcMdPYBwTu (5.75, scalable implicit GNN with efficient mini-batch). YOSO most closely resembles ghH6YYDs15 and 2soZBUoG3n — strong empirical efficiency results with overclaimed theoretical guarantees and baseline tuning concerns.
-- **Low anchors (avg < 3):** vAoyZWyDEc (2.50, incomputability theory vs. numerical experiments gap), bEgDEyy2Yk (1.0, O(n²) implementation claims but impractical theoretical algorithm). YOSO is above these — it has real empirical results and a workable implementation, not a purely theoretical paper with fatal flaws.
-
-YOSO sits squarely in the medium band. It has genuine empirical contributions (~75% training time reduction, competitive accuracy) but overclaimed theoretical guarantees and notable gaps (U dimensionality, missing full-batch baseline, misleading "lossless" branding). This is very similar to 2soZBUoG3n (4.25) and ghH6YYDs15 (4.67). The overclaim is more severe in YOSO given the "lossless" language, but the empirical gains are also more clearly demonstrated across more datasets.
+YOSO sits in the 3.5–4.5 range. Its novelty and empirical speedups push it above the low-scoring anchors, but the overclaimed "lossless reconstruction" and the U dimension inconsistency are significant issues that separate it from accepted papers like SEIGNN (5.75) or MAST (7.0). The theoretical framework as presented does not support the paper's strongest claims, and the gap between the N×N U formulation in the equations and the N×K implementation implied by the experiments is a transparency concern. The practical method likely works for good engineering reasons (low-rank graph structure, structured sampling), but the paper attributes its success to CS theory that doesn't directly apply when U is jointly optimized.
 
 MY FINAL SCORE: <pineapple>4.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

@@ -1,20 +1,20 @@
-Now I have a thorough understanding of the paper and calibration anchors. Let me write the final review.
+Now I have a thorough understanding of the paper. Let me write the final consolidated review.
 
 ## Summary
 
-The paper proposes Zero-Jack, a method for jailbreaking black-box multimodal large language models (MLLMs) by applying zeroth-order gradient estimation (two-point estimator) with a patch coordinate descent strategy to generate adversarial image perturbations. By dividing the image into patches (typically 32×32) and updating one patch at a time, Zero-Jack reduces the optimization dimension to ~2% of the full image, mitigating high-dimensional gradient estimation error while also eliminating the need for backpropagation, which yields substantial memory savings.
+The paper proposes Zer0-Jack, a method for jailbreaking black-box multimodal large language models (MLLMs) by applying zeroth-order gradient estimation to generate adversarial image perturbations. To address the high-dimensional estimation error inherent in zeroth-order optimization, the method introduces patch coordinate descent—updating one 32×32 image patch at a time instead of the full 224×224 image. Zer0-Jack achieves 90–98% attack success rates across MiniGPT-4, LLaVA1.5, and INF-MLLM1, rivaling white-box baselines and vastly outperforming transfer-based methods.
 
 ## Strengths
 
-- **Strong empirical attack performance**: Tables 2 and 3 show Zero-Jack achieving 88–98.2% ASR across MiniGPT-4, LLaVA1.5, and INF-MLLM1 on both benchmarks, dramatically outperforming all transfer-based baselines (GCG 13%, AutoDAN 22% at best on Harmful Behaviors) and closely matching the white-box baseline (93% on MiniGPT-4).
+- **Strong empirical performance matching white-box methods**: Zer0-Jack achieves 90–98% ASR across four model configurations (Tables 2–3), consistently within 2–5% of the white-box baseline. This is a striking result showing that zeroth-order optimization can nearly match gradient-based attacks for MLLM jailbreak (Tables 2–3).
 
-- **Meaningful memory efficiency**: Table 1 provides concrete GPU memory comparisons—Zero-Jack enables attacking MiniGPT-4 70B on a single A100 (63G) where the white-box method runs OOM, and attacks 13B models on a single RTX 4090 (22G vs. 31G for white-box).
+- **Patch coordinate descent effectively controls the noise-accuracy tradeoff**: The right subplot of Figure 4 shows ASR dropping sharply as patch size increases beyond 32 (from ~100% at size 32 to ~20–40% at size 256), providing clear empirical evidence that smaller patches reduce estimation error and improve ZO optimization quality (Section 4.4, Figure 4 right).
 
-- **Patch coordinate descent is well-motivated and ablated**: The right subplot of Figure 4 validates the 32×32 patch choice by showing ASR degrades for both smaller patches (insufficient global information) and larger patches (increased gradient noise), demonstrating a genuine sweet spot.
+- **Concrete memory efficiency gains for large models**: Table 1 shows substantial memory savings for 13B+ models (31G→22G for MiniGPT-4 13B; 39G→25G for LLaVA1.5 13B), and critically enables attacking the 70B model (63G) where white-box attacks run OOM. This is a practical benefit directly enabled by avoiding backpropagation (Table 1).
 
-- **GPT-4o direct attack as a real-world demonstration**: The attack on GPT-4o (Table 5, 69% ASR) demonstrates the practical relevance of the vulnerability, highlighting that even commercial APIs with partial logprob access are exploitable.
+- **Creative exploitation of logit bias for commercial MLLM attacks**: The method uses OpenAI's logit bias API feature to force target token generation and retrieve log probabilities, overcoming the top-20 logprob limitation—demonstrating the method works even under restrictive commercial API constraints (Section 4.6).
 
-- **Honest limitations discussion**: Section 5 openly acknowledges that Zero-Jack requires logprob access, cannot attack web-only interfaces, and needs auxiliary prompts for GPT-4o efficiency.
+- **GPT-4 as judge evaluation**: Using GPT-4 to assess whether responses are genuinely harmful is more robust than string-matching approaches commonly used in the jailbreak literature (Section 4.1).
 
 ## Weaknesses
 
@@ -23,85 +23,69 @@ None.
 
 ### Major
 
-- **Misleading "black-box" framing obscures a substantial access requirement**: The paper's title ("black box MLLMs"), abstract, and introduction frame Zero-Jack as broadly applicable to "black-box" models, but the method requires access to output log probabilities (Equation 4, Section 3.3), making this a *score-based* black-box method rather than the standard (and more restrictive) *decision-based* black-box setting. While Section 5 acknowledges this limitation, the front-section framing does not, creating a misleading impression of the method's scope. Many commercial APIs (e.g., Anthropic) do not expose logprobs, and web interfaces certainly do not. The paper should consistently position itself as "score-based black-box" throughout, as the threat model difference is material to the claimed contributions—especially the claim to be "the first method that aims at jailbreaking black-box MLLMs directly."
+- **Imprecise "black-box" framing makes the main comparison with transfer methods an apples-to-oranges evaluation.** Zer0-Jack requires access to output logits or token probabilities from the target model (Section 3.3: "we only need to get the output logits or probability"), which is a strictly stronger access level than transfer-based methods (which require zero queries to the target model). In the adversarial ML literature, this access level is typically called "score-based" rather than "black-box." The paper's headline result—that Zer0-Jack outperforms transfer methods—is trivially expected given the additional information Zer0-Jack has about the target model. The paper does acknowledge this limitation in Section 5, but the abstract, introduction, and Figure 1 all frame Zer0-Jack as a "direct black-box jailbreak" that "surpasses transfer-based methods," which overstates the significance of that comparison. A more meaningful comparison would be against other methods with comparable logit/score access (e.g., square attack, Sign-OPT, or even vanilla zeroth-order optimization on the full image), which are absent from the evaluation. That said, the comparison with white-box methods (where Zer0-Jack matches performance) is a meaningful and fair result.
 
-- **Asymmetric comparison with transfer baselines conflates different threat models**: Zero-Jack has query-based access to the target model's logprobs during optimization (Eq. 4), while the text-based transfer baselines (GCG, AutoDAN) and the image-based A-Image baseline receive *zero* information from the target model. It is expected that score-based query access to the target substantially outperforms methods with no such access. The paper presents this as a competitive evaluation (Abstract: "surpasses previous transfer-based methods"), but it is fundamentally an apples-to-oranges comparison across different threat models. The more informative comparison is with the WB baseline (which Zero-Jack approximately matches), as both share the same level of information about the target. This does not invalidate the results, but the framing of "surpassing" transfer methods should be tempered by acknowledging the threat-model asymmetry. Additionally, the absence of any *score-based query* baseline (e.g., full-image zeroth-order optimization without patches) makes it impossible to assess whether the patch coordinate descent—the paper's core technical contribution—actually helps, since all other methods operate in a weaker threat model.
-
-- **GPT-4o experiment conflates multiple factors**: Section 4.6 uses logit bias to force GPT-4o to generate target tokens during optimization and additionally uses an auxiliary text prompt from Andriushchenko et al. (2024) to "make the optimization easier." The paper acknowledges discarding the logit bias at evaluation time, but whether the optimized perturbations are effective *without* the logit bias during optimization is not independently verified. Meanwhile, the "Prompt + Original Image" baseline (18% ASR) is lower than "Text Prompt Only" (30%) in Table 5, suggesting that random images *hurt* attack success on GPT-4o, which lacks explanation. The 69% ASR cannot be cleanly attributed to Zero-Jack alone given the auxiliary prompt contribution.
+- **Missing score-based adversarial optimization baselines.** No other score-based/zeroth-order optimization method is included as a baseline, despite this being a well-studied area. The paper compares against text-based and transfer-based image attacks, but not against any method that also queries the target model with logit/score access. Without this, it is impossible to determine whether Zer0-Jack's strong performance stems from the specific method (patch coordinate descent + ZO optimization) or simply from having logit access. A vanilla full-image zeroth-order optimization baseline under the same query budget would be the minimum needed to validate the patch coordinate descent contribution.
 
 ### Minor
 
-- **No query count reporting**: The paper claims "reasonable queries" (Section 3.3 contribution 2) and mentions ~$0.80 per GPT-4o sample, but never reports the total query count per successful attack. Each gradient estimate for one patch requires 2 forward passes (Eq. 6), and a 224×224 image with 32×32 patches has 49 patches per full update cycle. Without query count data, the claim of "reduced query complexity" is unsubstantiated, though the dollar cost gives some practical indication.
+- **The ablation study in Figure 4 (left) has confusing and potentially contradictory labels.** The left subplot shows "Zero-Jack" at ~98% ASR and "Zero-Jack with Patch" at ~45%, yet Zer0-Jack is defined in Section 3.3 and Algorithm 1 as already using patch coordinate descent. The meaning of "Zero-Jack with Patch" is unclear: if it represents the proposed method with patches, then it contradicts the main results (Tables 2–3) and the paper's claim that "Patch updating can increase the performance" (Section 4.4). If it represents a different variant, the labels are too ambiguous to interpret. Fortunately, the right subplot (patch size analysis) provides clear supporting evidence for the patch design, mitigating some of this concern—but the left subplot remains uninterpretable as presented.
 
-- **Confusing ablation labels in Figure 4 (left)**: The bar labeled "Zero-Jack" (~98% ASR) outperforms "Zero-Jack with Patch" (~45% ASR), which is counterintuitive since Zero-Jack *uses* patches by design. The paper's text says "patch updating can increase the performance," but the figure labels appear to show the opposite for the zeroth-order variants. This likely reflects a naming convention issue (perhaps "Zero-Jack" = full method with patch, and "Zero-Jack with Patch" = a variant?), but it needs clarification as the current presentation is potentially misleading.
+- **The GPT-4o attack (Table 5) does not isolate the contribution of the image perturbation from the auxiliary text prompt.** The paper uses "a text prompt from (Andriushchenko et al., 2024) to make the optimization easier" (Section 4.6). Table 5 shows "Text Prompt Only" at 30% and "Prompt + Zer0-Jack" at 69%, but it is unclear whether "Text Prompt Only" uses the original harmful instruction or the auxiliary prompt. An ablation testing the auxiliary prompt alone (without image perturbation) vs. auxiliary prompt + perturbed image would clarify whether the image perturbation contributes meaningfully beyond the text prompt assistance.
 
-- **Weak image-based baselines**: P-Image (unmodified images) and G-Image (Gaussian noise) are trivially non-adversarial inputs, and A-Image is the only adversarial image baseline (itself a transfer method). This limits what can be concluded about Zero-Jack's relative effectiveness among image-based attacks, though this is somewhat understandable given the paucity of existing direct image-based jailbreak methods for MLLMs.
+- **Query efficiency is not reported in main experiments, limiting practical feasibility assessment.** The paper claims "reasonable queries" (Section 1) and reports ~$0.80/sample cost for GPT-4o (Section 4.6), but provides no query counts for any experiment. Each gradient estimate for a single patch requires 2 forward passes (Eq. 6), and with ~49 patches per image plus multiple iterations, this could involve hundreds or thousands of queries per sample. Without query counts, the trade-off between Zer0-Jack's higher ASR and its query cost relative to transfer methods cannot be assessed.
 
 ### Trivial
-
-- The novelty claim "the first method that aims at jailbreaking black-box MLLMs directly" (Section 1) is somewhat overstated—zeroth-order optimization for adversarial attacks is well-established in the vision ML literature, and the application to MLLMs, while new in application scope, is an anticipated extension.
+None.
 
 ## Nice-to-Haves
 
-- A full-image zeroth-order optimization baseline (without patch coordinate descent) to directly validate the patch strategy's contribution.
-- GPT-4o ablation without logit bias and without the auxiliary prompt, to isolate Zero-Jack's contribution.
-- Extension to a decision-based (text-only output) black-box setting, which would substantially broaden practical impact.
-- Adversarial perturbation visualizations to assess perceptibility and inform defense considerations.
+- Report query counts for all experiments to enable practical cost-benefit analysis relative to transfer methods.
+- Show perturbed images and measure perturbation magnitude (L∞ or L2 norm) to assess the attack's detectability.
+- Reframe the contribution as a "score-based" or "logit-access" attack, which would position the comparison fairly and avoid the misleading framing.
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution:
+These points are flagged to be removed, treat them with caution.
 
-- **"Cannot be independently verified" / reproducibility concerns about cited models and tools**: Per rules, if the paper cites it, it exists. Removed.
+- **"Memory savings are not a contribution because they come from not doing backpropagation"**: This mischaracterizes the paper's claim. The memory savings ARE a direct consequence of using zeroth-order optimization—which IS the paper's method. The 7B model savings (11G→10G) are indeed small, but for 13B and 70B models the savings are substantial and practically meaningful (31G→22G; OOM→63G). The critic's objection conflates "not novel in principle" with "not a contribution"—the concrete numbers and practical implications are useful regardless.
 
-- **Missing related works / appendix references**: The parser strips appendices; references cited in the paper are assumed to exist. Removed.
+- **"GCG is a misleading baseline because it optimizes discrete tokens while Zer0-Jack optimizes continuous pixels"**: GCG is a well-known jailbreak method used as a standard baseline in the jailbreak literature. The paper includes it as a text-based baseline, not as a direct image-space competitor. This is a reasonable comparison to show how existing jailbreak methods perform on MLLMs, even if the search spaces differ.
 
-- **Formatting artifacts / typos / notation inconsistencies**: These are parser errors, not author errors. Removed.
+- **"Transfer attack result (51.8% on GPT-4o) undermines the need for direct attacks"**: The paper addresses this directly in Section 4.3: "they still suffer from performance degradation, indicating the importance of attacking black-box models directly." The transferability results and direct attack results are complementary, not contradictory.
 
-- **White-box OOM is unsurprising without gradient checkpointing**: This is a nitpick—the paper appropriately demonstrates the memory advantage specific to not needing backpropagation, which is the point of the comparison regardless of whether other engineering techniques exist. Removed as minor nitpick.
+- **"The auxiliary text prompt used in GPT-4o attack may make the attack trivially easy"**: The paper acknowledges this in Section 5: "Zer0-Jack needs assistance from custom prompts, otherwise, Zer0-Jack requires far more iterations to attack GPT-4o." This is a limitation, not a fatal flaw.
 
-- **Paper lacks convergence analysis or theoretical justification**: This is a standard empirical systems/safety paper; demanding theoretical proofs for an empirical contribution is scope creep. Moved to nice-to-have.
+- **"The two-point gradient estimator (Eq. 4) is standard"**: While the estimator itself is standard (Spall, 1992), the contribution is in the application of this estimator to MLLM jailbreak with patch coordinate descent. Standard components combined in a novel way can still constitute a contribution.
 
-- **Harmful Behaviors dataset uses only 100 random subset out of 500**: The paper states this clearly; for a jailbreak evaluation paper, 100 samples with proper evaluation is standard and does not threaten core claims. Removed as generic weakness.
+- **"Whether the logit bias changes the reported log probabilities is a critical ambiguity"**: This is speculative. The paper describes a clear procedure: use logit bias to force target token generation, retrieve the log probability, then discard the bias for final generation. The concern about "before vs. after bias application" log probabilities reflects a misunderstanding—the log probability retrieved during optimization is with bias applied, and the bias is only discarded for the final evaluation.
 
 ## Novel Insights
 
-The paper reveals an interesting asymmetry in the MLLM safety landscape: the same logprob access that makes LLM APIs useful for downstream applications creates a direct attack surface for jailbreaking via the image modality, where continuous optimization circumvents the discrete token optimization challenge that limits text-based black-box attacks. The GPT-4o logit bias workaround is particularly noteworthy as a demonstration that even partial API access (top-20 logprobs + logit bias) is sufficient for an attacker to reconstruct the loss signal needed for optimization—an implication for API design that the safety community should consider.
+The paper reveals an important asymmetry in MLLM safety: adversarial perturbations in the image modality can be efficiently optimized via zeroth-order methods to near white-box levels of attack success (90–98%), while the same attack paradigm applied to text is much harder due to discrete optimization. This suggests that the image channel in MLLMs constitutes a particularly vulnerable attack surface for score-based optimization, a finding with implications for API design (e.g., whether to expose log probabilities).
 
 ## Suggestions
 
-- Recast the abstract and introduction to consistently describe Zero-Jack as a "score-based black-box" method, and explicitly contrast with decision-based black-box settings. The current comparison with transfer methods should add a sentence acknowledging the threat-model asymmetry.
-- Add a full-image zeroth-order optimization baseline (no patches) to Tables 2 and 3; this is the single most important missing comparison for validating the patch coordinate descent contribution.
-- Report query counts (forward passes per successful attack) for at least one representative experiment, and for the GPT-4o experiment.
-- Clarify the "Zero-Jack" vs. "Zero-Jack with Patch" labels in Figure 4 (left), as the current naming is contradictory to the method description.
-
-## Evaluation Axes
-
-**Originality**: Moderate. The core technique—zeroth-order optimization with patch coordinate descent—is a straightforward application of well-established tools (two-point estimator from Spall 1992; block coordinate descent) to the MLLM jailbreak setting. The novelty lies primarily in the application domain and the practical demonstration rather than in the technical components.
-
-**Importance of research question**: High. Direct jailbreak attacks on MLLMs are an important and timely safety concern, and the finding that logprob API access enables effective adversarial image optimization has significant implications for API design and safety evaluation.
-
-**Claims supported**: Partially. The central empirical claim (high ASR) is well-supported, but the framing of "surpassing transfer methods" confounds threat-model differences, and the GPT-4o result conflates multiple contributing factors. The "first method" claim is overreaching given the well-known zeroth-order optimization literature.
-
-**Soundness of experiments**: The main results on open-source models are sound, but missing score-based baselines and the confounded GPT-4o setup are significant gaps. The ablation (Fig. 4 right) is well-designed and informative.
-
-**Clarity**: Generally clear with well-structured method exposition, but the ablation figure labeling is confusing and the "black-box" terminology is inconsistently used.
-
-**Value to community**: Moderate-to-high. The practical demonstration that logprob access enables effective direct jailbreaks on MLLMs—including commercial models—is valuable for the safety community, even considering the threat model limitations.
+- Add at minimum a vanilla full-image zeroth-order optimization baseline (same ZO estimator, same query budget, no patch decomposition) to directly validate the benefit of patch coordinate descent. This is the single most important addition that would strengthen the paper.
+- Clarify the labels in Figure 4 (left subplot) and explicitly define what "Zero-Jack" vs. "Zero-Jack with Patch" means in the ablation context.
+- Report query counts (number of forward passes) per sample across all experiments.
+- Reframe the paper as a "score-based" or "logit-access" attack to set fair expectations and enable proper comparison with methods at the same access level.
 
 ## Score and Decision
 
 **Calibration anchors used:**
 
-1. **High band (>7):** r42tSSCHPh — Catastrophic Jailbreak via Exploiting Generation (avg 7.0, Spotlight). Similar strong empirical results (>95% ASR), equally simple method, but that paper had a cleaner threat model and broader model coverage without confounded comparisons. Zero-Jack is weaker due to its threat-model framing issues and missing baselines.
+| Paper | Avg Score | Comparison |
+|-------|-----------|------------|
+| r42tSSCHPh.md (Catastrophic Jailbreak) | 7.0 | Zer0-Jack has comparable empirical strength but weaker framing clarity and less thorough evaluation |
+| bhK7U37VW8.md (AutoDAN-Turbo) | 7.17 | Zer0-Jack is weaker: less novel strategy discovery, missing score-based baselines, imprecise framing |
+| tIBAOcAvn4.md (Boosting Ray Search) | 7.5 | Zer0-Jack lacks theoretical analysis and has weaker baseline coverage |
+| wNg0LibmQt.md (Gradient-based Jailbreak Images for Multimodal Fusion) | 5.0 | Zer0-Jack is comparable: both have limited baselines and incomplete evaluation, but Zer0-Jack has stronger empirical results |
+| djcciHhCrt.md (Visual adversarial examples) | 4.25 | Zer0-Jack is stronger: more models, clearer method, higher ASR |
+| efxXzrbgrX.md (Black-box TAA on SAM) | 3.75 | Zer0-Jack is clearly better: less overclaiming, more transparent about access requirements |
+| UWuTZYPSxJ.md (KDA) | 2.5 | Zer0-Jack is clearly better: more honest about limitations, real empirical results |
 
-2. **Medium band (4–6):** wNg0LibmQt — Gradient-based Jailbreak Images for Multimodal Fusion Models (avg 5.0, Reject). Very similar topical area (gradient-based image jailbreaks on MLLMs), but that paper had limited scope (only Chameleon) and questionable practical applicability. Zero-Jack is stronger: broader experiments, real commercial model attack, honest limitations. Also: Nazzz5GJ4g — Weak-to-Strong Jailbreaking (avg 5.4, Reject). Similarly strong ASR (>99%) but overclaimed black-box scope (required logprob access). Zero-Jack parallels this concern closely. uBnM3EFovQ — ReMiss (avg 5.75, Poster). Score-based jailbreak with overclaimed scope, but cleaner methodology.
-
-3. **Low band (<3):** UWuTZYPSxJ — KDA (avg 2.5, Reject). Overclaimed properties, confounded evaluation. Zero-Jack is clearly stronger than this. 5kMwiMnUip — NEMESIS (avg 1.4, Reject). Minimal novelty, essentially rehashing known techniques.
-
-Zero-Jack sits in the medium band: it has real empirical contributions and addresses an important problem, but the misleading black-box framing, asymmetric threat-model comparisons, and confounded GPT-4o experiment are substantive issues comparable to those in the 5.0–5.75 scored anchors. It is stronger than the Chameleon paper (5.0) due to broader evaluation and commercial model demonstration, but weaker than ReMiss (5.75) which had cleaner methodology despite similar overclaiming concerns. The ablation for patch size is a genuine contribution, but the missing score-based baseline is a notable gap.
-
-**Score: 5.0**
+Zer0-Jack falls between the medium-scoring papers (4.25–5.5 range) and the high-scoring papers (7+). Its core method works and achieves impressive ASR, but the imprecise "black-box" framing and missing score-based baselines prevent a clear assessment of whether the strong results are due to the method or simply the access level. Compared to wNg0LibmQt.md (5.0, similar topic area, similar evaluation issues), Zer0-Jack has stronger empirical results but a more significant framing concern. I place it at 5.0.
 
 MY FINAL SCORE: <pineapple>5.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

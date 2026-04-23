@@ -1,82 +1,89 @@
-Now I have a comprehensive understanding of the paper and the issues raised. Let me synthesize the review.
-
 ## Summary
 
-This paper proposes the Norm-Adaptive Maximum Mean Discrepancy (NAMMD), which scales MMD by the norms of kernel mean embeddings, and uses it to extend distribution closeness testing (DCT) from discrete 1D/TV-based settings to complex data via kernel methods. NAMMD divides MMD² by (4K − ‖μ_P‖² − ‖μ_Q‖²), yielding a value in [0,1] that increases with higher norms at the same MMD distance, motivated by the observation that pairs with the same MMD but different norms produce different p-values in two-sample testing.
+The paper proposes Norm-Adaptive MMD (NAMMD), which normalizes MMD² by (4K − ‖μ_P‖² − ‖μ_Q‖²) to create a closeness measure in [0,1] that scales with RKHS norms of distributions. This is motivated by the observation that distribution pairs with the same MMD value but different norms yield different p-values in testing, and NAMMD better correlates with these p-values. The paper extends distribution closeness testing (DCT) from discrete TV-based methods to complex data via kernel methods, provides theoretical analysis (asymptotic distributions, sample complexity, Type-I error control, power comparisons with MMD), and demonstrates practical utility on ImageNet variant assessment, domain adaptation confidence margins, and adversarial perturbation detection.
 
 ## Strengths
 
-- **First extension of DCT to complex data via kernel methods.** Prior DCT methods rely on total variation over discrete one-dimensional distributions with finite support (Section 2). By replacing TV with NAMMD and using characteristic kernels, the paper enables DCT on continuous and complex data (MNIST, CIFAR10, ImageNet), which is a genuinely new capability for the DCT framework.
+- **Extends DCT to complex data via kernels**: The paper identifies a genuine gap—existing DCT methods use TV on discrete 1D distributions—and proposes a kernel-based solution applicable to images and other complex data. This is a meaningful and underexplored direction (Sections 1–2, Table 2, Figures 3–5).
 
-- **Complete theoretical toolkit.** The paper provides asymptotic distributions (Theorem 2), Type-I error control (Theorem 5), and sample complexity bounds (Theorem 8), covering the statistical guarantees needed for a valid hypothesis test.
+- **Clean and interpretable NAMMD definition**: Definition 1 normalizes MMD² by the "unexplained variance" term 4K − ‖μ_P‖² − ‖μ_Q‖², keeping the statistic in [0,1] and making it increase with norms. The formula has a natural interpretation as capturing how effectively two distributions are separated relative to their spread (Definition 1, Remark, Section 3).
 
-- **Practical case studies.** The ImageNet variant experiments (Figure 3) demonstrate that NAMMD correctly recovers the same closeness ordering as accuracy margins {0.529, 0.564, 0.751, 0.827} for ImageNetsk, ImageNetr, ImageNetv2, ImageNeta, showing applicability without ground-truth labels.
+- **NAMMDFuse consistently outperforms MMDFuse and other SOTA methods**: Figure 2 shows NAMMDFuse (which replaces MMD with NAMMD in the MMDFuse fusion framework) achieves higher test power across blob, higgs, hdgm, and mnist datasets. This is the strongest evidence for NAMMD's specific contribution, since NAMMDFuse and MMDFuse share the same fusion framework and differ only in the base statistic.
 
-- **NAMMD's bounded range [0,1] is practically convenient.** For DCT where ε must be specified, having a normalized measure in [0,1] makes it more natural to set thresholds (Definition 3) compared to raw MMD whose range depends on the kernel constant K.
+- **Compelling practical case studies**: Section 5.2 demonstrates real utility through ImageNet variant similarity assessment (Figure 3), confidence margin evaluation for domain adaptation (Figure 4), and adversarial perturbation detection (Figure 5). The NAMMD distance correctly reflects closeness relationships consistent with ground-truth accuracy margins.
+
+- **Comprehensive theoretical framework**: The paper provides asymptotic distribution analysis (Theorem 2), Type-I error control (Theorem 5), concentration inequalities (Lemmas 6–7), and sample complexity bounds (Theorem 8), all within a coherent framework.
 
 ## Weaknesses
 
 ### Fatal
+
 None.
 
 ### Major
 
-- **The core motivation conflates test power with distributional distance, and the paper frames a tradeoff as an unambiguous improvement.** The paper argues that MMD is "less informative" because pairs with the same MMD but different norms have different p-values (Figure 1c). However, p-values reflect both effect size and estimator variance—concentrated (high-norm) distributions yield lower-variance MMD estimators and thus smaller p-values, meaning the test has more power to detect the difference, not that the distributions are "less close." MMD is a metric: when MMD(P₁,Q₁) = MMD(P₂,Q₂), the pairs are equally distant in the RKHS. NAMMD confounds distance with concentration, treating "easier to distinguish" as "more different." This is not necessarily wrong—NAMMD measures something meaningfully different from MMD (a standardized discrepancy analogous to Cohen's d vs. raw mean difference)—but the paper frames it as an unambiguous improvement rather than acknowledging the tradeoff. This matters because when the norm condition in Theorem 12 is reversed (‖μ_{P₁}‖ + ‖μ_{Q₁}‖ > ‖μ_{P₂}‖ + ‖μ_{Q₂}‖), NAMMD would be *worse* than MMD, a scenario the paper does not discuss.
+- **Theoretical guarantee for NAMMD's power advantage over MMD is essentially vacuous**: Theorems 10 and 12 establish that NAMMD has "higher test power" than MMD, but the key result—that NAMMD can reject when MMD does not—holds only with probability ≥ 1/65. This is an existence result showing the possibility of improvement, not a practical guarantee. The required sample size constant C' is distribution-dependent and unquantified (lines 245–249, 277–281). A 1/65 probability bound provides almost no assurance that NAMMD will meaningfully outperform MMD in practice.
 
-- **Experimental improvements for NAMMD over MMD are negligibly small.** Table 1 is the most direct test of the paper's central claim—it compares NAMMD and MMD test power with the same kernel. The improvements are within a fraction of one standard deviation: e.g., blob/Gaussian +0.016 (σ=0.090), higgs/Gaussian +0.003 (σ=0.073), mnist/Gaussian +0.006 (σ=0.019), cifar10/Gaussian +0.003 (σ=0.017). The consistent direction of improvement across all 20 kernel-dataset combinations is reassuring but the magnitudes do not establish that NAMMD meaningfully improves test power in practice.
+- **Empirical improvements over MMD in two-sample testing are marginal and lack significance tests**: Table 1 shows NAMMD outperforming MMD in all 20 comparisons, but most differences are far within one standard deviation (e.g., higgs/Gaussian: 0.566 ± 0.075 vs 0.563 ± 0.073; cifar10/Gaussian: 0.222 ± 0.020 vs 0.219 ± 0.017). The average improvement across datasets is ~1% of test power for most kernels. While the consistency is notable, no statistical significance tests are reported, and the differences are too small to establish meaningful superiority in this setting. This directly undermines the paper's central claim of "higher test power" for two-sample testing.
 
-- **Theoretical guarantees for "higher test power" are very weak.** Both Theorem 10 and Theorem 12 claim NAMMD can reject when MMD fails, but only with probability ≥ 1/65 ≈ 1.5%. A guarantee that improvements occur at least 1.5% of the time—likely derived from a Paley-Zygmund-type bound—does not substantiate the headline claim of "higher test power." Additionally, Theorem 12 requires the condition ‖μ_{P₁}‖ + ‖μ_{Q₁}‖ < ‖μ_{P₂}‖ + ‖μ_{Q₂}‖, which the paper merely asserts "is often met in practice" (Section 4.3) without empirical verification in the ImageNet or adversarial perturbation experiments.
-
-- **Missing direct comparison for DCT (ε>0): same-kernel MMD vs NAMMD.** The most critical experiment—comparing MMD-based and NAMMD-based distribution closeness testing with the same kernel for ε > 0—is absent. Table 1 only covers ε=0 (two-sample testing), where improvements are negligible. The Figure 3 ImageNet experiments compare NAMMD vs MMD but the paper does not clearly specify how ε^M is set for MMD-based DCT given that MMD is not normalized to [0,1]. Without this fair same-kernel comparison for ε>0, the core claim that norm-adaptive scaling improves closeness testing is not empirically supported for the paper's main application.
+- **Comparison with Canonne's test conflates kernel advantage with NAMMD-specific advantage**: Table 2 compares NAMMD (with Mahalanobis kernel) against Canonne's occurrence-based test on 50-element discrete distributions. The advantage partly comes from using a kernel at all—which captures geometric structure—rather than from the NAMMD normalization specifically. The paper states "NAMMD for distribution closeness testing achieves better performances than Canonne's test" (Section 5.2), but this overstates the conclusion. A fairer comparison would include an MMD-based DCT with the same kernel, testing whether MMD(P₂,Q₂) > MMD(P₁,Q₁), to isolate the effect of NAMMD's normalization from the effect of using a kernel.
 
 ### Minor
 
-- **The Canonne comparison (Table 2) conflates the kernel contribution with the NAMMD contribution.** Table 2 compares NAMMD (kernel-based) against Canonne's test (TV-based, no kernel) on discretized distributions. The large performance gap likely comes from kernels capturing structure in the data rather than from norm-adaptive scaling specifically. While the comparison shows NAMMD's practical advantage, it does not isolate NAMMD's contribution from the general benefit of using kernel methods.
+- **Theorem 12's norm condition is asserted without rigorous justification**: The condition ‖μ_{P₁}‖ + ‖μ_{Q₁}‖ < ‖μ_{P₂}‖ + ‖μ_{Q₂}‖ is stated to be "often met in practice as norms of mean embeddings are typically positively correlated with MMD value" (line 283). However, this correlation is not guaranteed: pairs of broad, overlapping distributions can have small norms while being far apart in MMD, violating the condition. The scope of Theorem 12 is narrower than claimed, and the failure mode (where NAMMD could have *lower* power than MMD) is not analyzed.
 
-- **The paper does not characterize when NAMMD hurts.** There exist natural configurations where ‖μ_{P₁}‖ + ‖μ_{Q₁}‖ > ‖μ_{P₂}‖ + ‖μ_{Q₂}‖ and MMD would outperform NAMMD. The paper should acknowledge and characterize this regime rather than claiming universal improvement.
+- **Type-I error for ε > 0 with plug-in variance estimator needs empirical verification in the main paper**: For DCT with ε > 0, the threshold τ_α (Eq. 2) uses the empirical variance σ_{X,Y} as a plug-in for the true σ_{P,Q}. Lemma 4 only provides a bias bound |E[σ²_{X,Y}] − σ²_{P,Q}| = O(1/√m), not a high-probability concentration bound. The Type-I error experiments are relegated to the appendix (Section D.6, not in the main paper), making it impossible to verify whether the Gaussian threshold with plug-in variance properly controls Type-I error.
 
-### Trivial
-None.
+- **Motivation framing is imprecise**: The paper claims MMD is "less informative" because "MMD value can be the same for many pairs of distributions that have different norms" (Abstract, Section 1). This conflates the distance metric (which correctly gives the same value for equidistant pairs) with test power (which varies with norms). Figure 1c already shows that the MMD *test* accounts for norms through the estimator's variance. The actual contribution is a new test statistic that re-encodes the signal-to-noise ratio into the distance itself, not a fix for a deficiency in MMD as a distance metric. More precise framing would strengthen the paper.
+
+## Trivial
+
+- The σ²_{P,Q} notation in Theorem 2 may have a dimensional inconsistency (the formula appears to give a standard deviation divided by a constant, not a variance), but this could be a PDF extraction artifact and is difficult to verify without the original.
 
 ## Nice-to-Haves
 
-- Ablation against simpler normalizations (e.g., MMD/K or MMD/√(4K−‖μ_P‖²−‖μ_Q‖²)) to justify the specific NAMMD scaling choice.
-- Statistical significance tests (e.g., paired Wilcoxon) on the Table 1 improvements across repetitions, given they are within standard deviations.
-- Empirical verification of the norm condition ‖μ_{P₁}‖+‖μ_{Q₁}‖ < ‖μ_{P₂}‖+‖μ_{Q₂}‖ in the ImageNet and adversarial perturbation experiments.
+- Include significance tests (e.g., paired t-tests) for the Table 1 power comparisons to properly assess whether NAMMD's improvement over MMD is statistically significant.
+- Add a comparison against an MMD-based DCT with the same kernel (testing MMD(P₂,Q₂) > MMD(P₁,Q₁)) to isolate the NAMMD normalization effect from the kernel effect in the DCT setting.
+- Analyze the failure mode: when Theorem 12's norm condition is violated, how much does NAMMD lose relative to MMD?
+- Add error bars or confidence intervals to Figures 3–5 for the DCT case studies.
 
 ## Removed Points
 
-*These points are flagged to be removed, treat them with caution.*
+These points are flagged to be removed, treat them with caution:
 
-- **"Canonne comparison is unfair/apples-to-oranges" (Harsh Critic #4):** Downgraded to minor. The comparison is between two valid DCT methods and shows practical advantage, even though it doesn't isolate NAMMD's contribution from the kernel approach generally. Calling it "unfair" is too strong—both are DCT methods on the same data, just using different closeness measures.
+- **"Denominator approaches zero causing instability"**: The critic claimed the denominator 4K − ‖μ_P‖² − ‖μ_Q‖² approaches zero when distributions are near-point-masses. This is incorrect: since 0 ≤ ‖μ_P‖² ≤ K and 0 ≤ ‖μ_Q‖² ≤ K, the denominator is always ≥ 2K > 0. The theoretical NAMMD is always well-defined.
 
-- **"Missing related work on kernel-based closeness/tolerance testing" (Harsh Critic, Section 1):** Removed per rules—cannot verify existence of specific uncited works.
+- **"Variance formula dimensional inconsistency"**: While the σ²_{P,Q} formula in Theorem 2 looks potentially inconsistent (square root in numerator rather than full variance expression), this is likely a PDF extraction artifact. Cannot verify without the original submission.
 
-- **"Permutation test denominator analysis" (Harsh Critic, Section 4.2):** This is a reasonable theoretical question but too speculative as a weakness—the paper shows experimentally that the permutation test works, and the question about denominator variation is a nice-to-have theoretical contribution rather than a flaw.
+- **"Canonne comparison tests different null hypotheses"**: While technically true (TV ≤ ε' vs NAMMD ≤ ε), the practical comparison is fair in the sense that both tests address the same underlying question (is the test pair further from the reference pair?) on the same data distributions. The real issue (kept above) is that the advantage comes partly from using a kernel, not from NAMMD normalization specifically.
 
-- **"Theorem 5 proof relies on variance estimator with only O(1/√m) guarantee" (Harsh Critic, Section 3):** Removed as strawman—the paper states the proof is in the appendix (which the parser stripped), and Type-I error control is a standard result with plug-in variance estimators.
+- **"Demanding missing related works"**: Not verifiable without external sources.
 
-- **"Sample complexity bounds are unremarkable / expected rate" (Harsh Critic, Section 4.1):** Weakened—providing explicit sample complexity bounds, even at expected rates, is a valid contribution for a new test statistic, especially since no such bounds existed for DCT with kernel measures before.
+- **"NAMMD and MMD have the same test power estimator"**: The paper itself acknowledges this in Section 4.2 (line 251), noting that for two fixed distributions, NAMMD is just MMD scaled by a constant. This is not a weakness but a property the paper already discusses.
 
 ## Novel Insights
 
-The paper reveals an interesting duality: NAMMD is to MMD roughly what a standardized effect size (Cohen's d) is to a raw mean difference. Both rescalings incorporate variance information to make comparisons across settings meaningful, but both also change what is being measured. The paper would be stronger if it embraced this framing—NAMMD is not a "better MMD" but a fundamentally different quantity useful when comparing closeness levels across distribution pairs with different concentrations, much as Cohen's d is preferred over raw differences in meta-analysis. The DCT application, where comparing ε across pairs is intrinsic to the problem, is precisely where this standardization is most justified.
+The paper reveals an interesting structural insight: normalizing MMD² by the "unexplained variance" 4K − ‖μ_P‖² − ‖μ_Q‖² = 4Var(P,κ) + 4Var(Q,κ) − 2MMD²(P,Q) effectively converts MMD from an absolute distance into a signal-to-noise-like ratio. This is why NAMMD better correlates with p-values and can achieve higher test power—especially in the DCT setting where you compare relative distances across pairs with different norms. However, the empirical evidence shows this conversion yields only marginal improvements in standard two-sample testing (Table 1), suggesting the benefit is primarily relevant when comparing distances across distribution pairs with differing norms (the DCT setting), rather than for a single pair.
 
 ## Suggestions
 
-- Reframe the motivation: replace "MMD is less informative" with "MMD is not directly comparable across pairs with different norms; NAMMD provides a standardized closeness measure enabling such comparisons"—this is more defensible and still strong.
-- Add a direct same-kernel MMD vs NAMMD comparison for distribution closeness testing (ε > 0), ideally on the ImageNet variants.
-- Report statistical significance or confidence intervals for the Table 1 improvements.
-- Verify and report whether the norm condition ‖μ_{P₁}‖ + ‖μ_{Q₁}‖ < ‖μ_{P₂}‖ + ‖μ_{Q₂}‖ holds in the ImageNet experiments.
+- Report paired statistical significance tests for Table 1; if the improvements are not significant, this should be acknowledged rather than overstated.
+- Add an MMD-based DCT baseline (same kernel, testing MMD(P₂,Q₂) > MMD(P₁,Q₁)) to Table 2 or the DCT experiments to isolate NAMMD's specific contribution.
+- Provide a concrete example or quantitative analysis of when Theorem 12's norm condition holds vs. fails, including empirical demonstration of NAMMD's behavior in the failure regime.
 
 ## Score and Decision
 
-**Calibration anchors:**
-- High: GZ6AcZwA8r (MMD Graph Kernel, avg 7.5, Accept spotlight) — strong novelty, solid theory, clear empirical gains. This paper is below it due to negligible empirical improvements and weaker theoretical guarantees.
-- Medium: QCDdI7X3f9 (Model Equality Testing, avg 6.5, Accept poster) — practical MMD-based testing with clear real-world application. This paper is comparable on practical applicability but weaker on demonstrating meaningful improvement over baseline. PPxyXlCAOJ (Learning Representations for Independence Testing, avg 5.5, Reject) — solid theory but limited empirical advantage over baselines; this paper is similarly situated.
-- Low: uxHme785fq (DP hypothesis testing, avg 2.5, Reject) — weak experiments and questionable utility. This paper is clearly above it since NAMMD has a valid definition, proper theory, and real case studies. yqaN7MfkFU (Regularized MMD, avg 4.4, Reject) — MMD variant with limited empirical study; this paper is somewhat above it due to the DCT extension and case studies, but shares the problem of marginal empirical advantage over MMD.
+**Calibration anchors used:**
 
-The paper makes a real contribution by extending DCT to complex data via kernel methods, and the NAMMD definition is clean with proper theoretical guarantees. However, the core claim of "higher test power" is undermined by negligible empirical improvements (Table 1), very weak theoretical guarantees (probability ≥ 1/65), the conflation of test power with closeness in the motivation, and the absence of the most critical experiment (same-kernel MMD vs NAMMD for ε > 0). The paper's value is more in the DCT framework extension itself than in the NAMMD statistic's specific advantage over MMD, yet the framing emphasizes the latter. This positions it below borderline accept papers like QCDdI7X3f9 (which had clearer practical gains) and closer to rejected papers like PPxyXlCAOJ (which had limited empirical advantage over baselines).
+| Paper | Avg Score | Comparison |
+|-------|-----------|------------|
+| GZ6AcZwA8r (MMD Graph Kernel) | 7.5 | Stronger: solid novel kernel framework with impressive empirical results and clear theoretical contributions. This paper's contributions are narrower and less well-supported. |
+| z9j7wctoGV (Deep Kernel Relative Test) | 6.0 | Comparable: both extend kernel testing to practical settings. That paper had stronger practical motivation and clearer contribution, despite concerns about assumptions. This paper's improvements are more marginal. |
+| yqaN7MfkFU (Regularized MMD) | 4.4 | Weaker: that paper had serious theoretical gaps. This paper has a cleaner formulation and more comprehensive framework, placing it above. |
+| Hh0Cg4epYY (Bayes Error Bounds) | 2.33 | Much weaker: fundamentally flawed theory. This paper is coherent and well-organized, well above this level. |
+| PPxyXlCAOJ (Learning Representations for Independence Testing) | 5.5 | Similar: both propose modifications to kernel test statistics. That paper was rejected despite reasonable ideas due to concerns about the evidence for improvement. |
 
-MY FINAL SCORE: <pineapple>4.0</pineapple>
+The paper proposes a reasonable and interpretable extension of MMD for distribution closeness testing, with a comprehensive theoretical framework and interesting practical applications. However, the central claim of "higher test power" is supported by weak theoretical guarantees (1/65 probability bound) and marginal empirical improvements in the most direct comparison (Table 1). The more convincing evidence comes from the NAMMDFuse integration and DCT case studies, but even these have limitations (no error bars, no fair MMD-based DCT baseline). The paper extends DCT to complex data, which is a genuine contribution direction, but overclaims the evidence for NAMMD's advantage over MMD specifically. Relative to the calibration anchors, this paper falls between the regularized MMD paper (4.4) and the deep kernel relative test paper (6.0), closer to the middle.
+
+MY FINAL SCORE: <pineapple>5.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

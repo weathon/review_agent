@@ -1,125 +1,112 @@
-Now I have a good understanding of the paper and calibration anchors. Let me synthesize the final review.
-
-Key verification of harsh critic's claims:
-
-1. **PVI with softmax normalization reduces to prior-corrected second model outputs**: MATHEMATICALLY CORRECT. After softmax, PVI_k ∝ (f'[x](y_k)/f[∅](y_k))^(1/T). However, calling it "vacuous" is too strong — it's still a meaningful prior-correction mechanism. The more important point is the asymmetry in comparison.
-
-2. **Missing deep ensemble baseline**: VALID. PVI requires training a second full model. The natural comparison is a 2-model ensemble, which is conspicuously absent.
-
-3. **Asymmetric model capacity across PMI/PSI/PVI**: VALID. PVI uses a full architecture copy while PMI uses a shallow 2-layer network and PSI uses projections. This confounds the comparison.
-
-4. **Overlapping confidence intervals**: PARTIALLY VALID. The paper itself acknowledges this in the results section: "After considering the margin of error, while the performance improvement of PVI is less pronounced for AUROC_f and AUPR_{f,success}, it remains notably significant for AUPR_{f,failure} and AURC." So the paper partially addresses this.
-
-5. **Limited calibration baselines**: VALID. Only MSP and SM in Table 3, justified only by "confidence calibration requires the confidence estimates to be between 0 and 1." This is a reasonable methodological constraint but still limits the claim.
-
-6. **Temperature scaling ablation missing**: VALID — this is a meaningful gap.
-
-Let me write the final review now.
+Now I have all the information I need. Let me compose the final review.
 
 ## Summary
 
-This paper proposes using three pointwise information (PI) measures—PMI, PVI, and PSI—as post-hoc confidence estimators for deep neural networks. It provides theoretical analysis of their invariance properties, margin sensitivity, and convergence rates, and empirically compares them across failure prediction and confidence calibration tasks, finding that PVI outperforms baselines on most metrics.
+The paper proposes using three pointwise information (PI) measures — PMI, PVI, and PSI — as confidence estimators for deep neural networks, conducting a comparative study of their theoretical properties (invariance, margin sensitivity, convergence rates) and empirical performance on failure prediction and confidence calibration tasks. The central empirical finding is that PVI outperforms both the other PI measures and six existing post-hoc baselines, which the authors argue is consistent with their theoretical analysis showing PVI has the most balanced invariance and margin sensitivity properties.
 
 ## Strengths
 
-- **Novel invariance hierarchy (Propositions 1–3, Section 3.1):** The paper establishes that PMI is invariant to homeomorphisms (potentially counter-productive per Remark 9), PSI lacks invariance to invertible linear transformations, and PVI strikes an intermediate balance by being invariant to invertible linear but not all homeomorphic transforms. This hierarchy provides genuine theoretical insight into why these measures behave differently and directly supports T2/T5.
+- **Systematic theoretical comparison of PI measures with clear takeaways**: The paper derives and compares invariance properties (Propositions 1–3), margin sensitivity (Proposition 4, Theorem 1, Proposition 5), and convergence rates for all three measures, distilling these into concrete takeaways (T1–T5, Section 3.3) that directly connect theory to experiments. Theorem 1's lower bound relating PSI to both margin and intrinsic dimensionality is a non-trivial result.
 
-- **Proposition 4 (PMI fails on non-overlapping distributions, Section 3.2):** This non-obvious result shows pmi(x;y)=1 for any non-overlapping class-conditional distributions with equal priors, meaning PMI cannot distinguish margin in well-separated settings. This is a crisp, novel theoretical deficiency of PMI.
+- **Revealing disconnect between margin sensitivity and practical confidence estimation quality**: Table 1 shows PSI has the highest correlation with margin, yet PVI consistently outperforms PSI on confidence estimation tasks (Tables 2–3). The paper's discussion in Section 5 about this disconnect — confidence as boundary sensitivity vs. predictive reliability — is genuinely insightful and suggests the community should think more carefully about what properties matter for confidence estimators.
 
-- **Consistent empirical advantage of PVI on key metrics (Tables 2–3):** PVI achieves the best AUPR_{f,error} and AURC across all four model-dataset combinations (e.g., 56.07 vs. next-best 48.54 on ResNet50/CIFAR-10 for AUPR_{f,error}), and the lowest ECE in all settings. These are the more informative metrics per Jaeger et al. (2023).
+- **PVI shows substantial improvements on key metrics**: On AUPR_{f,error} and AURC (the preferred failure prediction metrics per Jaeger et al., 2023), PVI shows consistent and often large improvements. For example, ResNet50/CIFAR-10 AUPR_{f,error}: PVI 56.07±3.24 vs. best baseline NE 48.54±1.83 (Table 2). PVI also achieves the lowest ECE across all settings (Table 3).
 
-- **Insightful tension between margin correlation and confidence estimation (Section 5, Table 1):** PSI has the highest margin correlation (0.758–0.846) yet PVI outperforms it on accuracy-based tasks. The paper's explanation—that margin sensitivity measures boundary proximity while confidence estimation requires predictive reliability—is nuanced and practically important.
-
-- **Honest reflections on limitations (Section 5):** The paper explicitly acknowledges that PI measures require additional model training and that higher margin correlation does not guarantee better confidence estimation, which shows intellectual honesty.
+- **Convergence rate theory predicts dataset-dependent patterns**: Takeaway T4 predicts PMI/PSI should degrade on complex datasets, and this is borne out empirically — PMI and PSI perform competitively on MLP/MNIST but substantially worsen on VGG16/STL-10 and ResNet50/CIFAR-10, while PVI remains robust (Table 2).
 
 ## Weaknesses
 
 ### Fatal
+
 None.
 
 ### Major
 
-- **PVI after softmax normalization functionally reduces to prior-corrected outputs of a separately trained classifier, undermining the "information-theoretic" framing of the empirical advantage.** After softmax normalization across classes, PVI_k = exp((-log f[∅](y_k) + log f'[x](y_k))/T) / Z is proportional to (f'[x](y_k)/f[∅](y_k))^(1/T)—i.e., a temperature-scaled, prior-corrected probability from the *separately trained* model f'. The f[∅] terms encoding class marginals are absorbed into the softmax normalization. This means PVI's advantage over baselines that use only the original model's outputs (MSP, SM, LM, etc.) may stem from having access to a second trained model's capacity rather than from any information-theoretic property of PVI. The paper does not acknowledge this collapse or decompose PVI's performance into the contribution of (a) the second model, (b) prior correction, and (c) temperature scaling. (Section 2, Definition 3; Section 4 normalization paragraph.)
+- **PVI is not genuinely "post-hoc" in the standard sense — it requires training a second full model, making the comparison against zero-cost baselines fundamentally asymmetric**: The paper frames its contribution as using PI measures "in a post-hoc manner, without needing to modify their architecture or training process" (Abstract, line 15). However, the PVI estimator requires training "another trained network" with the same architecture (Section 2, line 78), which doubles the computational cost of deployment preparation. The baselines compared against (MSP, SM, ML, LM, NE, NG) are all truly zero-cost — computed directly from the trained model's outputs. Since PVI's performance advantage may derive partially from having a second trained model rather than from the information-theoretic measure itself, the headline claim that "PVI outperform[s] all existing baselines for post-hoc confidence estimation" (line 38) is unsupported without comparing PVI against what a second model achieves through simpler means (e.g., the second model's MSP, ensembling, or MC Dropout). The paper acknowledges in the Limitations section (line 320) that "PI measures require training additional models" but does not address the implications for fair comparison.
 
-- **Missing deep ensemble baseline invalidates the headline claim of outperforming "all existing baselines."** Since PVI requires training a second full model with the same architecture (Section 2: "using the same network but with different initialization"), the direct fair comparison is a 2-model deep ensemble—identical computational cost (two full training runs). Deep ensembles are among the strongest known post-hoc uncertainty methods. If a 2-model ensemble matches or outperforms PVI, the paper's contribution reduces to "training two models is better than one," which is not novel. The paper's claim to "outperform all existing baselines" is unsupported without this comparison. (Abstract, Section 4.1 baseline list.)
-
-- **Asymmetric estimator capacity across PMI, PSI, and PVI confounds the comparison.** PVI uses a full copy of the original architecture; PMI uses a "shallow 2-layer neural network" (Section 2); PSI uses Gaussian/binning estimators on 1D projections (Section 2). When PVI outperforms PMI and PSI, it is impossible to attribute this to the information-theoretic properties rather than to the simple fact that a full model is a much more powerful density estimator than a 2-layer network. The theoretical analysis (Section 3) studies the *idealized quantities*, not the finite-capacity estimators, so it cannot explain differences driven by model capacity. The paper should either match estimator capacities or acknowledge this confound explicitly. (Section 2; Section 3.3 T5.)
+- **The comparison between PI measures is confounded by different input representations**: Section 4 (line 278) explicitly states that PVI is computed between "input features and predicted labels" using a separately trained model, while PMI and PSI are computed between "output layer features and predicted labels" using the frozen original model. PVI thus benefits from a dedicated representation optimized for the prediction task on raw inputs, while PMI and PSI are constrained to the original model's output-layer representation. The paper justifies this by saying it is "more natural" for each measure, but the confound means one cannot attribute PVI's superiority to the measure itself rather than to its representational advantage. A fairer comparison would apply all three measures to the same feature layer with comparable estimation procedures.
 
 ### Minor
 
-- **Calibration evaluation (Table 3, Section 4.2) includes only two baselines (MSP and SM),** justified on the grounds that "confidence calibration requires the confidence estimates to be between 0 and 1." While this is methodologically reasonable, it significantly limits the strength of the "outperforms all baselines" claim for calibration, since methods like Platt scaling or Dirichlet calibration also produce calibrated probabilities in [0,1] and could serve as additional baselines.
+- **Temperature scaling is applied to all methods for failure prediction despite the paper citing evidence it can harm this task**: The paper cites Zhu et al. (2022) showing "popular confidence calibration methods have been shown to be useless or harmful for failure prediction tasks" (line 19), yet applies temperature scaling to all methods "to ensure a fair comparison" (line 231). If temperature scaling harms failure prediction, it may differentially deflate baselines, since PVI — which already involves a separately trained model — may be less affected. While uniform application provides some parity, reporting results without temperature scaling for the failure prediction task would strengthen the claims.
 
-- **No temperature scaling ablation on the original model.** The paper applies softmax + temperature scaling to PI values. As the harsh analysis notes, if temperature scaling alone on the original model's outputs (without PI measures) achieves comparable results, the PI framework adds no value beyond the standard post-hoc calibration already widely used. This ablation is missing and would significantly strengthen or weaken the paper's claims. (Section 4.)
+- **The claim that PI measures "can potentially reduce inherent bias" from class imbalance (Motivation Point 3, line 33) is entirely untested**: All experiments use balanced datasets (MNIST, F-MNIST, STL-10, CIFAR-10). Given that this claim is presented as a core motivation for the approach, the absence of any class-imbalanced experiment is a noticeable gap.
 
-- **Many claimed improvements fall within standard deviation margins.** While PVI shows clear advantages on AUPR_{f,error} and AURC, improvements on AUROC_f are often within noise (e.g., ResNet50/CIFAR-10: PVI 86.50±1.02 vs. SM 85.14±0.38). The sweeping "outperforms all baselines" claim in the abstract is stronger than the data support, though the paper partially acknowledges this in Section 4.1's results paragraph. (Table 2, Abstract.)
+- **Standard deviations are large relative to differences in some calibration comparisons**: In Table 3 (VGG16/STL-10), PVI achieves ECE 4.91±2.63 vs. MSP 7.42±3.09 — the confidence intervals overlap substantially with only 5 runs, raising questions about statistical significance for this setting. The differences are more convincing for the failure prediction metrics (Table 2), particularly AUPR_{f,error} and AURC.
+
+- **The disconnect between margin sensitivity and practical performance weakens the theoretical narrative**: The paper acknowledges in Section 5 that "better sensitivity to margin doesn't necessarily imply better performance" — but this means the theoretical properties studied (margin sensitivity, invariance) do not cleanly predict which measure works best in practice. The explanation offered (confidence as boundary sensitivity vs. predictive reliability) is plausible but somewhat ad hoc, and is not empirically validated with per-class or per-difficulty-regime analysis.
 
 ### Trivial
+
 None.
 
 ## Nice-to-Haves
 
-- Decompose PVI's performance into the contribution of (a) having a second model, (b) prior correction via f[∅], (c) temperature scaling, and (d) the information-theoretic formulation itself. This would clarify what drives the empirical advantage.
-- Run all PI measures with matched estimator capacity (e.g., all using the original architecture) to disentangle the effect of the information measure from the estimator's power.
-- Compare PVI against a 2-model deep ensemble, which uses identical computational resources.
+- Compare PVI against a second-model MSP baseline (i.e., use the second trained model's softmax probability directly as a confidence score) to isolate the contribution of the information-theoretic formulation from the advantage of having a second model.
+
+- Apply all three PI measures to the same feature layer with comparable estimation procedures, to eliminate the representational confound.
+
+- Report failure prediction results without temperature scaling, given the cited evidence that it can harm this task.
+
+- Test on at least one class-imbalanced dataset to validate Motivation Point 3.
 
 ## Removed Points
 
 These points are flagged to be removed, treat them with caution:
 
-- **"PVI is not a post-hoc confidence estimator in the same class as MSP"** — This is an interpretive framing issue, not a flaw. PVI *is* applied post-hoc to a trained model; it just requires an additional training step. The paper is transparent about this in Section 2 and the Limitations paragraph. The real concern is the asymmetry of comparison, which is captured in Major weaknesses above.
+- **"Fully post-hoc approach requiring no architecture or training modification" as a strength** (from Strength Finder): This conflicts with the verified major weakness — PVI explicitly requires training a second full model (line 78). The claim of being "post-hoc" without modification is technically true about the original model but misleading as a strength when the method itself requires significant additional training.
 
-- **"Post-hoc without modifying architecture is misleading because PVI trains a full second model"** — The paper does say "without needing to modify their architecture or training process" (abstract), which refers to the *original* model. PVI's additional model is a separate estimator. While the framing could be clearer, the paper does disclose the additional training in Section 2.
+- **Logarithm base not specified** (from Harsh Critic): The paper uses log without specifying the base throughout. While Proposition 4 (pmi=1 for non-overlapping distributions) only holds with log base 2, this is a convention issue that doesn't affect the comparative analysis since all measures would scale uniformly with base change. This is too minor to list.
 
-- **Proposition 2 invariance may not hold for finite networks** — The proposition is stated as a mathematical fact about the idealized PVI quantity, which is standard practice. The gap between theoretical and estimated quantities is a universal issue in information theory, not unique to this paper. The Limitations section partially addresses this.
+- **"Proposition 5 gives only an upper bound"** (from Harsh Critic): This is factually correct but is not a weakness — upper bounds are a standard theoretical tool, and the paper does not overclaim what the bound demonstrates.
 
-- **Proposition 5 only gives an upper bound, not a tracking relationship** — This is a valid observation but mischaracterized as a fatal flaw. An upper bound is still informative—it tells us PVI cannot exceed a margin-dependent quantity, which constrains its behavior. The paper doesn't overclaim this result.
+- **Missing related works** (from Harsh Critic, implicit): Per instructions, we do not flag missing related works.
 
-- **PSI having higher margin correlation contradicts the theory's prediction that PVI is "most well-rounded"** — The paper explicitly discusses this in Section 5 and explains the distinction between margin sensitivity and predictive reliability. This is an honest finding, not a contradiction that undermines the paper.
+- **Formatting/style nitpicks and typos**: Per instructions, these are removed.
 
-- **Missing related works** — Not verifiable without external sources; removed per rules.
-
-- **Formatting/style/appendix concerns** — Removed per rules (parser artifacts, missing appendix).
-
-- **Missing statistical significance testing** — Single-run evaluation with standard deviations is the norm in this area; requesting paired significance tests is a nice-to-have, not a weakness.
-
-- **Reproducibility concerns about hyperparameters or implementation details** — Removed per rules.
+- **Missing appendix proofs**: Per instructions, these are removed as the parser strips appendices.
 
 ## Novel Insights
 
-The most novel insight from this review is that the information-theoretic framing of PVI, while theoretically elegant, functionally collapses into prior-corrected second-model outputs after the softmax normalization the paper applies. This means the paper's central empirical finding—PVI outperforming baselines—is most parsimoniously explained by the trivial advantage of having a second trained model, not by the information-theoretic properties the theoretical analysis studies. The disconnect between theory (which predicts PVI is "most well-rounded") and the likely driver of empirical success (model capacity) is a deeper problem than the paper acknowledges.
+The most genuinely novel insight from this review is that the paper inadvertently reveals a fundamental tension in confidence estimation research: the theoretical properties one might expect to matter (margin sensitivity) do not predict practical performance, while the property that does correlate with performance (balanced invariance) is justified post hoc rather than derived from first principles. This suggests the field may need to rethink what theoretical guarantees are actually relevant for confidence estimation, rather than importing geometric intuitions from the margin/robustness literature.
 
 ## Suggestions
 
-- Add a 2-model deep ensemble baseline. This is the single most important experiment: if the ensemble matches PVI, the paper's contribution shifts; if PVI beats the ensemble, it's a much stronger result.
-- Run an ablation where temperature scaling is applied directly to the original model's logits (without PI measures) to isolate the value added by the PI framework.
-- Match estimator capacities across PMI, PSI, and PVI (e.g., all using the same architecture) in at least one experiment to disentangle measure properties from estimator power.
+- Add a "second-model MSP" baseline: train the same second model used for PVI but use its raw softmax output as a confidence score. This single experiment would clarify how much of PVI's advantage comes from the information-theoretic formulation vs. simply having a second trained model.
 
-## Evaluation on Axes
+- In the abstract and introduction, qualify the "post-hoc" claim by acknowledging that PVI requires additional model training, and explicitly position the contribution as comparing PI measures where some require additional training. This would prevent the fair-comparison concern from arising in the first place.
 
-- **Originality:** Moderate. The systematic comparison of PI measures with theoretical analysis is novel, but the empirical advantage may reduce to model capacity rather than the information-theoretic framework itself.
-- **Importance of research question:** High. Confidence estimation in post-hoc settings is a practically important problem, especially given that calibration methods can harm failure prediction.
-- **Claims well supported:** Moderately. The theoretical claims are well-supported, but the central empirical claim ("outperforms all baselines") is undermined by the absence of the most natural baseline (2-model ensemble) and the asymmetry in model capacity.
-- **Soundness of experiments:** Weakened by missing deep ensemble baseline, no temperature-scaling ablation, and asymmetric estimator capacity across PI measures.
-- **Clarity of writing:** Generally good. The T1–T5 takeaways structure is helpful. The framing of PVI as "post-hoc without modifying architecture" could be more transparent about the second-model requirement.
-- **Value to community:** Moderate. The theoretical invariance hierarchy and margin analysis are useful contributions regardless of the empirical confound, but the practical value is diminished until the confounds are addressed.
+- Consider reporting failure prediction results both with and without temperature scaling, given the paper's own citation of work showing temperature scaling can harm this task.
 
-## Calibration
+## Evaluation
 
-**Anchors used:**
+**Originality**: The systematic comparison of three PI measures for confidence estimation is a useful organizing framework. The theoretical analysis of invariance, margin, and convergence properties for all three measures is a meaningful contribution. However, PVI itself is not novel (Ethayarajh et al., 2022), and the paper's primary contribution is comparative rather than methodological.
 
-1. **ta26LtNq2r.md** (avg 8.0, Accept Spotlight) — "Learning to Reject Meets Long-tail Learning": Strong theory + clear empirical contribution. Much cleaner causal chain from theory to experiments than this paper. This paper is clearly below this anchor due to the fundamental comparison asymmetry.
+**Importance of research question**: Confidence estimation for DNNs is an important and well-motivated problem. The paper addresses both failure prediction and calibration, which are practically relevant.
 
-2. **TId1SHe8JG.md** (avg 7.5, Accept Spotlight) — "Provable Uncertainty Decomposition via Higher-Order Calibration": Principled uncertainty method with formal guarantees. Stronger theoretical contribution with more rigorous empirical validation. This paper is below this anchor.
+**Claim support**: The central claim that PVI outperforms all baselines is weakened by the asymmetric comparison (PVI requires training a second model; baselines are zero-cost). Without a second-model baseline, the claim cannot be fully attributed to the information-theoretic measure.
 
-3. **YUefWMfPoc.md** (avg 5.75, Reject) — "How to fix a broken confidence estimator": Comprehensive evaluation of post-hoc confidence estimators with strong empirical scope but limited novelty. This paper has more theoretical contribution but worse empirical methodology (missing ensemble baseline, asymmetric capacity). Roughly comparable or slightly below this anchor.
+**Experimental soundness**: The experimental design has a structural confound (PVI uses raw inputs + new model vs. baselines using original model outputs + PMI/PSI using output features). Temperature scaling may differentially affect methods. Standard deviations overlap in some calibration comparisons. Datasets are all balanced, leaving the class-imbalance claim untested.
 
-4. **ohHtdp3jDi.md** (avg 4.0, Reject) — "Implicit Functional Bayesian Deep Learning": Missing deep ensemble baseline, overclaimed results, sub-par performance. Similar pattern of missing key baselines. This paper has better theory but similar empirical gaps. Comparable or slightly above.
+**Clarity**: The paper is generally well-organized with clear takeaway summaries (T1–T5) that connect theory to experiments. The "post-hoc" framing is misleading given PVI's training requirements.
 
-5. **jTnHyyGYy2.md** (avg 4.5, Reject) — "LoRA-Ensemble": Mixed results, deep ensembles outperform proposed method on some benchmarks, missing comparisons to compute-efficient approaches. Directly relevant comparison pattern (method vs. ensemble). This paper is comparable to this anchor.
+**Value to community**: The theoretical analysis of PI measures and the finding about margin sensitivity vs. practical performance are useful reference points. The paper would be more valuable if the empirical claims were more carefully supported.
 
-6. **63r6HyqyRm.md** (avg 2.33, Reject) — "Vision-free Baseline for Multimodal Grammar Induction": Unfair comparison where proposed method uses pre-trained model importing billions of training data. More severe version of the asymmetry problem in this paper. This paper is clearly above this anchor since the asymmetry is less extreme.
+## Score and Decision
 
-The paper sits in the 4–5 range: it has genuine theoretical contributions (invariance hierarchy, PMI's failure on non-overlapping distributions) but the central empirical claim is undermined by the missing ensemble baseline and the effectively trivial nature of PVI's advantage after softmax normalization. This is worse than the 5.75 anchor (which had stronger empirical methodology) and comparable to the 4.0–4.5 anchors that shared similar weaknesses around missing baselines and overclaimed results.
+**Calibration anchors:**
 
-MY FINAL SCORE: <pineapple>4.0</pineapple>
+| Paper | Path | Avg Score | Comparison |
+|-------|------|-----------|------------|
+| R-EDL (high) | `/home/wg25r/review_agent/human_reviews/Si3YFA641c.md` | 7.2 | Novel method with strong empirical results and theoretical justification for uncertainty estimation — clearly above this paper, which has an unfair comparison problem |
+| Provable Uncertainty Decomposition (high) | `/home/wg25r/review_agent/human_reviews/TId1SHe8JG.md` | 7.5 | Formal guarantees on uncertainty decomposition — much stronger theoretical contribution |
+| Relative Uncertainty (medium-high) | `/home/wg25r/review_agent/human_reviews/ruGY8v10mK.md` | 6.5 | Novel data-driven uncertainty measure with empirical improvements — similar scope but cleaner comparison setup |
+| Broken Confidence Estimator (medium) | `/home/wg25r/review_agent/human_reviews/YUefWMfPoc.md` | 5.75 | Post-hoc confidence estimation comparison study — similar topic, rejected despite cleaner experiments |
+| Confidence as Vulnerability (medium-low) | `/home/wg25r/review_agent/human_reviews/0IqriWHWYy.md` | 4.25 | Limited technical contribution and missing baselines — similar concerns about overclaimed generality |
+| External Insight Calibration (low) | `/home/wg25r/review_agent/human_reviews/miIE56qM10.md` | 3.0 | Specifically criticized for "potentially unfair" comparison of trained post-processing vs. zero-cost baselines — very similar to this paper's core problem |
+| Post-prediction Confidence (low) | `/home/wg25r/review_agent/human_reviews/AL4tS0HhJT.md` | 2.5 | No baseline comparison — clearly below this paper |
+
+This paper sits between the medium-low and medium anchors. It has genuine theoretical contributions (invariance analysis, margin sensitivity, convergence rates) that the low-scoring papers lack, but its central empirical claim is undermined by the same unfair-comparison issue that tanked the miIE56qM10 paper (score 3.0). The paper is stronger than the low anchors because of its systematic theoretical analysis, but weaker than the medium anchors because its main empirical finding doesn't hold up under scrutiny. The paper is roughly comparable to 0IqriWHWYy (4.25) which had similar concerns about overclaimed generality with limited experiments, but with more theoretical content. I place it slightly above at 4.5, reflecting the value of the theoretical analysis even though the empirical claims are weakened.
+
+MY FINAL SCORE: <pineapple>4.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

@@ -1,93 +1,87 @@
-Good. Now I have verified the key claims. Let me compile the final review.
-
 ## Summary
 
-The paper proposes a multimodal RAG QA system that integrates a ColPali-based text-image retrieval model (bypassing OCR/layout analysis) with a GPT-4o-based visual question-answering module, supported by a custom dataset (IMG_MD_test_QA) constructed from 50,000+ document pages. The system is evaluated against three baselines (Text-Only RAG, Haystack 2.0 RAG, Chinese-CLIP RAG) on retrieval precision, generation quality, response speed, and a proposed Multimodal Consistency Score.
+This paper proposes a multimodal RAG question-answering system that integrates a fine-tuned ColPali-based text-to-image retrieval model with GPT-4o for visual question answering. The system constructs a dataset of over 50,000 document pages with associated images, Markdown text, and GPT-4o-generated QA pairs, and claims to simplify document processing by bypassing OCR during retrieval while improving retrieval accuracy and generation quality over existing baselines.
 
 ## Strengths
 
-- **Valid problem motivation**: Text-only RAG systems fail on documents with charts and figures. A system that retrieves and reasons over visual content addresses a real gap. Section 1 clearly motivates this.
-- **ColPali-based retrieval is a reasonable architectural choice**: Using ColPali to bypass OCR and directly process document images is well-motivated and the retrieval results (Table 3: 82.3% Precision@1 vs. 68.4% for OCR-based Haystack) support this advantage for the retrieval-only component.
-- **Consistent empirical superiority in retrieval metrics**: Table 3 shows the proposed system outperforms all baselines on Precision@K, and the comparison with Chinese-CLIP RAG (80.2% vs. 82.3%) is between systems using the same GPT-4o generator, making the retrieval improvement credible.
+- **Well-motivated problem**: Traditional text-only RAG systems indeed struggle with visually rich documents containing charts, figures, and diagrams, and end-to-end visual document retrieval (bypassing OCR at retrieval time) is a worthwhile direction. The paper correctly identifies this gap in Section 1.
+
+- **Coherent system design**: The architecture (Figure 1, Table 1) cleanly separates the ColPali-based text-to-image retrieval module from the GPT-4o VQA module, where retrieved top-K images are directly passed to the multimodal QA model. This avoids information loss from OCR flattening of visual content.
+
+- **Consistent improvements over the strongest fair baseline**: The proposed system outperforms Chinese-CLIP-RAG across all reported metrics—Precision@1/3/5 (Table 3: 82.3%/78.6%/75.4% vs. 80.2%/76.5%/72.9%), F1/ROUGE-L/BLEU (Table 4: 72.1/32.4/7.9 vs. 70.4/29.2/7.4), and MCS (Table 5: 71.9% vs. 68.4%). While margins are modest, the consistency across dimensions is notable.
+
+- **Retrieval comparison is partially defensible**: Table 3 compares retrieval mechanisms (ColPali vs. DPR vs. EasyOCR+FAISS vs. Chinese-CLIP) where the generation model does not affect Precision@K scores, making these retrieval results the most credible evidence in the paper.
 
 ## Weaknesses
 
 ### Fatal
-
-None. While the evaluation has serious issues (see Major), none completely invalidate the core contribution—a demonstration that ColPali-based retrieval improves over CLIP-based retrieval for multimodal RAG.
+None.
 
 ### Major
 
-- **Circular evaluation for generation quality (F1/BLEU/ROUGE)**: GPT-4o generates the ground truth QA pairs (Section 3.2.2: "GPT-4o is employed to extract relevant question-answer pairs") and also generates the system's answers (Section 3.4.1: "Based on the GPT-4o model, this module generates high-quality answers"). The generation quality metrics in Table 4 therefore measure how well GPT-4o reproduces its own outputs under different retrieval contexts, not factual correctness against the source documents. This is a structural issue that undermines the generation quality claims. The retrieval metrics (Table 3) are less affected because retrieval ground truth (which page is relevant) is more straightforward, but the generation evaluation is fundamentally compromised.
+- **Unfair baseline comparison inflates generation quality results (Tables 4, 5)**: The proposed system uses GPT-4o for generation, while the first two baselines (Text-Only RAG and Haystack 2.0 RAG) use T5. GPT-4o is orders of magnitude more capable than T5 for generation tasks. Comparing F1/ROUGE/BLEU scores between GPT-4o-generated and T5-generated answers measures the difference between these foundation models, not the contribution of the proposed retrieval pipeline or dataset. The paper's headline narrative heavily relies on these generation quality improvements (e.g., F1 of 72.1 vs. 55.2 for Text-Only RAG), which are almost entirely attributable to the generation model gap. The only fair comparison is against Chinese-CLIP-RAG (also using GPT-4o), where the advantages shrink considerably.
 
-- **Confounded baseline comparisons for generation quality**: Two baselines (Text-Only RAG, Haystack 2.0 RAG) use T5 as the generator, while Chinese-CLIP RAG and "Our Model" both use GPT-4o. Table 4 shows a massive jump from T5-based to GPT-4o-based systems (F1: 62.7→70.4) versus a small gap between the two GPT-4o systems (70.4→72.1). The paper attributes improvements to the retrieval pipeline, but the dominant factor is clearly GPT-4o vs. T5. Only the comparison with Chinese-CLIP RAG (same GPT-4o generator) is a fair test of the retrieval contribution, and the improvement there is modest (F1: 70.4→72.1, ROUGE-L: 29.2→32.4). The paper does not acknowledge this confound.
+- **Marginal improvements over the only fair baseline, reported without variance or significance**: Against Chinese-CLIP-RAG (the only baseline with comparable generation capacity), improvements are: Precision@1 +2.1 points, F1 +1.7 points, ROUGE-L +3.2 points, BLEU +0.5 points. No standard deviations, error bars, or significance tests are reported, so we cannot assess whether these differences are meaningful or noise. Given that the paper claims three contributions (a dataset, a retrieval model, and system integration), the evidence does not convincingly establish that the proposed system substantially outperforms a reasonable baseline. Additionally, it is unclear whether the baselines (including Chinese-CLIP) were also fine-tuned on the custom dataset; if not, even Table 3 partially favors the proposed system.
 
-- **MCS metric is ill-defined**: Equation (6) defines MCS as cosine similarity between "text modality embedding $E_T$" and "image modality embedding $E_I$" with no specification of what these embeddings represent—the query? the generated answer? the retrieved image? the document? The paper claims MCS "assesses the consistency between generated answers and input text and images," but cosine similarity between two unspecified embeddings does not measure answer–input consistency in any meaningful sense. No validation (e.g., human correlation) is provided showing that higher MCS corresponds to better multimodal alignment.
+- **MCS metric does not measure what it claims (Eq. 6, Table 5)**: MCS is defined as cosine similarity between a text embedding $E_T$ and an image embedding $E_I$. The paper claims this "assesses the consistency between generated answers and input text and images" and "reflects the model's ability to align and integrate cross-modal information." Cosine similarity between two fixed embeddings measures vector alignment in embedding space, not whether a generated answer is factually consistent with image content. A model producing fluent but hallucinated answers could score highly if the embedding happens to align well. This metric cannot distinguish between genuine cross-modal reasoning and spurious correlation, making Table 5 unreliable as evidence for the claimed multimodal consistency capability.
+
+- **"Simplification" claim is misleading (Introduction, Section 3.3 vs. Section 3.2.2)**: The introduction (line 33) claims the system "aims to simplify traditional document processing workflows, avoiding complex preprocessing steps (such as document parsing, OCR layout analysis, and text chunking)" and "significantly simplifies the RAG document processing flow." Section 3.3 (line 102) echoes this: "This approach simplifies traditional document retrieval by bypassing OCR and layout analysis." While ColPali does bypass OCR *at runtime retrieval* by directly encoding document images, Section 3.2.2 reveals that the dataset construction pipeline includes layout analysis-OCR for Markdown conversion, GPT-4o-based formatting and correction, PDF-to-image conversion with resolution optimization, data augmentation, and QA pair generation via GPT-4o. The paper does not clearly distinguish between the offline data preparation (which uses OCR) and the online retrieval (which bypasses it), making the blanket "simplification" claim misleading. The overall system is arguably more complex, not simpler, than traditional RAG.
 
 ### Minor
 
-- **Misleading "simplification" claims**: The paper claims the system "avoids complex preprocessing steps (such as document parsing, OCR layout analysis, and text chunking)" (Section 1, contribution 3). But Section 3.2.2 explicitly describes performing layout analysis-OCR, Markdown conversion, and GPT-4o formatting. The preprocessing is not eliminated—it is moved to an offline dataset construction phase. The claim of "simplifying" the pipeline is partially valid for the inference-time pipeline, but the wording overclaims.
-- **No ablation study**: There is no ablation isolating the contribution of ColPali fine-tuning vs. off-the-shelf ColPali, or different numbers of retrieved images, or the effect of data augmentation during training. This makes it hard to attribute improvements to specific design choices.
-- **Insufficient detail on ColPali fine-tuning**: The paper says ColPali is "fine-tuned with a custom dataset" (Section 3.3) but provides no details—learning rate, epochs, batch size, contrastive learning objective, or negative sampling strategy. This limits reproducibility of the retrieval component.
-- **No variance or significance reporting**: No confidence intervals, standard deviations, or significance tests are reported for any result. The improvements over Chinese-CLIP RAG are small (e.g., F1: 70.4→72.1), making it impossible to determine if they are meaningful.
-- **Dataset not publicly available and poorly characterized**: The dataset (IMG_MD_test_QA) has no domain breakdown, no QA pair statistics, and no stated plans for release. No human verification of GPT-4o-generated QA pairs is mentioned.
+- **Nearly duplicate Related Work subsections**: The "Retrieval-Augmented Generation" and "Image-Text Retrieval" subsections (lines 37-39) contain substantially overlapping text—both discuss global/local alignment, hash encoding, cross-modal pre-training, and ColPali—suggesting a copy-paste error that undermines the paper's scholarly presentation.
+
+- **Missing fine-tuning details for ColPali**: Section 3.3 describes fine-tuning ColPali as the paper's core technical contribution, yet provides no learning rate, number of epochs, which layers were frozen, batch size, or specifics about the training objective beyond mentioning "contrastive learning and a cross-entropy loss function." This makes it difficult to assess or reproduce the claimed contribution.
+
+- **Insufficient dataset characterization**: The dataset of "over 50,000 pages" (Section 4.1.1) is described only by domain (finance, law, healthcare) and format. No statistics on the number of QA pairs, image types, answer length distribution, or quality assessment are provided, making it difficult to evaluate the dataset's value as a claimed contribution.
+
+- **No latency comparison table**: The claim of "1.8 seconds" response time (Section 4.3.3) appears only in running text with no comparison numbers for baselines, no measurement methodology, and no breakdown of retrieval vs. generation time.
 
 ### Trivial
-
-- The Related Work section (Section 2) has highly repetitive content between the "Retrieval-Augmented Generation" and "Image-Text Retrieval" subsections—both discuss cross-modal alignment, hash encoding, Chinese contexts, and ColPali in nearly identical language.
-- The architecture diagram (Figure 1) shows "Image" → "Text Embeddings" and "Markdown + QA" → "Image Embeddings," which contradicts the textual description and appears to be a diagram error.
+None.
 
 ## Nice-to-Haves
 
-- Qualitative examples showing the system handling complex charts and flowcharts (currently zero examples)
-- Human-annotated ground truth for a subset of the QA pairs to validate the GPT-4o-generated references
-- Error analysis on failure cases to reveal limitations with specific document types
+- **Ablation isolating the retrieval contribution**: Compare fine-tuned ColPali vs. off-the-shelf ColPali vs. Chinese-CLIP, all with the same GPT-4o generation backend, to cleanly attribute retrieval improvements to the custom dataset fine-tuning.
+- **Significance testing**: Report standard deviations across multiple runs and statistical significance for comparisons in Tables 3-5.
+- **Qualitative examples**: Show actual retrieved pages and generated answers for queries requiring chart/image understanding alongside baseline outputs, to demonstrate the claimed advantage in chart-intensive scenarios more convincingly than aggregate metrics.
+- **Error analysis**: When the system retrieves wrong images, what goes wrong? Does the ColPali fine-tuning help specifically on charts/tables or across the board?
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution:
+*These points are flagged to be removed, treat them with caution.*
 
-- **"Dataset not released / cannot be independently verified"**: The paper is under review; dataset release cannot be demanded as a condition. However, the lack of public availability combined with poor characterization remains a valid minor concern (retained in Minor above).
-- **"No complete training logs or hyperparameters for reproducibility"**: Demanding full training details is unrealistic for a submission. The fine-tuning details objection is retained as Minor because it concerns the core methodological contribution, not peripheral details.
-- **Formatting/style complaints**: Removed per rules—these are parser artifacts, not author errors.
-- **"Missing references / missing related work"**: No external sources available to confirm what should have been cited.
-- **Circularity invalidating retrieval metrics**: The retrieval ground truth (which page/image is relevant) is more objective than generation evaluation, so the circularity concern primarily affects Table 4, not Table 3. The harsh critic's claim that this invalidates *all* empirical claims is overstated.
+- **Haystack 2.0 citation mismatch**: The harsh critic noted the citation (Faisal et al., 2020) points to the original Haystack framework, not Haystack 2.0. This is a minor citation issue, not a substantive criticism, and the paper describes the Haystack 2.0 configuration adequately (EasyOCR + FAISS + T5).
+- **DPR+T5 as "straw-man" for multimodal tasks**: The critic claimed DPR+T5 is designed for open-domain text QA, making it a straw-man. Per the rules, criticisms about unfair comparison that favor the baseline (not the author's method) should be removed—the asymmetry here favors the author's method, but this is already captured by the unfair generation model comparison (Major weakness above). The DPR+T5 baseline inclusion itself is not inappropriate as a text-only reference point.
+- **Reproducibility concerns about undisclosed preprocessing details**: The critic demanded specifics about which OCR tools and what GPT-4o prompts were used for formatting correction and QA generation. Per the rules, nitpicks about reproducibility of implementation details should be removed.
+- **Criticism that the dataset is "GPT-4o-generated QA pairs over OCR'd documents—standard practice, not a contribution"**: While this is a valid observation about the modesty of the dataset contribution, the claim that it is "standard practice, not a contribution" is overly dismissive; it could still have value as a resource. The weakness about insufficient dataset characterization (Minor weakness above) captures the real concern.
+- **Latency comparison demand**: The lack of latency comparison numbers for baselines is noted as a Minor weakness above, but the demand for complete latency methodology and breakdown goes beyond what is standard.
 
 ## Novel Insights
 
-The paper highlights a genuine tension in multimodal RAG systems: moving preprocessing (OCR, layout analysis) offline into dataset construction eliminates error propagation at inference time, but front-loads cost and brittleness into the data pipeline. The ColPali-based approach genuinely addresses inference-time OCR failure modes, but the evaluation framework needed to validate this—particularly for generation quality—is undercut by using the same LLM to generate references and answers. This is an emerging pattern in LLM-era papers where synthetic data generation creates hard-to-detect circularity in evaluation.
+The paper illustrates a broader pattern in multimodal RAG research: when systems assemble pipelines from existing powerful components (ColPali + GPT-4o), the challenge is not in demonstrating that the pipeline works, but in cleanly attributing improvements to specific design choices versus the inherent capability of the underlying models. The unfair baseline comparison in this paper is a symptom of this attribution problem—without careful experimental design (same-generation-model ablations, significance testing), it is difficult to distinguish a genuine system-level contribution from the compounding effects of using more capable subcomponents.
 
 ## Suggestions
 
-- Add an ablation comparing off-the-shelf ColPali vs. fine-tuned ColPali with the same GPT-4o generator to isolate the fine-tuning contribution.
-- Add GPT-4o as the generator for the Text-Only RAG and Haystack baselines to provide fair generation quality comparisons that control for the generator model.
-- Validate MCS with human judgments: have annotators rate cross-modal alignment and compute correlation with MCS scores.
-- Clarify what $E_T$ and $E_I$ represent in Equation (6).
+- Replace T5 in the Text-Only RAG and Haystack 2.0 baselines with GPT-4o (or use T5 in the proposed system) to isolate the retrieval contribution from the generation model contribution. This single change would make the generation quality comparisons fair and substantially strengthen or clarify the paper's claims.
+- Add an ablation comparing off-the-shelf ColPali vs. fine-tuned ColPali with the same GPT-4o backend, which would directly quantify the contribution of the custom dataset fine-tuning.
+- Clearly distinguish between offline data preparation (which uses OCR) and online retrieval (which bypasses OCR) in the "simplification" claim, and reframe the claim to accurately reflect what is simplified and what is not.
 
-## Evaluation on Key Axes
+## Score and Decision
 
-- **Originality**: Low. The paper integrates existing components (ColPali + GPT-4o) into a pipeline with no new model, training objective, or methodology. Fine-tuning ColPali on a custom dataset is the only technical addition, and the paper is opaque about how this was done.
-- **Importance of research question**: Moderate. Multimodal RAG for visually rich documents is a valuable direction, but this paper does not advance the state of the art meaningfully.
-- **Claims well supported**: Weak. The generation quality claims are undermined by circular evaluation and confounded baselines. Only the retrieval comparison with Chinese-CLIP RAG provides a controlled test, and the improvement there is modest.
-- **Soundness of experiments**: Weak. Circular ground truth, confounded baselines, no ablations, no variance, no significance tests, ill-defined MCS metric.
-- **Clarity of writing**: Moderate. The system description is clear but the paper overclaims (simplification, avoidance of preprocessing) and the related work section is repetitive.
-- **Value to community**: Low-moderate. As an engineering integration paper without released code or data, the value is limited. The ColPali fine-tuning details, if provided, could have been more useful.
+**Calibration anchors:**
 
-## Calibration
+| Paper | Avg Score | Comparison |
+|-------|-----------|------------|
+| Inference Scaling for RAG | 8.0 | Far stronger: systematic scaling laws, extensive experiments, clear attribution of contributions |
+| MMed-RAG | 7.0 | Much stronger: novel domain-aware retrieval, theoretical justification, 43.8% factual accuracy improvement |
+| ColPali | 5.25 | Stronger: introduced genuinely novel concept (direct visual document embedding), new benchmark, open release |
+| Bidirectional generative retrieval | 4.8 | Comparable: multimodal retrieval with methodological gaps |
+| Reward-RAG | 3.0 | Similar: GPT-4 unfair comparison inflating results, limited technical novelty |
+| EDU-RAG | 2.33 | Weaker than this paper: entirely shallow evaluation, basic RAG only |
+| TimeRAG | 3.0 | Similar: misleading scope claims, irrelevant baselines |
 
-Papers compared against:
-
-| Anchor Paper | Avg Score | Relation to Paper Under Review |
-|---|---|---|
-| ColPali (ogjBpZ8uSi.md) | 5.25 | Directly relevant: introduces the retrieval model this paper uses. Scored higher because it introduced a novel method + benchmark (ViDoRe) + open-source release. Our paper merely applies ColPali with less rigor. |
-| MMed-RAG (s5epFPdIW6.md) | 7.0 | Topically similar multimodal RAG system. Scored higher due to novel decomposition of RAG errors, theoretical justification, ablation studies, and multi-dataset evaluation across 5 medical datasets. |
-| Self-RAG (hSyW5go0v8.md) | 7.5 | High anchor for RAG papers. Novel methodology (reflection tokens), controlled experiments, strong baselines. Far above our paper in contribution. |
-| Reward-RAG (oqRe1KvD17.md) | 3.0 | Low anchor. Flagged for using GPT-4 to generate both training labels and answers (similar circularity issue), confounded baselines where GPT-4 gives unfair advantage. Very similar weaknesses to our paper. |
-| EDU-RAG (a2rSx6t4EV.md) | 2.33 | Low anchor. Basic RAG pipeline with existing components, shallow analysis, missing comparisons. Similar "engineering integration with no novelty" pattern. |
-| ColCLIP (7F4ioiKQFT.md) | 4.0 | Medium-low anchor. Fine-tunes CLIP + MaxSim for retrieval—analogous to our paper fine-tuning ColPali. Scored low for limited novelty and insufficient explanations of design choices. |
-| DataSEA (zEPYCDaJae.md) | 2.5 | Low anchor. Engineering pipeline using LLMs with no methodological novelty. Similar pattern to our paper. |
-
-This paper shares the same structural weaknesses as Reward-RAG and EDU-RAG (circular LLM-generated evaluation, engineering integration with no methodological novelty, confounded baselines), which scored around 2.5–3.0. However, unlike those papers, this one does have a meaningful and partially validated retrieval contribution (the ColPali vs. Chinese-CLIP comparison in Table 3). It falls below ColCLIP (4.0) because ColCLIP at least provided some design rationale and code release, while this paper provides even less methodological detail and has the circular evaluation problem in the generation metrics. The paper is somewhat above the pure-engineering low anchors (DataSEA at 2.5, EDU-RAG at 2.33) because the retrieval component is validated with a fair comparison against Chinese-CLIP RAG.
+This paper shares Reward-RAG's (avg 3.0) core weakness—unfair GPT-4 vs. T5 generation comparison that inflates headline results—but has somewhat more empirical content (a complete system, multiple evaluation dimensions, consistent albeit marginal improvements over the strongest baseline). It is notably weaker than ColPali (5.25), which introduced the core concept this paper builds on. The unfair baseline comparison, marginal improvements without significance testing, flawed MCS metric, and misleading "simplification" claim collectively undermine the paper's core narrative. The paper assembles a working engineering pipeline but does not demonstrate a meaningful research contribution beyond what fine-tuned ColPali + GPT-4o already provides.
 
 MY FINAL SCORE: <pineapple>3.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

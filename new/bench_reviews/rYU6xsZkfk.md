@@ -1,18 +1,18 @@
-Now I have a thorough understanding of the paper and the calibration anchors. Let me synthesize my final review.
-
 ## Summary
 
-The paper proposes Derivative Learning (DERL), a method to train neural networks on physical systems by matching partial derivatives of the true solution rather than function values, combined with initial and boundary conditions. DERL is compared against supervised output learning (OUTL), PINNs, and Sobolev learning across ODEs (damped pendulum), time-independent PDEs (Allen-Cahn), time-dependent PDEs (continuity equation, Navier-Stokes), and a distillation setting. The paper also introduces derivative-based knowledge distillation for transferring physical information between models.
+The paper proposes Derivative Learning (DERL), a method that trains neural networks to represent solutions of dynamical systems and PDEs by matching the partial derivatives of the target solution plus initial/boundary conditions, without requiring the PDE structure itself. The key insight is that individually targeting derivatives decouples the optimization objective compared to the entangled PDE residual used by PINNs. The paper also introduces derivative distillation for transferring physical knowledge between models, showing that higher-order derivative distillation improves physical consistency.
 
 ## Strengths
 
-- **The DERL-vs-OUTL comparison reveals a genuine and interesting empirical finding**: Across all experiments, matching derivatives (plus IC/BC) consistently outperforms matching function values (plus IC/BC) on physical consistency metrics. The Allen-Cahn result (Table 3: DERL PDE residual 0.0096173 vs. OUTL 0.030412) and the finding that DERL outperforms SOB (which has *more* information—both values and derivatives) suggest that including function-value targets in the interior loss can conflict with learning correct dynamics. This is a non-obvious and useful finding.
+- **Novel derivative distillation framework with demonstrated improvements**: Section 4.5 introduces derivative-based distillation for transferring physical knowledge between architecturally different models. On the KdV equation (Table 6), distilling from a PINN teacher to DERL/HESL students yields a BC loss reduction of over an order of magnitude (teacher: 0.33532 → student: 0.014197) while maintaining comparable PDE residual and solution accuracy. This is the paper's most original contribution and, to our knowledge, the first such attempt.
 
-- **The distillation framework is a meaningful contribution**: Transferring physical knowledge between architecturally different models via derivative distillation is novel. The KdV experiment (Table 6) shows that HESL and DER+HESL match teacher PINN accuracy while achieving much better BC satisfaction (BC loss ~0.014 vs. PINN teacher 0.335), and the finding that higher-order derivative distillation (Hessian learning) improves physical consistency (PDE loss 0.19153 vs. 0.32480 for DERL alone) provides actionable insight.
+- **Clean conceptual insight about decoupled derivative objectives**: Figure 1 clearly illustrates that DERL treats each partial derivative as an independent target rather than entangling them in a single PDE residual like PINNs. This provides a well-motivated explanation for why DERL optimizes more easily — each gradient component has a direct target rather than a coupled constraint.
 
-- **DERL effectively addresses PINN's time-propagation failure**: On the continuity equation, DERL achieves L² error 0.028827 vs. PINN's 0.088850, and on Navier-Stokes, 0.021687 vs. 0.63828 (Tables 4, 5). This aligns with well-documented PINN pathologies (Wang et al., 2022) and provides a practical workaround.
+- **Higher-order derivative distillation demonstrably improves physical consistency**: Table 6 shows that DER+HESL (learning both ∇u and Hessians) achieves the best derivative matching (0.041988), best Hessian matching (0.85280), and strong PDE residual (0.19317), compared to DERL alone (PDE loss 0.32480) and OUTL (PDE loss 17.366). This directly validates the claim that distilling higher-order derivatives improves physical consistency.
 
-- **Figure 1 is effective** at illustrating the core conceptual distinction: PINNs entangle derivatives in a PDE residual while DERL assigns individual targets to each partial derivative.
+- **DERL works with empirical derivatives**: The continuity equation experiment (Section 4.3) uses finite difference approximations (Δx = Δy = Δt = 0.01) without interpolation, yet DERL still achieves competitive performance. This is practically important since analytical derivatives are often unavailable.
+
+- **Reasonable experimental breadth**: The evaluation spans ODEs (pendulum, E1), time-independent PDEs (Allen-Cahn, E2), time-dependent PDEs (continuity, E3), systems of PDEs (Navier-Stokes, E4), and distillation on third-order PDEs (KdV, E5) and Euler equations (E6), providing evidence across problem complexity classes.
 
 ## Weaknesses
 
@@ -22,75 +22,75 @@ None.
 
 ### Major
 
-- **Misleading framing of the DERL-vs-PINN information asymmetry**: The paper's central claim that DERL learns "without explicit knowledge about the underlying equations" (Abstract) is true, but the paper obscures what DERL substitutes for PDE knowledge: dense derivative information from the true solution throughout the entire space-time domain (Equation 3: the derivative loss spans [0,T] × Ω). The statement "DERL correctly learns the complete solution without ever seeing any data for t > 0" (Section 4.3) is misleading—DERL sees ∂ρ/∂t, ∂ρ/∂x, ∂ρ/∂y at all t ∈ [0,10] via finite differences on the reference solution. Partial derivatives at t > 0 *are* data about the solution at t > 0; they are simply a different (and often harder to obtain) form of prior knowledge than the PDE itself. The paper frames DERL and PINN as solving the same problem with different tools, when they require incommensurable types of prior knowledge. This does not invalidate DERL's empirical advantages—but the narrative that DERL removes the need for explicit physics *without acknowledging the equally strong (or stronger) requirement for solution-level derivative access* is structurally misleading and undermines the paper's central positioning.
+- **DERL and PINNs solve fundamentally different problems, but the paper conflates them**: DERL requires the true derivatives Du at interior collocation points (computed from the known solution via analytical formulas or numerical simulation), while PINNs require only the PDE structure + IC/BC and never access the solution at interior points. For well-posed problems, both types of information are sufficient to uniquely determine the solution, but they are different inputs. The paper frames DERL as outperforming PINNs (Abstract: "DERL outperforms PINNs"), implying they compete on the same task, but they receive qualitatively different information. The paper should clearly position DERL as solving a *neural approximation problem* (given derivative data + IC/BC) rather than a *forward PDE problem* (given PDE + IC/BC), and the comparison with PINNs should be reframed as comparing optimization landscapes under different information regimes, not as a direct performance contest.
 
-- **Theoretical guarantees are tautological restatements of PDE uniqueness and do not support the claimed contribution**: Theorems 2.1–2.3 essentially state that if a function matches all derivatives and boundary/initial conditions of the PDE solution, it equals the PDE solution—a direct consequence of standard functional analysis (fundamental theorem of calculus for Theorem 2.1; Poincaré inequality for Theorem 2.2). The theorems say nothing about whether the loss *can* be driven to zero by a neural network (requiring universal approximation in Sobolev spaces and analysis of training dynamics). Theorem 2.3 is particularly tautological: it says a network optimizing L(û, u) converges to u, which holds trivially because L is exactly the distance to u in derivative+boundary norm. The Abstract calls these "theoretical guarantees that our approach learns the true solution," which overstates what has been established.
+- **Factually misleading claim "without ever seeing any data for t > 0"**: In Section 4.3, the paper states DERL "correctly learns the complete solution *without ever seeing any data for t > 0*." This is false — DERL's loss (Eq. 3) includes the derivative term ||Dû − Du||² over the full time-space domain [0,T] × Ω, meaning DERL sees derivative values at all interior points including t > 0. Derivative data is data. The paper's more carefully worded statement in Section 4.4 ("without having access to the solution in the interior") is accurate (DERL doesn't see function *values* in the interior), but the "no data for t > 0" claim exploits an artificial distinction between function values and derivative values to claim a surprising result that does not hold.
 
-- **PINN baselines are outdated, inflating the claimed improvement**: The PINN implementation appears to be vanilla PINN (Raissi et al., 2019) without any of the substantial training improvements developed since: causal training (Wang et al., 2022—cited by the authors for PINN failure modes but not as a remedy), adaptive loss weighting, or advanced collocation strategies. The Navier-Stokes PINN failure (L² error 0.638) is a well-known pathology that these improvements specifically address. Since the paper's key selling point is outperforming PINNs, and the PINN variant used is known to fail on exactly the problems tested, the "DERL outperforms PINNs" claim is not established against a competitive baseline.
+- **Unclear practical motivation for when DERL applies vs. PINNs**: The paper does not clearly articulate scenarios where one would have access to spatially and temporally dense derivative data but not the PDE itself. In practice, derivatives come from either (1) analytical solutions (trivial case), (2) high-resolution numerical simulations (but then why re-learn the solution as a neural network?), or (3) distillation from pre-trained models (the most compelling case, but limited in scope). The paper should honestly delineate when DERL is the right tool versus when PINNs are more appropriate, rather than presenting DERL as a universal alternative to PINNs.
 
 ### Minor
 
-- **No sensitivity analysis for finite difference approximation quality**: The continuity equation experiment uses Δx=Δy=Δt=0.01 (Section 4.3)—very fine grids that provide high-quality derivative approximations. There is no study of how DERL degrades with coarser grids, sparser collocation, or noisy derivative estimates, which are the conditions under which the empirical derivative regime would actually matter in practice.
+- **Selective presentation of mixed results**: In the continuity equation (Table 4), OUTL achieves lower L² error than DERL (0.02793 vs. 0.02883), and PINN achieves lower PDE residual (0.04107 vs. 0.07338). In Navier-Stokes (Table 5), OUTL again has lower L² error (0.01195 vs. 0.02169). Yet the paper claims DERL is "the most effective method" for the continuity equation. While the paper does note DERL is "comparable to OUTL" and "second best for PDE consistency," the overall framing overstates DERL's advantage. DERL's strength is primarily in physical consistency metrics, not L² accuracy, and this should be reflected more honestly.
 
-- **Mixed results on solution accuracy vs. physical consistency**: DERL consistently wins on consistency metrics (PDE residual, field error) but sometimes loses on solution accuracy—OUTL achieves better L² error on continuity (0.027932 vs. 0.028827, Table 4) and Navier-Stokes (0.011950 vs. 0.021687, Table 5). This accuracy-consistency tradeoff is central to understanding when DERL is preferable, yet receives no analysis or discussion.
+- **Theoretical results are straightforward consequences of Poincaré-type inequalities**: Theorems 2.1–2.3 prove that matching derivatives + IC/BC yields the correct function, which follows from standard Poincaré inequality / fundamental theorem of calculus results. The bound ||û−u|| ≤ 2(C+1)ε in Theorem 2.2 provides a quantitative estimate, but the theorems say nothing about whether a finite-capacity network on finite data can achieve small ε, which is the practically relevant question.
 
-- **The Poincaré constant caveat in Theorem 2.2**: The bound ‖û − u‖ ≤ 2(C+1)ε depends on the Poincaré constant C, which can be arbitrarily large for certain domains. This caveat is not discussed despite its practical implications.
+- **No variance or confidence intervals reported**: All tables report single-run results to five decimal places with no standard deviations. Given the stochastic nature of neural network training and the small absolute differences between some methods (e.g., Allen-Cahn Table 3: DERL PDE L² = 0.0096 vs. SOB = 0.0165), statistical significance is unclear.
 
 ### Trivial
 
-None.
+None significant.
 
 ## Nice-to-Haves
 
-- Experiments with progressively coarser grids and noisy derivative estimates to test DERL's robustness in the empirical derivative regime where it would practically matter.
-- Comparison against modern PINN variants (causal PINNs, self-adaptive PINNs) on Navier-Stokes and continuity equations to establish the advantage against competitive baselines.
-- Long-horizon rollout visualizations to test whether DERL's physical consistency advantage translates to better long-time prediction accuracy.
-- An ablation where DERL receives sparse/incomplete derivative information vs. PINN with interior data augmentation, to characterize the information tradeoff more honestly.
+- A comparison where OUTL is given the same collocation points (function values where DERL sees derivatives) would isolate the effect of derivative vs. output learning with equal information, directly testing the paper's core claim.
+
+- Analysis of failure modes: when does DERL fail? What happens with noisy or sparse derivative data, irregular domains, or chaotic systems?
+
+- Training dynamics/loss curves comparing DERL vs. PINN convergence to substantiate the "simpler to train" claim beyond final accuracy numbers.
+
+- A multi-teacher compositional distillation experiment to support the conclusion's vision of "continual composition and integration of physical information across different models."
 
 ## Removed Points
 
-*These points are flagged to be removed, treat them with caution.*
+These points are flagged to be removed, treat them with caution:
 
-- **"DERL requires derivative-level access to the true solution everywhere—a form of information that is typically harder to obtain than the PDE itself"** — While the information asymmetry concern is valid (kept as a Major weakness on framing), the claim that derivative access is "typically harder" than knowing the PDE is context-dependent and speculative. In many data-rich settings (sensor networks, simulation outputs), derivative estimates are readily available. The framing concern is kept, but the blanket assertion about relative difficulty is softened.
+- **"DERL receives strictly more information than PINNs"** (Harsh Critic point #1): While DERL does receive different information than PINNs, the characterization as "strictly more" is inaccurate. For well-posed problems, both the PDE + IC/BC and derivatives + IC/BC are sufficient to uniquely determine the solution — they are informationally equivalent but qualitatively different. The real issue is that the paper conflates these different problem setups, not that DERL gets "more" information.
 
-- **"Missing experiments: ablation where DERL has access to the same information as PINN (and vice versa)"** — This asks for an asymmetric comparison that favors the baseline, which per the hard rules should not be treated as a weakness. Moved to Nice-to-Have.
+- **HNN/LNN comparison is misleading** (Harsh Critic Section 4.1 note): The paper explicitly states "We train them on the conservative part of the field" and notes HNN/LNN are "specifically designed for conservative fields." This transparency allows readers to interpret the results appropriately. The comparison shows DERL's broader applicability to non-conservative systems, which is a valid point even if the setup disadvantages HNN/LNN on their home turf.
 
-- **"Missing related works"** — Per rules, we do not flag missing related works as we cannot confirm their existence independently.
+- **"We are the first to consider a pure derivative approach" overlooks Sobolev training** (Harsh Critic Section 3 note): The paper includes SOB as a baseline and the distinction between "pure derivative" (λ for output = 0) and "derivative + output" (SOB) is valid and practically meaningful, as the experimental results show SOB performs differently from DERL.
 
-- **"No comparison to conventional PDE solvers"** — The paper's contribution is about training neural network surrogate models, not replacing classical solvers. This is outside the stated scope.
+- **Criticism of conclusion's "compositional learning" vision as "speculative and unsupported"**: Conclusions are expected to speculate about future directions. The paper's distillation experiments provide a foundation for this vision, even if they don't fully demonstrate it.
 
-- **"Formatting/style issues, typos"** — Removed per hard rules on parser artifacts.
+- **Strength "DERL dramatically outperforms PINNs on time-dependent PDEs"**: While numerically true, this strength is weakened by the fact that DERL and PINNs receive different inputs. Retained in the review as part of the experimental evidence but the framing issue is noted as a Major weakness.
 
-- **"Strength: consistent empirical outperformance across all four main experiments"** — This conflicts with the verified weakness that OUTL has better L² error on continuity and Navier-Stokes. DERL wins on consistency, not universally on accuracy. Dropped as a strength in favor of the more precise formulation kept above.
+- **Strength "General-purpose DERL outperforms physics-specialized methods on non-conservative systems"**: This is weakened because HNN/LNN are disadvantaged by being applied to non-conservative systems. Removed from main strengths.
+
+- **Criticism about reproducibility / undisclosed hyperparameters**: The paper states hyperparameters are independently tuned and details are in Appendix A/D. Standard for the field.
 
 ## Novel Insights
 
-The most interesting insight that emerges from the review is the *unlearning effect*: DERL (derivatives + IC/BC) consistently outperforms SOB (values + derivatives + IC/BC), suggesting that supervising on function values in the interior *actively harms* physical consistency, possibly by conflicting with the derivative-based learning signal. This "less information is better" finding challenges the intuitive assumption that adding supervision terms should monotonically improve performance, and points to fundamental optimization pathologies when neural networks are trained on heterogeneous loss terms for PDE problems. The paper does not analyze this phenomenon, which may be its most important empirical discovery.
+The most insightful observation that emerges from synthesizing the reviews with the paper is that DERL's core contribution is not about being "better than PINNs" but about revealing a fundamental trade-off in how physical information is encoded in training objectives. The PDE residual (PINN's approach) and the derivative targets (DERL's approach) are both sufficient to determine the solution for well-posed problems, but they create radically different optimization landscapes: PINNs require satisfying a coupled constraint while DERL decomposes into independent per-derivative regression. The derivative distillation experiments (Section 4.5) are the clearest illustration of this principle — they work precisely because the teacher model's derivative outputs can serve as independent targets for the student, avoiding the optimization difficulties that would arise from re-imposing the PDE as a constraint. This suggests a broader design principle: when transferring or composing physical knowledge across models, derivative-based objectives may be more effective than constraint-based objectives, regardless of whether one method is "better" in absolute terms.
 
 ## Suggestions
 
-- Reframe the paper honestly: DERL trades PDE knowledge for solution-level derivative access. Acknowledge this information asymmetry explicitly, and position the contribution as showing that *when derivative data is available*, it provides a more tractable optimization landscape than the PDE residual. This framing is both honest and interesting.
-- Add a sensitivity analysis showing DERL's performance as a function of grid resolution (Δx, Δt) in the finite-difference regime; this directly tests the practical applicability of the method.
-- Discuss the accuracy-consistency tradeoff more carefully: on what problems/settings is DERL's consistency advantage worth a potential accuracy cost? Does the consistency advantage translate to better extrapolation?
-- Upgrade PINN baselines to include at least one modern variant (e.g., causal training or self-adaptive PINNs) on the time-dependent experiments to make the comparison credible.
+- Rewrite the abstract and introduction to clearly position DERL as solving the *neural approximation problem with derivative data* rather than competing with PINNs on the forward PDE problem. State explicitly that DERL requires access to the solution's derivatives (from simulation, analytical formulas, or distillation), while PINNs require the PDE structure but no interior data.
 
----
+- Correct the "without ever seeing any data for t > 0" claim to "without ever seeing function values at interior points for t > 0" — derivative data at t > 0 is still data.
 
-## Calibration Summary
-
-| Anchor Paper | Path | Avg Score | Comparison |
-|---|---|---|---|
-| PhyMPGN (High) | /home/wg25r/review_agent/human_reviews/fU8H4lzkIm.md | 8.0 | Strong PDE solver with physics encodings, thorough experiments, genuine architecture contribution. DERL is weaker: has misleading framing and weaker baselines. |
-| ActNet/KST (High) | /home/wg25r/review_agent/human_reviews/SyVPiehSbg.md | 7.5 | Novel architecture for PINNs, strong empirical results, clear contributions. DERL has a real empirical finding but overclaims and has tautological theory. |
-| PENO (Medium) | /home/wg25r/review_agent/human_reviews/5LvTfc4fBz.md | 5.0 | Physics-enhanced neural operator criticized for unfair baselines and lack of solver comparison. DERL similarly has an information asymmetry problem but a more genuine core finding than PENO. |
-| PID (Medium-Low) | /home/wg25r/review_agent/human_reviews/a24gfxA7jD.md | 5.0 | Physics-informed distillation that applies existing PINN methods to diffusion distillation, criticized for limited novelty and not beating SOTA. DERL's distillation contribution is modestly more novel. |
-| Guaranteed Neural PDE Boundary Control (Low-Medium) | /home/wg25r/review_agent/human_reviews/LKUVlhjgOw.md | 4.0 | Overclaimed "guarantees" undermined by 71% safety rate; standard CBF applied once model is learned. DERL's tautological theory is less egregious but the overclaim pattern is similar. |
-| PDE-Diffusion (Low) | /home/wg25r/review_agent/human_reviews/3sOE3MFepx.md | 2.2 | Overclaimed PDE solver with misleading speed claims, placeholder results, fundamentally mismatched methodology. DERL is substantially stronger—has real empirical findings. |
-| Characteristic NN for Conservation (Low) | /home/wg25r/review_agent/human_reviews/HDmmwwTIlf.md | 2.5 | Unsupported convergence guarantees, no benchmark baselines, one PDE only. DERL is much better: multiple experiments, relevant baselines, genuine findings. |
-
-DERL sits between the medium-quality anchors (5.0–5.5 range, with misleading framing/baselines but real contributions) and the high-quality ones (7.0+, where contributions are clean and well-supported). The core empirical finding (derivative > value matching for physics consistency) is genuine, and the distillation contribution adds novelty. However, the misleading framing, tautological theory, and weak PINN baselines are substantive issues that a rebuttal cannot fully fix. This positions the paper in the 5.0–5.5 range, similar to PENO (5.0) and Unisolver (5.5), which had comparable issues with information asymmetry and overclaiming.
+- Add a focused discussion (even 1–2 paragraphs) of practical scenarios where DERL is applicable: (1) compact neural representation of expensive simulations, (2) knowledge distillation between physics-informed models, (3) systems where derivative measurements are available but the governing equations are unknown.
 
 ## Score and Decision
+
+**Calibration anchors compared:**
+
+- **Low anchors**: PDE-Diffusion (avg 2.2) — fundamentally flawed methodology and presentation; EPINN (avg 2.5) — overclaimed speed with no baselines; DeepFDM (avg 3.5) — unfair comparison where PDE structure was known to proposed method but not baselines. DERL is clearly better than these: it has a valid core idea, genuine experimental evidence, and a novel distillation contribution.
+
+- **Medium anchors**: Sobolev acceleration (avg 4.5) — shallow theory on derivative-based training, limited practical validation; Hybrid Numerical PINNs (avg 3.33) — overclaimed speedup, insufficient baselines; Efficient Discrete PINNs (avg 4.0) — limited novelty, underwhelming compared to numerical methods. DERL is comparable to or slightly above these: it has more experimental breadth and the novel distillation angle, but faces similar overclaiming issues.
+
+- **High anchors**: PhyMPGN (avg 8.0) — strong experimental results, comprehensive evaluation, clear novelty; AAS (avg 7.25) — novel minmax formulation with good theory; KAN (avg 7.2) — novel architecture with strong empirical results. DERL is clearly below these: the framing issues and unclear practical applicability prevent it from reaching this level.
+
+DERL sits between the medium and high-scoring anchors for papers with genuine contributions but significant framing issues. The distillation experiments push it above purely theoretical contributions like Sobolev acceleration, but the overclaiming about PINN comparisons and the misleading "no data" claim pull it below the 6 threshold. The DeepFDM case (3.5) involved a clearly unfair comparison; DERL's situation is more nuanced since both DERL and PINN receive informationally sufficient but qualitatively different inputs, so DERL deserves a higher score than DeepFDM.
 
 MY FINAL SCORE: <pineapple>5.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

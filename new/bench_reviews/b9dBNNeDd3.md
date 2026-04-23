@@ -1,112 +1,95 @@
-Good. The paper acknowledges the parameter size difference, calling it "slightly larger."
-
-Now let me verify the FID numbers for the transition states vs AR specifically:
-
-From Table 4 (line ~375-380):
-- FMT-B AR (raster-256-cosine): 5.40 FID
-- FMT-B SAR-TS (random-16-random): 7.04 FID  
-- FMT-L AR: 3.72 FID
-- FMT-L SAR-TS: 4.75 FID
-- FMT-XL AR: 2.76 FID
-- FMT-XL SAR-TS: 4.24 FID
-
-And MAR (K=1):
-- FMT-B: 6.98 FID
-- FMT-L: 6.13 FID
-
-So the transition states (at 64 steps) are indeed worse than AR but better than MAR for B and L. The harsh critic's claim that SAR-TS is "substantially worse than both AR and MAR" needs checking: for FMT-B, SAR-TS = 7.04 vs AR = 5.40 vs MAR = 6.98, so SAR-TS is worse than both for B. For FMT-L, SAR-TS = 4.75 vs AR = 3.72 vs MAR = 6.13, so SAR-TS is worse than AR but better than MAR.
-
-Wait, let me re-check. The SAR-TS uses "random-16-random" which is evaluated at 64 steps (the paper says "the last three rows of Table 4 present the performance (64 steps)"). But the MAR configuration (K=1) is a separate thing. Let me verify the FID comparison claim more carefully.
-
-For FMT-B: SAR-TS 7.04 vs AR 5.40 vs MAR 6.98 → SAR-TS worse than both (7.04 > 6.98 > 5.40)
-For FMT-L: SAR-TS 4.75 vs AR 3.72 vs MAR 6.13 → SAR-TS worse than AR, better than MAR
-
-The harsh critic's claim "substantially worse than both AR and MAR" is only correct for FMT-B, not for FMT-L or XL (where MAR results aren't shown for XL). The critic overstates this.
-
-Now I have enough to write the final review.
+Now I have all the information needed to write the final review. Let me synthesize everything.
 
 ## Summary
 
-The paper introduces Set AutoRegressive Modeling (SAR), a generalized AR paradigm that unifies AR, VAR, and MAR as special cases by parameterizing generation via sequence order and output intervals. The key idea is that by varying these two axes, one can smoothly interpolate between standard AR (many single-token prediction steps, causal, KV-cache-friendly) and MAR (few multi-token steps, non-causal, no KV cache), enabling "transition states" that are causal (hence KV-cache-compatible) yet require fewer inference steps.
+The paper introduces Set AutoRegressive Modeling (SAR), a framework that generalizes autoregressive image generation by parameterizing it along two axes—sequence order and output intervals—showing that AR, MAR, and VAR emerge as special cases. The intermediate "transition states" between AR and MAR are the main contribution, claimed to enable few-step inference (from MAR) alongside KV cache acceleration (from AR). The paper proposes the Fully Masked Transformer (FMT) architecture to realize SAR and conducts extensive ablations on ImageNet 256×256, along with a qualitative text-to-image demonstration (Lumina-SAR).
 
 ## Strengths
 
-- **Conceptual unification is genuine and insightful**: The SAR framework cleanly subsumes AR, VAR, and MAR under a single formulation defined by sequence order and output intervals (Table 2, Fig. 2). The introduction of generalized causal masks as the mechanism bridging these paradigms is elegant and provides the community with a useful vocabulary for reasoning about AR variants. The paper explicitly acknowledges this as a "preliminary" exploration in its limitation section.
+- **Clean conceptual unification.** The SAR framework that subsumes AR, MAR, and VAR via two design axes (sequence order, output intervals) is a genuine and clarifying abstraction. Table 2 and Figure 2 effectively summarize the relationship, and the formal treatment of generalized causal masks is principled.
 
-- **Thorough and well-structured ablation**: The systematic investigation of sequence orders (Fig. 6, Table 5), output schedules (Fig. 8), and set numbers (Fig. 9) is a strong empirical contribution. The finding that random orders enable few-step generalization (while fixed orders catastrophically fail) and that random intervals similarly enable generalization are non-obvious and valuable. The causal-vs-full-attention analysis in Fig. 9 (middle) provides principled guidance for choosing SAR configurations.
+- **Thorough and revealing ablations.** Section 4.4 provides an extensive exploration that uncovers non-obvious findings: random sequence order enables few-step generalization (Figure 6, Table 5), fixed-random order achieves similar generalization to fully random order, and models trained with very few sets can recover performance by abandoning causality (Figure 9, middle). These are empirically grounded insights that future work can build on.
 
-- **Smooth transition from K=2 to K=1 documented**: Table 6 empirically validates the smoothness claim between AR and MAR, showing that removing the first set's loss (going K=2→K=1) has little impact (8.81→7.19 FID), and that removing causality in decoder self-attention further helps MAR (8.81→6.98). This is honest and informative.
+- **Honest self-assessment.** The paper explicitly acknowledges that the VAR analog underperforms (Section 4.3: "primarily a conceptual example"), that the causal mask hurts at the MAR endpoint (Table 6 discussion), and that SAR intermediate state performance on ImageNet is limited (Limitation section). This transparency strengthens the paper's credibility.
 
-- **Practical T2I demonstration**: Lumina-SAR generates 1024×1024 images in 3–6 seconds at 64–128 steps (Fig. 10), showing the practical applicability of transition states for real text-to-image generation, with arbitrary aspect ratios.
+- **Practical speed-quality tradeoff demonstrated.** Figure 7 shows FMT-L SAR-TS at 64 steps achieves ~4.8 FID in 5.5s vs. LlamaGen-L at 256 steps achieving ~4.7 FID in 8.5s, establishing a real speed-quality operating point between AR and MAR extremes.
 
 ## Weaknesses
 
 ### Fatal
+
 None.
 
 ### Major
 
-- **Transition-state quality trade-off is significant and understated**: SAR-TS (random-16-random at 64 steps) consistently underperforms the AR configuration: FMT-B 7.04 vs. 5.40, FMT-L 4.75 vs. 3.72, FMT-XL 4.24 vs. 2.76 FID (Table 4). The paper describes this as "somewhat lower" (Section 4.3, line 320), but relative degradation ranges from 28% to 53%. More importantly, the paper explicitly concedes that "our strategy for SAR transition states may not be optimal, which could explain the sub-optimal SAR-TS results" (Section 4.4, line 438), meaning the paper's headline claim about transition states combining AR and MAR benefits has not been convincingly demonstrated with the current schedule strategy. This does not invalidate the framework but significantly limits the practical impact of the key novelty.
+- **The core claim that transition states deliver "the advantages of both AR and MAR" is only partially substantiated.** The abstract promises a "seamless transition" where intermediate states "leverage the advantages of both AR and MAR," but the evidence falls short of this framing. For FMT-L, AR achieves FID 3.72 (256 steps) while SAR-TS achieves FID 4.75 (64 steps)—a meaningful quality gap. While SAR-TS does outperform the pure MAR setting (FID 6.13) at the same model size, which is a positive signal, the paper does not quantify the KV cache speedup against FMT's cross-attention overhead per decoder layer (acknowledged at line 308: "we add an extra cross-attention module at each decoder layer"). Figure 7 compares only against the AR baseline (LlamaGen-L), omitting any MAR baseline at equivalent step counts or wall-clock times, making it impossible to assess whether SAR-TS truly occupies a superior position on the speed-quality Pareto frontier versus both extremes.
 
-- **KV cache acceleration is claimed but never measured**: The paper repeatedly states that SAR transition states "support KV cache acceleration" (abstract, Section 4.3, contributions), and this is positioned as a key advantage over MAR. While it is true that causal attention is compatible with KV cache in principle, the paper provides no measurement isolating the actual speedup from KV cache at the few-step regime where transition states operate. At 16–64 steps, each step processes a large token chunk, and the KV-cache benefit on previously computed tokens forms a diminishing fraction of total compute. The wall-clock comparisons in Fig. 7 conflate fewer-forward-passes speedup with KV-cache speedup. This gap between claim and evidence weakens a central selling point.
+- **The text-to-image application (Lumina-SAR) has zero quantitative evaluation.** Section 4.5 presents only qualitative samples with timing information—no FID, CLIP score, or comparison against any T2I baseline on a standard benchmark. The training data and procedure are inherited from Zhuo et al. (2024), making it impossible to isolate SAR's contribution. This section amounts to an anecdotal existence proof rather than a validation of SAR's generation capability at transition states.
 
-- **FMT vs. LlamaGen comparison is confounded by parameter count**: FMT models have 12–15% more parameters than comparable LlamaGen tiers (125M vs. 111M, 394M vs. 343M, 893M vs. 775M) due to the added cross-attention modules (acknowledged in line 308 as "slightly larger"). The FID improvements at AR settings are modest (e.g., FMT-B 5.40 vs. LlamaGen-B* 5.46), making it difficult to attribute gains to FMT's architectural design rather than the parameter budget advantage. No matched-parameter or matched-FLOP comparison is provided.
+- **The "seamless transition" framing overclaims based on the evidence.** The transition is seamless in the mathematical formulation but not in performance. Table 6 shows that the causal mask (the defining mechanism of SAR) actively hurts at the MAR endpoint (FID 8.81 with causal mask vs. 6.98 without). The paper also acknowledges the transition is not smooth in the opposite direction—the next-scale (VAR-analogous) variant achieves FID 12.49 (Table 4). The use of "seamless" in the abstract is misleading given these discontinuities. A more accurate framing would be "a continuous design space with tradeoffs at the extremes."
 
 ### Minor
 
-- **T2I section lacks quantitative evaluation**: Section 4.5 provides only qualitative samples (Fig. 10) with timing information but no FID, CLIP score, or comparison to any baseline. While the limited data/compute budget may explain this, it means the T2I results serve as a proof-of-concept demo rather than evidence for the paper's claim of "validating the generation capability of the transition states."
+- **Training epoch discrepancy confounds comparison.** SAR-TS models are trained for 300 epochs while all other models (including AR and MAR baselines) are trained for 200 epochs (Section 4.1). The paper is transparent about this, but it means the SAR-TS results in Table 4 benefit from 50% more training, making the quality gap relative to AR likely larger than reported.
 
-- **Causal masking is counterproductive at the MAR endpoint**: Table 6 (Row 1 vs. Row 3) shows that causal masking hurts MAR by 26% (8.81→6.98 FID). This is not a flaw in the paper—the authors acknowledge it—but it does imply the "unification" comes at a cost: the causal structure SAR depends on degrades the very method (MAR) it claims to encompass. The paper would benefit from discussing whether this is fundamental or addressable through schedule improvements.
+- **The VAR "unification" is nominal rather than substantive.** While the paper honestly labels the next-scale variant as "primarily a conceptual example," including it in the unification claim (Table 1 lists VAR as a special case with a checkmark for "Common VAE: ✗") is misleading. The 12.49 vs. 1.80 FID gap (even accounting for model size differences) shows that sequence order and output intervals alone cannot replicate VAR's performance, which relies on a specialized multi-scale tokenizer. The unification holds formally but not practically for this case.
 
-- **SAR as VAR result is weak**: The "next-scale" variant achieves 12.49 FID vs. VAR's 1.80 (Table 4). While the paper fairly calls this "primarily a conceptual example," it limits confidence in the framework's ability to recover the performance of all unified paradigms.
-
-### Trivial
-None.
+- **Table 1's claim that SAR has "Flexible" training/inference match while MAR has "Unmatch" is imprecise.** SAR transition states also exhibit train-test mismatch: they are trained with random orders/intervals but can be inferred with different step counts and schedules. Figure 8 shows performance degrades when inference steps diverge from training steps in some configurations. SAR is more flexible than MAR in this regard, but "Flexible" overstates the degree of match.
 
 ## Nice-to-Haves
 
-- Direct measurement of KV cache speedup (with vs. without) at transition-state step counts would substantiate the efficiency claim
-- A matched-parameter ablation (removing cross-attention modules or adjusting width) to isolate FMT's architectural contribution
-- Better inference schedules for transition states: the paper acknowledges its random strategy is likely suboptimal; exploring curriculum or learned schedules could significantly strengthen the main claim
+- Direct speed-quality Pareto comparison plotting FID vs. wall-clock time for SAR-TS, AR, and MAR at the same model size would decisively test the "advantages of both" claim.
+- Quantitative evaluation of Lumina-SAR on a standard T2I benchmark (e.g., MSCOCO FID, CLIP score) against baselines.
+- KV cache speedup measurement for SAR-TS at various step counts, quantified against the cross-attention overhead of FMT, to verify the net efficiency gain.
 
 ## Removed Points
-*These points are flagged to be removed, treat them with caution.*
 
-- **Harsh critic claim that SAR-TS is "substantially worse than both AR and MAR"**: This is only true for FMT-B (7.04 > 6.98 > 5.40). For FMT-L, SAR-TS (4.75) is actually *better* than MAR (6.13). The critic overstates the case.
+These points are flagged to be removed, treat them with caution:
 
-- **Harsh critic claim of "30–95% relative FID degradation"**: This inflates the comparison by comparing transition states (at 64 steps) to AR (256 steps). The relevant comparison is SAR-TS at 64 steps vs. AR at 64+ steps vs. MAR at comparable step counts, where the trade-off is more nuanced. The "95%" figure comes from comparing SAR-TS-XL to the possibly unfair XL-AR at cfg=1.75 with much more training.
+- **Harsh critic's claim that SAR-TS "consistently underperforms both extremes."** This is factually incorrect for the MAR extreme: FMT-L SAR-TS achieves FID 4.75 vs. FMT-L MAR's FID 6.13. The transition state IS better than MAR at this model size.
 
-- **Demand for empirical validation that decoder-only transformers fail with SAR**: The paper provides principled reasoning for three failure modes (Section 3.2). This is a reasonable design discussion; demanding an empirical failure demonstration is scope creep.
+- **Harsh critic's claim that FMT-B has 125M vs. LlamaGen-B's 111M parameters, implying unfair comparison.** The paper is transparent about the parameter difference and notes it is due to the cross-attention addition. A ~12% parameter increase is a minor confound, not a structural unfairness—especially since the starred LlamaGen entries provide the fairest comparison.
 
-- **Figure 7 criticism about LlamaGen being a single point**: LlamaGen is a pure AR model with no natural few-step trade-off to plot (it always needs 256 steps). The comparison is therefore appropriate as a reference point.
+- **Harsh critic's claim about Table 4 mixing methods with rejection sampling and different CFG values.** The paper clearly marks which methods use rejection sampling ("re") and which CFG values are used. This is standard practice in the field and does not prevent comparison.
 
-- **Concern about SAR-TS at 256 steps having worse FID than at 64 steps**: Looking at Figure 7, the FID values at 64 and 256 steps are both around ~4.8–4.9, which is within measurement noise, not an "unexplained" inversion. This is a minor observation, not a concern.
+- **Strength Finder's repetitive and garbled output about "random output intervals: Few steps → Better."** While the underlying finding is valid (random intervals enable few-step generalization, per Figure 8), the Strength Finder's output was largely incoherent and has been replaced with a properly grounded formulation above.
 
-- **Demand for failure cases in T2I generation**: Cherry-picked samples are standard for T2I demos; demanding failure visualizations is a nice-to-have, not a weakness.
-
-- **Strength finder's claim #2 that transition states provide "previously unavailable design point"**: This overclaims—SAR-TS shows worse FID than AR at the same 256 steps, and the KV cache benefit at few steps is unquantified. Moved to removed because it conflicts with a verified major weakness about unquantified KV cache benefit.
+- **Harsh critic's demand that FMT's three failure modes of decoder-only transformers be empirically validated.** This is a nice-to-have but not a core flaw; the architectural justification is reasonable and the paper demonstrates that FMT works in practice.
 
 ## Novel Insights
 
-The ablation reveals an interesting asymmetry: the SAR framework's greatest empirical value may not be the transition states themselves (which currently underperform), but rather the understanding it provides about *why* fixed-order AR models fail at few-step inference and *what* randomization in order and intervals buys you. The finding that models trained with too few sets benefit from abandoning causality at inference (Fig. 9, middle) connects to a broader question about when causal structure is vs. isn't beneficial—a question the SAR framework is uniquely positioned to address.
+The most insightful finding is the asymmetry of the transition: SAR-TS outperforms pure MAR (4.75 vs. 6.13 FID for FMT-L) but underperforms AR (4.75 vs. 3.72), suggesting that the practical value of SAR lies not in a symmetric "best of both worlds" but in a specific niche—adding causal structure to few-step generation, which improves over MAR's non-causal approach. This reframes the contribution: SAR's transition states are not a Pareto-improvement over both extremes, but rather a principled way to inject KV-cacheable causality into few-step generation, at a known quality cost relative to full AR.
 
 ## Suggestions
 
-- Run a direct KV cache ablation: measure inference time with and without KV cache at each step count for SAR-TS models, and report the fraction of speedup attributable to KV cache vs. fewer forward passes.
-- Try a simple schedule improvement for transition states (e.g., cosine or learned intervals instead of random) before submitting, as the paper itself identifies this as the likely bottleneck for SAR-TS performance.
-- Add a small matched-parameter ablation: reduce FMT width or layers to match LlamaGen's parameter count to isolate architectural vs. capacity effects.
+- Retitle or reframe the abstract to replace "seamless transition" and "leveraging the advantages of both AR and MAR" with more precise language, e.g., "a continuous design space between AR and MAR that enables few-step causal generation with KV cache, at a tradeoff in generation quality relative to full AR."
+- Add FID/wall-clock comparisons that include MAR baselines at equivalent step counts to Figure 7, making the speed-quality Pareto argument rigorous.
+- Report at least one quantitative metric for Lumina-SAR; even a single FID number on MSCOCO would substantially strengthen the T2I validation.
+
+## Evaluation
+
+**Originality:** High. The SAR framework is a genuinely novel and clean conceptual contribution that clarifies the relationship between AR, MAR, and VAR. The design space exploration is original and reveals non-obvious findings.
+
+**Importance of research question:** High. Enabling few-step inference with KV cache in autoregressive image generation is a practically important goal.
+
+**Claims well supported:** Partially. The formal framework is well-supported, but the core empirical claim about transition states inheriting "the advantages of both" is only partially validated, and the T2I application lacks quantitative evaluation.
+
+**Soundness of experiments:** Moderate. The ablations are thorough but the SAR-TS vs. AR/MAR comparison is confounded by training epoch differences, and the efficiency analysis lacks proper baselines.
+
+**Clarity of writing:** Good. The paper is well-organized with clear figures and tables, though the abstract overclaims.
+
+**Value to community:** Moderate-to-high. The framework provides a useful conceptual lens and the ablation insights are valuable, even if the transition states don't fully deliver on the promised advantages.
 
 ## Score and Decision
 
-**Calibration anchors:**
+Calibration anchors:
+- **Block Diffusion** (avg 8.0, Oral): Similar interpolation concept (AR↔diffusion) but with much stronger empirical demonstration that intermediate states actually work well. SAR is weaker because its core claim is less convincingly demonstrated.
+- **Show-o** (avg 6.5, Poster): Unified framework with comparable performance to specialized models. SAR is weaker because it doesn't match AR quality and lacks quantitative T2I evaluation.
+- **GVP / MarDini** (avg 5.5, Reject): Conceptual unification praised but insufficient empirical validation. SAR is comparable—clean framework but transition states only partially validated.
+- **DDM** (avg 3.5, Reject): Conceptual contribution but flawed technical novelty. SAR is stronger—its framework is sound and ablations are thorough.
+- **TCIG** (avg 1.5, Reject): Trivial contribution with overclaimed results. SAR is much stronger.
 
-- **High band (>7)**: Transfusion (8.0, Oral) — unifies AR and diffusion with strong empirical results across scales; HART (6.8, Poster) — hybrid AR with concrete efficiency gains and SOTA FID. SAR is substantially weaker than these in demonstrated practical gains.
-
-- **Medium band (4–6)**: GVP (5.5, Reject) — unified probabilistic framework bridging AR and masked modeling for visual representation, similar conceptual contribution but mixed empirical validation; Show-o (6.5, Poster) — unifies AR and discrete diffusion with competitive performance across tasks; Big Learning (5.25, Reject) — novel unifying formulation with overclaim and limited quantitative evaluation. SAR is comparable to GVP in its conceptual contribution and mixed empirical support, but has more thorough ablation and a real T2I application.
-
-- **Low band (<3)**: Chemosensing LMM paper (1.0, Reject) — no experiments or meaningful contribution. SAR is far above this tier.
-
-SAR has a genuine conceptual contribution (unification framework) with thorough ablation that produces valuable empirical insights. However, its central practical claim (transition states combining both AR and MAR advantages) is undermined by significant quality degradation and an unmeasured KV cache benefit. This places it below Show-o (which had competitive quantitative results) and HART (which had concrete efficiency wins), but above purely conceptual papers like Big Learning. The gap between claims and evidence is the main differentiator from accepted papers in this space.
+SAR sits between the GVP/MarDini tier (5.5) and Show-o tier (6.5). It has a cleaner conceptual framework and more thorough ablations than GVP/MarDini, but its core claim is less well-supported than Show-o's. The honest self-assessment partially compensates for the overclaimed abstract. I place it at the higher end of the borderline range.
 
 MY FINAL SCORE: <pineapple>5.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

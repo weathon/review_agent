@@ -1,43 +1,20 @@
-Now I have enough information to write the final review. Let me consolidate all findings.
-
-Key verification results:
-
-1. **"Competitive watermark robustness" claim**: Looking at Table 2, WMAdapter-I's JPEG bit accuracy is 0.90 vs. StableSig 0.93 and WOUAF 0.99; combined attacks 0.90 vs. 0.93 for both. However, WMAdapter-F has 0.92 combined, which is much closer. The paper does acknowledge the trade-off in the text (line 222: "trailing the top-performing methods by only 0.01 and 0.03, respectively, while still maintaining competitive robustness") and line 226 calls it "competitive accuracy." The claim of "competitive robustness" is somewhat overclaimed given the 3-9% JPEG gap, but the paper does frame it as a tradeoff and uses the word "competitive" not "superior." This is a valid criticism but more moderate than the harsh critic suggests.
-
-2. **"Non-intrusive" framing**: The paper says "not modify any parameters of the pretrained diffusion modules" — this is technically accurate since the adapter adds residuals but doesn't modify VAE weights at inference for Adapter-I. RoSteALS also doesn't modify diffusion weights per Table 1, but WMAdapter additionally achieves imperceptibility. The "non-intrusive" claim is defensible but the framing overclaims by making it seem like a unique distinction when RoSteALS shares the "no modified diffusion modules" property. The real distinction is imperceptibility, not weight preservation per se.
-
-3. **Missing Stable Messenger comparison**: The paper acknowledges Stable Messenger (line 69) but dismisses it with "their model design is different from ours." This is a valid criticism — when a concurrent method shares a core claimed innovation (content-aware watermarks), a comparison would strengthen the paper.
-
-4. **AquaLoRA in Figure 1 but not Table 2**: AquaLoRA appears qualitatively in Figure 1 and Table 1, and is mentioned in the text regarding lens flare artifacts (line 336). Not being in Table 2 needs explanation but is not fatal.
-
-5. **Mechanism of hybrid finetuning**: The paper does describe the strategy (train adapter + VAE jointly, deploy with original VAE) but doesn't explain why it works. This is a valid criticism about depth of analysis.
-
-6. **No variance reporting**: Standard in the field, but a minor concern given the scale of evaluation.
-
-7. **JPEG robustness**: WMAdapter-I's 0.90 JPEG bit accuracy vs. 0.93 (StableSig) and 0.99 (WOUAF) is a genuine weakness. But note that RoSteALS gets JPEG 0.99 but Crop 0.50 and Combined 0.50, so methods that excel at one attack may fail at others. WMAdapter is weaker at JPEG but stronger than some at other attacks. Still, the JPEG weakness deserves mentioning.
-
-Given the calibration anchors:
-- High (>7): Watermark poisoning paper (avg 7.5) — much more rigorous + novel insight
-- Medium (4-6): Recipe for Watermarking (5.33, Reject), IFAdapter (5.75, Reject), 3D-Adapter (5.6, Reject) — all have novel plugin/adapter designs but missing comparisons and limited depth
-- Low (<3): KncRpAnprQ (2.0, Reject) — overclaimed contribution + missing critical baselines
-
-This paper is comparable to the 3D-Adapter / IFAdapter class of papers — novel plug-in module, strong empirical results, but missing comparison with a directly relevant concurrent method. It's stronger than the Recipe for Watermarking paper (better quality and more thorough evaluation). It's clearly above the low-score papers (no fundamental flaws). It's below the high-score watermark papers (which offer deeper insight/mechanism). I'd place it around 5.5-6.0.</think>Now I have all the information I need to write the final review. Let me synthesize everything.
+Now I have a thorough understanding of the paper and calibration anchors. Let me synthesize the final review.
 
 ## Summary
 
-WMAdapter is a lightweight (1.3M parameters, 30ms overhead) plug-and-play watermarking plugin for latent diffusion models that embeds arbitrary watermark bits during VAE decoding without modifying diffusion module weights. Its two key innovations are: (1) a contextual adapter that conditions on VAE decoder features to generate content-aware watermark residuals, and (2) a hybrid finetuning strategy that jointly trains the adapter and VAE decoder but deploys only the adapter with the original VAE, suppressing artifacts. The method achieves the best image quality (PSNR=34.8, FID=2.5) among compared diffusion-native watermarking methods while maintaining high watermark accuracy.
+WMAdapter introduces a plug-and-play watermarking plugin for latent diffusion models that embeds arbitrary watermark keys during generation without modifying any diffusion components at inference. Two key innovations enable this: (1) a Contextual Adapter that conditions watermark embeddings on image content features extracted from the VAE decoder, and (2) a Hybrid Finetuning strategy that jointly trains the adapter and VAE decoder but deploys only the finetuned adapter with the original VAE at inference, suppressing artifacts while preserving pipeline integrity.
 
 ## Strengths
 
-- **Contextual adapter design is well-validated by ablation**: Table 4 shows a substantial 4.1 dB PSNR improvement (28.7→32.8) and 0.02 bit accuracy gain (0.97→0.99) from conditioning on image content vs. context-less design, directly supporting the central design principle.
+- **Contextual Adapter design is well-motivated with clear empirical support**: Conditioning watermark embeddings on image content features allows the adapter to exploit high-variance regions for better concealment. Table 4 shows a substantial +4.1 dB PSNR improvement (28.7→32.8) and +0.02 bit accuracy gain over the context-less structure still used by prior SOTA methods (Xiong et al., 2023; Kim et al., 2023; Bui et al., 2023).
 
-- **Hybrid finetuning is creative and effective**: Tables 5 and Figure 6 demonstrate that Hybrid Finetuning (Adapter-I) achieves 34.8 dB PSNR vs. 29.9 for Joint Finetuning (Adapter-V), while Figure 6 visually confirms elimination of both grid-like artifacts (Adapter-B/F) and lens flare artifacts (Adapter-V), at only a 0.02 combined bit accuracy cost.
+- **Hybrid Finetuning is a genuinely creative and effective strategy**: Jointly finetuning the adapter and VAE decoder during training, then deploying the original VAE at inference, yields the best image quality (Table 5: Adapter-I achieves PSNR 34.8 / FID 2.5 vs. Adapter-V's 29.9 / 3.1) while eliminating both grid-like and lens flare artifacts (Figure 6). This is a novel training technique not explored by prior watermarking methods.
 
-- **Comprehensive robustness evaluation**: Section 4.3 goes beyond standard distortions to include regeneration attacks, adversarial attacks (white-box and black-box), and query-based attacks, with Figure 5 showing WMAdapter requires 4–6 dB PSNR drop for watermark removal via regeneration vs. only 2 dB for Stable Signature.
+- **Comprehensive robustness evaluation beyond standard distortions**: The paper evaluates regeneration attacks, white-box/black-box adversarial attacks, and query-based attacks (Section 4.3, Figure 5), going well beyond the JPEG/crop/brightness evaluation typical of prior work. The regeneration attack analysis (4–6 dB PSNR drop needed vs. 2 dB for Stable Signature) is particularly informative.
 
-- **Strong image quality with practical efficiency**: WMAdapter-I achieves best-in-class PSNR (34.8) and FID (2.5) in Table 2, improving over Stable Signature by ~17% PSNR and ~22% FID, while being lightweight (1.3M params, 30ms, 1–2 epoch training vs. ~10 days for WOUAF).
+- **Strong scalability without per-key finetuning**: Table 3 shows WMAdapter-F achieves perfect (1.000) tracing accuracy at all user scales (10⁴–10⁶), while Stable Signature drops to 0.998 at 10⁶. This addresses a critical practical limitation of per-key finetuning approaches.
 
-- **Systematic ablation design**: The paper cleanly disentangles contributions of contextual structure (Table 4), finetuning strategies (Table 5, Figure 6), and total variation loss, making each design choice's role clear.
+- **Honest and informative artifact analysis**: Figures 6 and 7 clearly show the grid-like artifacts in Adapter-F and lens flare artifacts in VAE-modifying methods (Stable Signature, Adapter-V), with zoomed-in comparisons that strengthen the non-intrusion argument.
 
 ## Weaknesses
 
@@ -46,67 +23,65 @@ None.
 
 ### Major
 
-- **Missing comparison with Stable Messenger, the only other content-aware watermarking method the authors identify**: The paper acknowledges in Section 2.2 that Stable Messenger (Nguyen et al., 2023) also generates content-aware watermarks — a core claimed innovation — but dismisses comparison with "their model design is different from ours." When a concurrent method shares a key design principle, direct comparison is needed to validate whether WMAdapter's specific contextual adapter architecture or the general principle of content-awareness drives the improvements. Without it, the reader cannot assess the novelty of the contextual approach over the alternative content-aware design. (Section 2.2, line 69)
+- **Missing unwatermarked SD 2.1 FID baseline**: The paper's central claim is that WMAdapter "preserves diffusion pipeline integrity" and produces "artifact-free" images. Yet the FID of unwatermarked SD 2.1 images under the same evaluation protocol is never reported. Without this, the reader cannot determine whether WMAdapter-I's FID of 2.5 represents no degradation, slight degradation, or improvement over the base model. The PSNR of 34.8 dB provides indirect evidence of minimal visual impact, but the FID comparison is essential for assessing the absolute cost of watermarking—the core narrative of the paper. All quality comparisons in Table 2 are relative among watermarked methods; the absolute quality cost is opaque.
 
-- **JPEG robustness gap is understated**: In Table 2, WMAdapter-I achieves only 0.90 bit accuracy under JPEG compression (Q=80), trailing Stable Signature (0.93) and WOUAF (0.99) by 3–9 percentage points. Combined attacks also show a 3-point gap (0.90 vs. 0.93). The paper's abstract and conclusion use the term "competitive watermark robustness," but a 3–9% gap under one of the most common real-world distortions stretches the meaning of "competitive." The paper should more explicitly acknowledge this quality-robustness tradeoff and discuss the JPEG weakness in the text rather than leaving the reader to discover it only in the table. (Abstract, line 23; Table 2, line 218; Section 4.2)
-
-- **Hybrid finetuning mechanism is unexplained**: The strategy of jointly training adapter and VAE, then deploying only the adapter with the original VAE, is creative but presented as "it works" without mechanistic understanding. Why do residuals trained against a finetuned VAE remain compatible with the original VAE at inference? Is the residual magnitude small enough, or does the adapter learn a representation transferable across VAE states? Analysis of residual magnitudes, feature distributions, or controlled experiments comparing VAE drift would transform this from an empirical trick into a better-understood contribution. (Section 3.4, lines 174–180)
+- **Hybrid Finetuning mechanism lacks explanation**: Why does jointly finetuning a VAE decoder (which is discarded at inference) improve adapter residuals with the original VAE? The empirical result is striking (PSNR jumps from 33.1 to 34.8 in Table 5), but no mechanism is proposed or analyzed. Possible explanations (e.g., joint optimization smoothing the loss landscape, the adapter learning to offload difficult cases to the VAE during training) are not explored. This limits the contribution from an insight to a training recipe, reducing intellectual depth.
 
 ### Minor
 
-- **"Non-intrusive" framing is definitionally narrow**: The paper emphasizes that WMAdapter "keeps all diffusion components intact" (line 23, 47), which is technically true about weight parameters, but the adapter injects residuals into every major VAE decoder block, functionally altering the VAE's output path. Moreover, Table 1 shows RoSteALS also has "No" modified diffusion modules — the real differentiator is imperceptibility, not weight preservation alone. The framing subtly inflates the novelty by making the "non-intrusive" property seem unique when the actual innovations are the contextual conditioning and hybrid finetuning. (Table 1, line 45; Section 3.5, line 184)
+- **AquaLoRA absent from quantitative comparison (Table 2)**: AquaLoRA is prominently featured as a key competitor in Table 1 and Figure 1 but excluded from Table 2's quantitative results. Since AquaLoRA represents the "intrusive watermarking" paradigm the paper argues against, its numerical absence leaves the comparison against intrusive methods incomplete. However, the paper does show qualitative comparisons with AquaLoRA in Figure 1, and the six methods in Table 2 provide reasonable coverage.
 
-- **AquaLoRA appears in Figure 1 and Table 1 but not in the main quantitative comparison (Table 2)**: No explanation is given for its absence from the robustness comparison, especially since the paper uses AquaLoRA as a visual example of artifacts in Figure 1. (Figure 1, line 13; Table 1)
+- **JPEG robustness gap relative to Stable Signature underacknowledged**: WMAdapter-I achieves 0.90 bit accuracy under JPEG 80 vs. Stable Signature's 0.93 (Table 2). While TPR remains perfect (1.00) and tracing accuracy is high (0.999 at 10⁶), the paper frames robustness as "competitive" without explicitly acknowledging this 3-point gap on one of the most common real-world distortions. The tradeoff between quality and JPEG robustness should be discussed more transparently.
 
-- **3×3 conv collapse is unexplained**: Table 4 shows the 3×3 conv variant collapsing to 0.49 bit accuracy and 12.0 PSNR, dismissed in Section 4.4.1 as "unstable training." Since 3×3 convolutions are standard in related architectures, some diagnosis of why this instability occurs would strengthen the design rationale for 1×1 convolutions. (Table 4; line 328)
+- **Contextual vs. context-less ablation potentially confounded by parameter count**: Table 4 shows the contextual adapter outperforming the context-less version, but does the contextual adapter have more parameters due to the additional feature input channels? If the improvement stems primarily from capacity rather than contextual conditioning, the motivation is weakened.
 
 ### Trivial
 None.
 
 ## Nice-to-Haves
 
-- Analysis of JPEG robustness across multiple quality levels (beyond Q=80) and targeted experiments varying JPEG augmentation during training to determine whether the JPEG weakness is inherent to the residual injection mechanism or a training artifact.
-
-- Multiple training runs with different seeds reporting variance, especially given short training (2 epochs) and small performance gaps near 1.000 in Table 3 tracing accuracy.
-
-- Side-by-side failure cases under JPEG compression for WMAdapter-I, to concretely illustrate the quality-robustness frontier.
+- Investigate why 3×3 convolutions lead to unstable training (Table 4 reports PSNR 12.0 / Bit Acc 0.49) with gradient clipping, normalization, or learning rate tuning—currently this ablation point is uninformative as it reflects a training failure rather than a principled architectural argument.
+- Analyze how the adapter's residual distribution changes during Hybrid Finetuning to provide mechanistic understanding of why the technique works.
+- Visualize failure cases under JPEG compression where WMAdapter-I drops below Stable Signature's accuracy to understand the failure mode.
 
 ## Removed Points
 
 These points are flagged to be removed, treat them with caution:
 
-- **"Inability to verify models/baselines exist"**: Several baselines (Stable Signature, WOUAF, RoSteALS, etc.) are cited in the paper and assumed to exist per review guidelines. Removed as reviewer knowledge gap.
+- **FID computation protocol ambiguity**: The critic claimed ambiguity about whether FID reference images are real COCO images or unwatermarked generations. The paper explicitly states (Section 4.1) "FID between watermarked images and images from coco val set," meaning real COCO images. While computing FID against unwatermarked generations would also be informative, the current protocol is standard and clearly specified—this is not an ambiguity.
 
-- **Reproducibility concerns about undisclosed hyperparameters**: The paper specifies learning rates, batch sizes, GPU setup, optimizer, loss weights (λ₁-λ₄), and training duration. Nitpicks about unreproducibility are removed.
+- **Security argument for pretrained decoder is weak**: The critic argued the "hundreds of open-source decoders" argument provides no protection if an attacker can identify which decoder is used. While this is partially valid, the paper already acknowledges white-box adversarial attacks can remove watermarks (Section 4.3), so the security posture is consistent. The pretrained decoder choice is primarily justified by training efficiency (1-2 epochs vs. 300 epochs), not security. The security claim is a secondary benefit, not a core contribution.
 
-- **Formatting/garbled text issues**: The numbered blank lines (80–134) and formatting artifacts are parser errors, not paper issues. Removed.
+- **Abstract oversimplifies "keep all diffusion components intact"**: The critic noted the abstract doesn't mention Hybrid Finetuning jointly finetunes the VAE during training. The paper clearly distinguishes training-time from inference-time modification in Section 3.4 and Figure 4. The abstract's framing is accurate for the inference pipeline, which is the practically relevant claim.
 
-- **Missing appendix references**: References to appendices (A.7, A.8, A.9) that may exist in the original submission are stripped by the parser. Removed as a concern.
+- **Missing more recent baselines (Meng et al. 2024, Zhang et al. 2024)**: Per rules, do not flag missing related works without external confirmation of their existence and relevance.
 
-- **"Overclaim that 'competitive robustness' is unsupported" at the level implied by the harsh critic**: The harsh critic calls this "misleading" and a "clear tradeoff," but the paper does partially acknowledge the tradeoff (line 222: "trailing the top-performing methods by only 0.01 and 0.03, respectively, while still maintaining competitive robustness") and the scatter plot in Figure 1 explicitly positions WMAdapter on a quality-robustness tradeoff frontier. The criticism is valid but overstated — downgraded to Major rather than Fatal.
-
-- **"PSNR of 34.8 dB is not universally considered imperceptible"**: This is a standard threshold debate; the paper uses PSNR as one metric alongside FID and qualitative evidence. Removed as overly generic.
+- **Unwatermarked SD 2.1 FID being "often reported in the 4–6 range"**: The critic's claim about typical SD 2.1 FID on COCO at 512×512 is an external assertion that cannot be verified against the paper's specific evaluation protocol. The core concern (missing baseline) is valid and kept above, but the specific numbers cited are not verifiable.
 
 ## Novel Insights
 
-The hybrid finetuning strategy reveals an interesting asymmetry: jointly training the adapter with the VAE creates a co-adapted state that effectively denoises the adapter's output, but the resulting adapter residuals remain useful when paired with the *original* VAE at inference — suggesting the adapter learns a quasi-universal perturbation that is sufficiently small or structurally compatible to work across VAE parameterizations. This observation, if formally characterized, could generalize to other adapter-for-diffusion designs where retaining the original model at inference is desirable.
+The Hybrid Finetuning strategy reveals an interesting phenomenon: a watermark adapter can benefit from co-training with a VAE decoder that is later discarded at inference. This suggests that the adapter learns residuals that are better "shaped" to the original VAE's reconstruction function when it has access to the VAE's gradient signal during training—a form of knowledge distillation without explicit teacher-student formulation. Understanding this mechanism could generalize beyond watermarking to other adapter/plugin training paradigms.
 
 ## Suggestions
 
-- Add a direct comparison with Stable Messenger (or at minimum, a detailed discussion of architectural differences and expected performance differences) to validate that content-awareness *via the contextual adapter* rather than content-awareness per se drives the improvements.
-
-- Explicitly discuss the JPEG robustness gap in Section 4.2 and consider whether higher JPEG quality augmentation during training could close the gap without sacrificing image quality.
-
-- Add a brief analysis of why hybrid finetuning works — even a simple comparison of residual magnitudes between Adapter-I and Adapter-V, or feature distribution statistics before/after VAE finetuning, would provide insight.
+- Report unwatermarked SD 2.1 FID under the same protocol as Table 2 (COCO val set, 512×512). This single addition would substantively strengthen the "integrity-preserving" claim and is easily obtainable.
+- Control for parameter count in the contextual vs. context-less ablation (Table 4) by adding parameters to the context-less variant, ensuring the improvement is attributable to contextual conditioning rather than capacity.
+- Provide a brief mechanistic discussion of Hybrid Finetuning—even an informal analysis of how the adapter's learned residuals shift during joint VAE finetuning would elevate the contribution from recipe to insight.
 
 ## Score and Decision
 
 **Calibration anchors:**
-- High: agHddsQhsL (avg 7.5, Spotlight) — watermark-based defense for diffusion customization, with novel targeted attack insight and thorough evaluation. WMAdapter is narrower in insight depth (no mechanistic explanation of hybrid finetuning) and missing a concurrent comparison.
-- Medium: HexshmBu0P (avg 5.33, Reject) — recipe for watermarking diffusion models, similar domain but weaker quality (PSNR < 30) and limited robustness evaluation. WMAdapter is clearly stronger. 3D-Adapter (avg 5.6, Reject) — novel plug-in module, strong empirical results, but missing concurrent comparisons. Very similar weakness profile to WMAdapter. IFAdapter (avg 5.75, Reject) — plug-and-play adapter, missing comparison to concurrent work (InstanceDiffusion), similar quality profile.
-- Low: KncRpAnprQ (avg 2.0, Reject) — overclaimed contribution with missing entire category of baselines (SNNs) making experiments unfair. WMAdapter's missing comparison is less severe — Stable Messenger shares one design principle but is architecturally different, and the paper does compare against 6 other methods.
 
-WMAdapter is stronger than the medium-range watermarking recipe paper (better results, more thorough evaluation) and on par with the adapter papers that were rejected for missing concurrent comparisons. The missing Stable Messenger comparison is a real gap but not as severe as missing an entire class of baselines. The paper's contributions (contextual adapter + hybrid finetuning) are genuine and well-supported by ablations, placing it above the borderline rejects but below the strong accepts due to the JPEG gap and unexplained mechanism.
+| Paper | Avg Score | Decision | Comparison |
+|-------|-----------|----------|-----------|
+| agHddsQhsL (Targeted adversarial attacks for diffusion protection) | 7.50 | Accept (Spotlight) | More novel insight, cleaner contribution; WMAdapter has more empirical gaps |
+| 84n3UwkH7b (Memorization detection in diffusion) | 8.00 | Accept (Oral) | Significantly stronger contribution; WMAdapter below this tier |
+| uzz3qAYy0D (VideoShield: zero-shot video watermarking) | 6.00 | Accept (Poster) | Similar plugin-style paradigm; WMAdapter has stronger ablations and quality results but more gaps |
+| HexshmBu0P (Recipe for Watermarking Diffusion) | 5.33 | Reject | Directly comparable topic; WMAdapter is clearly stronger with better PSNR, clearer innovations, and more thorough evaluation |
+| PCm1oT8pZI (Safe watermark injection) | 5.75 | Accept (poster) | Similar scope; WMAdapter has more thorough evaluation |
+| bGv9kWeBcw (FStega) | 2.80 | Reject | Overclaimed, wrong category, visible distortion; WMAdapter is far above this |
 
-MY FINAL SCORE: <pineapple>5.5</pineapple>
-MY FINAL DECISION: <orange>Reject</orange>
+WMAdapter is clearly stronger than the rejected watermarking papers (5.33, 2.80) and comparable to or slightly better than the borderline-accepted VideoShield (6.0), given its more thorough ablations and better empirical results. It falls below the spotlight/oral tier (7.5+) due to the missing unwatermarked FID baseline and unexplained Hybrid Finetuning mechanism. The two genuine innovations with strong empirical support place it solidly in the acceptable range, but the evidential gaps prevent a higher score.
+
+MY FINAL SCORE: <pineapple>6.0</pineapple>
+MY FINAL DECISION: <orange>Accept</orange>

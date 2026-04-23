@@ -1,88 +1,108 @@
-Now I have enough information. Let me compile my meta-review.
-
-Let me re-examine the critical issues one more time:
-
-1. **VLind-Bench multimodal = regular**: This is confirmed from lines 202-205 and 211-214. The multimodal attention variant produces identical scores to regular in every metric for both models. Yet line 220 states "Our multimodal collaborative method has notably enhanced the baseline model's performance across all metrics" which is directly contradicted by the data. This is a serious issue.
-
-2. **Causal graph notation error**: Lines 73 and 75 show "$T_l \rightarrow A_v$" and "$P_l \rightarrow A_v$" but the text descriptions say these influence "$A_t$" (MLLM/LLM attention). This is a notation inconsistency - the arrows point to $A_v$ (visual attention) but the descriptions reference $A_t$ (LLM attention). This is confusing but may be a notation error rather than a conceptual one.
-
-3. **Causal framework reducing to contrastive decoding**: The actual computation (Eqs. 8-10) is indeed structurally similar to VCD - it's a contrastive logit adjustment: $\ell_i + \gamma(\ell_i - \ell_{cf,i})$. The perturbation target differs (attention maps vs. visual input). The causal framing (SCM, back-door adjustment, counterfactual reasoning) provides the motivation but the actual operational mechanism is contrastive decoding.
-
-4. **Abstract claims about "65.3% on 6 VLInd-Bench indicators" and "143.7 points on 6 indicators"**: The data shows only 5 indicators (Sck, Svp, Scb, Slp, LP). The multimodal variant shows no improvement. The "65.3%" and "143.7 points" claims are unverifiable from the presented data.
-
-5. **POPE results only for LLaVA-1.5, not Qwen2-VL**: Confirmed - the table caption says "with LLaVA-1.5" and only LLaVA results appear.
-
-6. **No VCD/OPERA results on VLind-Bench**: Confirmed - the paper says "other methods failed to achieve significant performance improvements" about LLaVA-1.5 without showing any numbers for VCD/OPERA on VLind-Bench.
-
-Now let me write the final review.
+Now I have all the information I need to write the final review. Let me consolidate my findings.
 
 ## Summary
-CausalMM proposes a structural causal model for MLLMs that treats visual and language priors as confounders between attention mechanisms and model output, then applies counterfactual reasoning (back-door adjustment) at both visual and language attention levels to mitigate modality prior-induced hallucinations. The method perturbs attention maps (random, uniform, reversed, shuffled) and amplifies the difference between original and perturbed output logits, operating as a plug-and-play decoding strategy.
+
+CausalMM proposes a structural causal model (SCM) for MLLMs that treats visual and language priors as confounders between attention mechanisms and model output, applying back-door adjustment and counterfactual reasoning to derive a contrastive decoding strategy that perturbs attention maps at both visual encoder and LLM levels to mitigate hallucinations.
 
 ## Strengths
-- **Intervening on attention maps rather than visual inputs is a meaningful design choice.** While the operational mechanism parallels contrastive decoding, perturbing internal attention (rather than external inputs as in VCD) probes a different aspect of model behavior and represents a legitimate alternative contrastive signal (Section 3.2, Eqs. 1–7).
-- **The paper evaluates on multiple benchmarks** (VLind-Bench, POPE, MME, LLaVA-Bench) across two MLLMs (LLaVA-1.5, Qwen2-VL) and provides three variants (vision-only, language-only, multimodal), allowing analysis of where improvements originate (Tables 1–3, Figures 3–5).
-- **The layer ablation (Figure 7) is a useful finding**, showing middle layers (10–12) are most effective intervention targets, consistent with other findings on where meaningful representations reside in transformers.
-- **The paper is honest about failure modes** (Figure 9), showing an unsolved case where CausalMM fails to correct fine-grained attribute hallucination.
+
+- **Attention perturbation as a contrastive signal is a reasonable and potentially useful technique.** Unlike VCD which perturbs the visual input (adding noise to the image), CausalMM perturbs the attention maps directly. This is a distinct and sensible approach: by replacing attention weights with random/uniform/reversed/shuffled alternatives, the method generates counterfactual logits that capture the bias introduced by the model's attention patterns. The ablation in Section 4.3 (Figure 6) shows random attention works best, providing practical guidance.
+- **Dual-modality perturbation captures both bias sources.** The method addresses both visual priors (via visual encoder attention perturbation) and language priors (via LLM attention perturbation), and combines them in a multimodal collaborative setting (Eq. 12). This is a natural extension beyond methods that only address one modality.
+- **POPE results show genuine improvements, especially in adversarial settings.** On GQA adversarial, CausalMM-multimodal achieves 79.53 accuracy vs. 75.16 regular (+4.37), outperforming VCD (+1.17) and OPERA (−0.16). Similar patterns hold on MSCOCO adversarial (83.70 vs 78.63 regular, +5.07) and A-OKVQA adversarial (77.86 vs 74.26, +3.60). These are consistent, meaningful gains.
+- **Plug-and-play, training-free compatibility.** The method operates entirely at inference time by modifying attention maps, making it compatible with any MLLM architecture without retraining, as demonstrated across LLaVA-1.5 and Qwen2-VL.
 
 ## Weaknesses
 
 ### Fatal
-- **VLind-Bench multimodal variant equals the no-intervention baseline, directly contradicting textual claims.** The data (lines 202–205, 211–214) shows multimodal attention produces *identical* scores to regular on every VLind-Bench metric for both LLaVA-1.5 and Qwen2-VL (e.g., LLaVA Sck: regular=22.5, multimodal=22.5; Qwen Sck: regular=88.8, multimodal=88.8). Yet line 220 states "Our multimodal collaborative method has notably enhanced the baseline model's performance across all metrics," and line 218 claims "CausalMM method significantly improves the model's score on VLind-Bench." These claims are flatly contradicted by the paper's own data. VLind-Bench is the benchmark most directly designed to measure the language-prior bias that the paper targets, so the failure of the primary proposed variant to improve on it severely undermines the paper's core story. The abstract claims of "65.3% on 6 VLInd-Bench indicators" and "143.7 points on 6 indicators" are unverifiable from the presented data (5 indicators shown, best variant showing zero improvement).
+
+**VLind-Bench headline claims are directly contradicted by the paper's own data.** The abstract claims "a maximum score improvement of **65.3%** on 6 VLind-Bench indicators" and the introduction claims "**143.7** points on 6 indicators of VLind-Bench." Yet Figure 3's data table shows that the multimodal attention variant (the paper's main proposed method) produces scores **identical** to the regular baseline across all five sub-metrics for both models:
+
+- LLaVA-1.5: regular (Sck=22.5, Svp=35.0, Scb=48.8, Slp=65.0, LP=45.0) = multimodal (22.5, 35.0, 48.8, 65.0, 45.0)
+- Qwen2-VL: regular (88.8, 98.0, 68.0, 82.0, 52.0) = multimodal (88.8, 98.0, 68.0, 82.0, 52.0)
+
+Zero improvement. Furthermore, the vision-only and language-only variants actually **decrease** some scores (e.g., LLaVA-1.5 Sck drops from 22.5 to 15.0 with vision attention). The paper's own text compounds this problem: it claims the multimodal collaborative setting makes "a significant leap" (Section 4.2, paragraph 1) and that "CAUSALMM method significantly improves the model's score on VLind-Bench" (Figure 3 caption). No computation from the presented data can produce the 65.3% or 143.7-point figures. This is the paper's most prominent quantitative claim in the abstract, and it is unsupported.
 
 ### Major
-- **The causal framework is not genuinely instantiated; the operational mechanism reduces to contrastive decoding.** The paper constructs an SCM and invokes Pearl's back-door adjustment (Section 3.1–3.3), but the implementation never conditions on confounders $P_v$/$P_l$ (they are fixed model parameters at inference), the "interventions" are heuristic perturbations not derived from structural equations, and the token selection formula (Eq. 8) computes $\ell_i + \gamma(\ell_i - \ell_{cf,i})$ — structurally identical to contrastive decoding (compare VCD's formulation). The causal machinery (graph, back-door criterion, counterfactual reasoning) adds theoretical framing without adding theoretical power over simply saying "perturb attention, amplify the difference." This matters because the paper's central claim is that its contribution lies in treating priors as confounders under a causal framework, but the operational output of that framework is indistinguishable from a contrastive decoding variant.
 
-- **Notation errors in the causal graph undermine theoretical clarity.** Lines 73 and 75 list edges "$T_l \rightarrow A_v$" and "$P_l \rightarrow A_v$" (arrows to visual attention $A_v$) but describe them as "influence the MLLM's attention $A_t$" and "inform the MLLM's attention mechanism $A_t$" (language attention $A_t$). Whether $P_l$ confounds $A_v$ or $A_t$ changes the back-door paths and identification formula. This inconsistency calls into question whether the proof referenced in Sec A.1 uses the corrected or erroneous graph.
+- **The causal framework is decorative rather than derivational—the method reduces to contrastive decoding with attention perturbation.** The paper's central novelty claim is applying structural causal modeling with back-door adjustment and counterfactual reasoning to MLLMs. However, the actual implementation (Eqs. 9-12) computes token selection as $\arg\max \text{softmax}(\ell_i + \gamma(\ell_i - \ell_{cf,i}))$, which is structurally identical to VCD's contrastive decoding formula—the only difference is that counterfactual logits come from attention perturbation rather than visual input distortion. The SCM does not determine which attention to perturb, how to perturb it (random/uniform/reversed/shuffled), the decoding formula's specific form ($\max$, $\gamma$, $\log(\epsilon)$), or the intervention layer—all are chosen empirically. The paper never derives the token selection formula from the SCM or back-door adjustment. The claimed paradigm shift from "statistical correlations" to "causal relationships" is therefore unsupported: the method is contrastive decoding, and the causal framing adds no algorithmic content beyond what the perturbation mechanism already provides.
 
-- **Missing Qwen2-VL results on POPE.** The paper lists Qwen2-VL as a baseline model and tests it on VLind-Bench and MME, but Table 1 is restricted to LLaVA-1.5. Without POPE results for Qwen2-VL, the claim of cross-model effectiveness on the primary hallucination benchmark is incomplete (Table 1 caption: "We evaluate the POPE task accuracy of various MLLMs on the MSCOCO, A-OKVQA, and GQA datasets with LLaVA-1.5 under different decoding settings").
+- **The SCM contains notational errors that undermine confidence in the causal modeling.** In Section 3.1, the graph lists "$T_l \rightarrow A_v$: Language token embeddings $T_l$ influence the MLLM's attention $A_t$" and "$P_l \rightarrow A_v$: Language priors $P_l$ inform the MLLM's attention mechanism $A_t$." The arrows point to $A_v$ (visual attention) but the descriptions reference $A_t$ (LLM attention)—these should be $T_l \rightarrow A_t$ and $P_l \rightarrow A_t$. This is not merely a typo; it creates confusion about the causal graph's structure and whether the authors have carefully validated their own model. Additionally, the graph lacks the $T_i \rightarrow A_t$ edge, which represents how visual tokens are inputs to the LLM's attention—a critical architectural path in MLLMs.
 
 ### Minor
-- **VCD and OPERA are dismissed on VLind-Bench without data.** Section 4.2 states "other methods failed to achieve significant performance improvements in balancing modality priors" for LLaVA-1.5 on VLind-Bench, but no VLind-Bench numbers for VCD or OPERA are presented. This claim should be supported by numbers or removed.
-- **Ablation differences in Figure 6 are very small** (y-axis range 0.02–0.04), with no variance or significance information, making it hard to assess whether the observed differences among perturbation types are meaningful.
-- **GPT-4o evaluation (Table 3) shows differences of 0.1–0.3 points on a 10-point scale**, which is within the noise floor of LLM-as-judge evaluation. These differences should not be presented as strong evidence of improvement.
+
+- **POPE results are competitive but not uniformly dominant.** OPERA frequently achieves higher recall (e.g., MSCOCO Random: OPERA 85.26 vs CausalMM-multimodal 82.00; A-OKVQA Popular: OPERA 91.13 vs CausalMM 77.60). CausalMM's advantage is primarily in accuracy and precision, not across all metrics. The paper's claim of "superior performance" (Section 4.2) is overstated given the mixed results.
+
+- **The GPT-4o evaluation (Table 3) shows trivially small improvements.** The multimodal variant scores 85.0 on the "All" metric vs. 84.7 for regular—a 0.3-point difference on a 10-point scale. This is within noise and does not substantiate meaningful improvement.
+
+- **MME results are presented in figures with narrow y-axis ranges** (Figure 5: Perception 1450-1550, Cognition 420-460), which visually amplifies modest differences. Precise numerical comparisons are difficult from the bar charts alone, and the only detailed MME table (Table 2) covers just 4 sub-metrics for Qwen2-VL.
 
 ### Trivial
-- The "$\arg\max$ over softmax" in Eqs. 8–10 is mathematically equivalent to $\arg\max$ over the adjusted logits directly; the softmax normalization is redundant.
+
+None worth noting beyond what's already covered.
 
 ## Nice-to-Haves
-- Attention map visualizations before and after intervention would provide mechanistic evidence beyond output-level metrics.
-- An experiment comparing SCM-derived interventions to random perturbations of other model components would help disentangle the causal contribution from the contrastive contribution.
-- An explanation of why the multimodal variant equals regular on VLind-Bench — does combining vision and language contrastive signals cancel out?
+
+- A direct mechanistic analysis of how attention perturbation changes internal representations (hidden states, token representations) would strengthen the claim that the method addresses "causal effects" rather than simply providing a useful contrastive signal.
+- Attention map visualizations before and after perturbation would help readers understand what the method actually does to the model's focus.
+- Variance/significance reporting on POPE and MME results, given that many improvements are 2-5 percentage points.
 
 ## Removed Points
-These points are flagged to be removed, treat them with caution:
 
-- **"Confounders are never conditioned on, making them ineligible."** While technically correct that the paper doesn't explicitly condition on $P_v$/$P_l$ in the traditional Pearl sense (they're fixed at inference), the paper's Eq. 13 for $P_{effect,V}$ does explicitly condition on $I=\mathbf{I}, P_v=\mathbf{P}_v$ in the formal derivation. The gap is between the formal expression and the operational implementation, not a complete absence — but the mismatch remains a valid major concern (captured above).
-- **"The expectation $E_{A_i \sim \tilde{A}_i}$ is never actually computed."** The paper states "In all experiments we use direct sampling" (line 164), which is a standard simplification. This is more of a minor gap than a structural problem.
-- **Demanding standard deviations/confidence intervals for all results.** In large-scale benchmark evaluation in this field, single-run reporting is common. Moving to nice-to-have.
-- **Missing proofs in appendix.** Appendix sections are stripped by the parser; they exist in the original submission per the instructions.
-- **Formatting/style nitpicks** (softmax redundancy, $\log(\epsilon)$ terms) — these are minor mathematical observations, captured as trivial.
-- **Strength finder's claim about "strong empirical improvements on VLind-Bench"** — this conflicts with the verified fatal weakness showing multimodal = regular. Removed as a strength.
-- **Strength finder's claim about "principled ablation on counterfactual attention types" — the ablation exists (Figure 6) but the differences are tiny and insignificant, so "principled" is overstated. Demoted.
+These points are flagged to be removed, treat them with caution.
+
+- **Harsh Critic: "The back-door adjustment is never computed" and "Pv and Pl are fixed parametric properties, so summation is incoherent."** The paper references "Sec. A.1" for proof—the appendix (stripped from the parsed version) may contain this derivation. While the concern about fixed model properties is philosophically valid, many causal inference papers in ML treat model parameters as random variables in a population-level analysis, so this is not outright incoherent. The core issue—that the framework doesn't derive the actual method—is already captured in the Major weakness.
+
+- **Harsh Critic: "Counterfactual reasoning formulas mix observational conditioning with interventional notation in violation of Pearl's calculus."** This is technically nuanced. After a $do$-intervention on $A_i$, conditioning on $I$ and $P_v$ (which have direct paths to $O$ via $T_i$) is not automatically inconsistent—it simply doesn't change the conditional for $A_i$ itself. The notation is confusing but may not be formally wrong.
+
+- **Harsh Critic: "SCM omits the critical cross-attention path $T_i → A_t$."** While valid, the graph already has $T_i → O$ and $A_t → O$ as separate paths. The omission of $T_i → A_t$ is a simplification rather than a fundamental error, though it does reduce the fidelity of the causal model.
+
+- **Harsh Critic: "Direct paths $T_i → O$ and $T_l → O$ don't exist in transformer architectures."** Causal graphs are abstractions; these paths can represent the cumulative effect of tokens passing through the processing pipeline. This is a standard simplification in causal modeling.
+
+- **Strength Finder: "Principled causal framing over correlation-based approaches" and "CausalMM formalizes the relationship using SCM, enabling principled back-door adjustment."** These strengths are removed because they conflict with the verified Major weakness that the causal framework doesn't substantively contribute to the method. You cannot claim a "principled" framework as a strength when the framework doesn't derive the actual algorithm.
+
+- **Strength Finder: "Dramatic improvement on VLind-Bench" with "Figure 3 shows substantial gains across all five sub-metrics."** This strength is removed because it is directly contradicted by the data in Figure 3, which shows multimodal = regular across all five sub-metrics for both models.
+
+- **Harsh Critic: Demands for "direct comparison with attention-perturbation contrastive decoding without the causal framing."** This is a nice-to-have, not a required experiment. The method IS contrastive decoding with attention perturbation; the value-add of the causal framing (or lack thereof) is a conceptual point, not an experimental one.
 
 ## Novel Insights
-The finding that the multimodal collaborative variant produces *identical* results to the regular baseline on VLind-Bench while vision-only and language-only variants individually *degrade* performance (LLaVA: vision Sck drops from 22.5→15.0, language drops 22.5→11.2) suggests that combining vision and language contrastive signals may cancel each other's effects rather than synergizing. This pattern — where individual modality interventions hurt but the combination yields baseline performance — could indicate that the perturbations are not isolating causal effects but rather adding opposing biases that happen to cancel, which is consistent with the concern that the causal framework is not genuinely instantiated.
+
+The most revealing observation from this review is the disconnect between the paper's theoretical apparatus and its empirical substance. The paper builds an elaborate causal framework (SCM, back-door adjustment, counterfactual reasoning with do-calculus notation) but the actual method is a simple and reasonable technique—perturb attention maps and use the resulting logit differences as a contrastive signal during decoding. This technique could stand on its own merits without the causal dressing. The VLind-Bench data contradiction (multimodal = regular, yet claiming 65.3% improvement) is the most damaging finding, as it suggests either computational errors or selective reporting in the paper's headline results.
 
 ## Suggestions
-- Revise all claims about VLind-Bench improvements to match the actual data. The multimodal variant shows no improvement; either explain this result or correct the narrative.
-- To justify the causal framework beyond contrastive decoding, demonstrate that the SCM structure informs which perturbation is chosen — e.g., show that interventions derived from the graph outperform arbitrary perturbations of non-attention components.
-- Add Qwen2-VL results on POPE, or explicitly scope the POPE claims to LLaVA-1.5.
-- Fix the causal graph notation: $T_l \rightarrow A_v$ should either be $T_l \rightarrow A_t$ or the description should reference $A_v$.
 
-## Calibration Summary
+- **Immediately reconcile the VLind-Bench claims with the data.** Either the 65.3% and 143.7-point figures are computed from a metric or comparison not shown in the paper, or they are incorrect. Provide exact derivations or retract the claims.
+- **Honest framing:** Position the contribution as "contrastive decoding with dual-modality attention perturbation" rather than "a structural causal model with back-door adjustment." The attention perturbation idea is interesting and useful; the causal framework, as currently presented, weakens rather than strengthens the paper.
+- **Fix the SCM notational errors** ($T_l \rightarrow A_v$ and $P_l \rightarrow A_v$ should be $T_l \rightarrow A_t$ and $P_l \rightarrow A_t$).
 
-**High anchors (score > 7):** TAME (7.0) — MLLM hallucination decoding via attention eigenspectrum intervention; DoLa (7.25) — contrastive decoding via layer comparison; MLLMs Know Where to Look (7.0) — causal intervention study on visual perception. These papers combined genuine empirical improvements with clear, well-justified mechanisms, and their methods were clearly distinct from prior contrastive decoding approaches (or, like DoLa, were transparent about being contrastive decoding without overclaiming a causal framework).
+## Calibration
 
-**Medium anchors (score 4–6):** Latent Partial Causal Model (5.75) — causal framing for multimodal but confusing presentation; Unveiling Causal Relationships Among Tokens (4.67) — causal token analysis with heuristic decoding. These papers had interesting ideas but were hampered by gaps between causal theory and implementation, or limited experimental validation.
+**Anchors compared against:**
 
-**Low anchors (score < 3):** TRACER (3.0) — "causal" framework that reduces to perturbation-based attribution (LIME-like), reviewers flagged that "causality does not appear to play a major role in the algorithm"; H-QLoRA (2.0) — results numerically identical to baseline yet claimed as improvements.
+| Paper | Path | Avg Score | Comparison |
+|-------|------|-----------|------------|
+| TAME (anchor token intervention for MLLM hallucination) | `/home/wg25r/review_agent/human_reviews/zGb4WgCW5i.md` | 7.00 | Similar topic (attention-based MLLM hallucination mitigation, plug-and-play), but TAME has clean theory-meets-method alignment and no data contradictions. CausalMM is below this. |
+| DoLa (contrastive decoding for LLM hallucination) | `/home/wg25r/review_agent/human_reviews/Th6NyL07na.md` | 7.25 | Same technique class (contrastive decoding) with principled derivation. CausalMM is well below this. |
+| Visual Attention Sink (MLLM attention redistribution) | `/home/wg25r/review_agent/human_reviews/7uDI7w5RQA.md` | 5.75 | Similar topic (attention-based intervention), similar concerns about novelty vs. existing methods. But no data contradictions. CausalMM is below this. |
+| GACD (gradient-based contrastive decoding for MLLM hallucination) | `/home/wg25r/review_agent/human_reviews/zgXGNXkC0F.md` | 4.75 | Similar profile: addresses MLLM hallucination via contrastive decoding with overclaimed novelty. CausalMM is comparable but the VLind-Bench data contradiction is worse. |
+| DFITE (diffusion model for ITE, misapplied causal framework) | `/home/wg25r/review_agent/human_reviews/4u0ruVk749.md` | 3.00 | Similar issue: causal framework doesn't connect to the actual method. CausalMM is slightly above this because it has more substantial empirical results on POPE. |
+| IRIS (misapplied causal discovery) | `/home/wg25r/review_agent/human_reviews/zgM66fu0wv.md` | 2.50 | Causal framework fundamentally misapplied. CausalMM is above this because the attention perturbation method itself is reasonable. |
+| Overclaimed tabular learner | `/home/wg25r/review_agent/human_reviews/lf8QQ2KMgv.md` | 3.75 | Headline claims contradicted by own data. CausalMM is comparable—same core problem of data not supporting claims. |
 
-**Comparison:** CausalMM sits between the medium and low anchors. Like TRACER (3.0), it has a "causal" framework that operationally reduces to heuristic perturbations + contrastive adjustment. Like H-QLoRA (2.0), it claims improvements that are contradicted by its own presented data on the benchmark most relevant to its stated problem. However, unlike those low-scoring papers, CausalMM shows genuine (if modest) improvements on POPE for LLaVA-1.5, and the attention-level perturbation is a legitimate design choice. The VLind-Bench contradiction is the most damaging issue, as it concerns the benchmark that most directly measures the paper's stated problem (language prior bias). I place this below the medium anchors because of the data-claim contradiction on the core benchmark, but above the low anchors because the POPE results are real.
-
-**Score: 3.5**
+CausalMM sits between the 3.0-3.75 range occupied by papers with misapplied causal frameworks or overclaimed results contradicted by data, and the 4.75-5.75 range for papers with reasonable methods but some issues. The VLind-Bench data contradiction pulls it firmly toward the lower end, but the genuine POPE improvements (particularly in adversarial settings) keep it from the very bottom. Final score: 3.5.
 
 ## Score and Decision
+
+**Originality:** Low. The method is contrastive decoding with attention perturbation—structurally identical to VCD with a different perturbation target. The causal framework, claimed as the primary novelty, does not derive the algorithm.
+
+**Importance of research question:** Moderate. Mitigating MLLM hallucination from modality priors is important and timely.
+
+**Claims well supported:** Poor. The most prominent claim (65.3% VLind-Bench improvement) is directly contradicted by the paper's own data. The causal framework claims are not supported by the method's derivation.
+
+**Soundness of experiments:** Mixed. POPE results are reasonable; VLind-Bench results contradict the claims; MME results are presented with limited numerical detail.
+
+**Clarity:** Moderate. The paper is readable but contains notational errors in the SCM and confusing mixing of causal and observational language.
+
+**Value to community:** Low-to-moderate. The attention perturbation idea is useful, but the paper's framing and unsupported claims may mislead rather than help.
 
 MY FINAL SCORE: <pineapple>3.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

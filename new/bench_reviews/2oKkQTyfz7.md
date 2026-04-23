@@ -1,101 +1,104 @@
-Now I have sufficient information to write the final review. Let me synthesize everything.
+Now I have all the information I need. Let me compile the final review.
 
 ## Summary
 
-The paper introduces GSA-VLN (General Scene Adaptation for Vision-and-Language Navigation), a new task requiring VLN agents to continuously improve as they execute instructions in persistent environments through long-term memory and parameter adaptation. To evaluate this task, the authors create GSA-R2R, a dataset that significantly expands environmental diversity (150 buildings across 20 types from HM3D/MP3D, including OOD non-residential buildings) and instruction diversity (7 styles including OOD Scene and User instructions generated via a three-stage LLM-orchestrated pipeline). The authors benchmark existing adaptation methods and propose GR-DUET, which maintains a global topological graph across episodes with environment-specific pretraining, achieving the best results across all GSA-R2R splits.
+This paper introduces GSA-VLN (General Scene Adaptation for Vision-and-Language Navigation), a new task requiring VLN agents to execute navigation instructions within persistent environments and adapt over time via long-term memory and unsupervised parameter updates. To evaluate this task, the authors propose GSA-R2R, a large-scale dataset expanding from 29 to 150 evaluation buildings (including non-residential OOD environments) with 90,000 instructions across 7 styles generated via a three-stage LLM-orchestrated pipeline. The paper benchmarks existing VLN methods and adaptation techniques, and proposes GR-DUET, which maintains a global topological graph across episodes with environment-specific pretraining, achieving 8–11.6% SR improvements over vanilla DUET across all evaluation splits.
 
 ## Strengths
 
-- **Novel and important task formulation**: GSA-VLN addresses a meaningful gap between standard VLN evaluation (one-shot, frozen parameters) and real-world deployment in persistent environments. The formalization with memory bank (Eq. 1), memory access (Eq. 2), and parameter update (Eq. 3) cleanly distinguishes the task from standard VLN and TTA (Section 3.2).
+- **Substantial and diverse evaluation dataset**: GSA-R2R provides 150 buildings across 20 types (vs. R2R's 29 scenes/6 types), 90,000 instructions in 7 styles (vs. R2R's 6,522 in 1 style), and 2,905 unseen vocabulary words (vs. 545), as shown in Table 1. This directly enables the ID/OOD evaluation framing that the paper advocates.
 
-- **Substantially expanded dataset**: GSA-R2R addresses two concrete deficiencies in existing VLN benchmarks: expanding from 29 evaluation scenes (6 types) in R2R to 150 scenes (20 types) including OOD non-residential buildings, and from 1 instruction style to 7 styles. Table 1 provides direct quantitative comparison showing GSA-R2R has the greatest number and diversity of scenes, paths, and instructions among embodied navigation datasets.
+- **Well-motivated and clearly formalized task**: The GSA-VLN task is defined through the memory bank (Eq. 1), history-augmented policy (Eq. 2), unsupervised parameter update (Eq. 3), and environment-agnostic initialization objective (Eq. 4). This formulation cleanly distinguishes the task from standard VLN and lifelong learning, supporting both memory-based and optimization-based approaches.
 
-- **Insightful benchmarking that reveals failure modes**: The paper demonstrates that TTA methods (TENT, SAR) degrade performance because entropy-based confidence becomes unreliable after error accumulation in sequential decision-making (Section 4.3.2, Table 4), and that existing memory-based methods catastrophically fail due to overly long history embeddings. These are non-obvious findings valuable to the community.
+- **Large, consistent improvements across all splits**: GR-DUET achieves 11.6% SR gain over DUET on Test-R-Basic (69.3 vs. 57.7, Table 4), 8.5% on Test-N-Basic (56.6 vs. 48.1), and up to ~11% on User instruction splits (Table 5), consistently outperforming all baselines across residential/non-residential environments and Basic/Scene/User instruction types.
 
-- **Strong empirical improvements from GR-DUET**: The method achieves 11.6% and 8.5% SR improvements over vanilla DUET on Test-R-Basic and Test-N-Basic (Table 4), and up to ~11% SR improvement on Scene/User instruction splits (Tables 5–6). Ablation studies (Tables 7–8) confirm both the pretraining strategy and buffer-based graph construction contribute.
+- **Insightful benchmarking analysis of failure modes**: The paper demonstrates that TTA methods (TENT, SAR) hurt performance in sequential decision-making because error accumulation invalidates entropy as a confidence signal (Table 4: TENT drops SPL from 47.0 to 44.2), and that existing memory methods catastrophically fail with long histories (TourHAMT SR drops to 14.9%). These are non-obvious findings with practical implications.
 
-- **Three-stage instruction pipeline**: The speaker → VLM refinement → LLM role-playing pipeline (Section 3.3.2) is principled, with human evaluation (Table 2) confirming ~80% path-instruction alignment and high style distinctiveness (96.1% for Scene).
+- **Creative three-stage instruction pipeline**: The pipeline—speaker generation → VLM refinement using navigation success as a filter → LLM rephrasing with role-playing/character profiles (Figure 3)—addresses both noise in generated instructions and the lack of stylistic diversity, producing instructions validated through human evaluation (Table 2: ~80% path-instruction matching, 96.1% style distinctiveness for Scene instructions).
 
-- **Experimental rigor**: Evaluation with batch size 1 in online manner, three runs with randomly sequenced instructions reporting mean ± standard error, and consistent CLIP-ViT/B-16 features across baselines ensure fair comparisons.
+- **Principled ID/OOD categorization**: The residential/non-residential environment split and Basic/Scene/User instruction types provide a clean framework for analyzing generalization, with performance trends in Table 3 (residential > non-residential, Basic > User > Scene) confirming these categories capture meaningful distribution shifts.
 
 ## Weaknesses
 
 ### Fatal
-
 None.
 
 ### Major
 
-- **No demonstration that agents actually adapt *over time***: The paper's central claim is that GSA-VLN enables agents to "continuously improve as they execute instructions in a specific environment" (Section 3.2, abstract). Yet all reported results (Tables 3–6) are aggregate metrics over all episodes within a split, never showing performance as a function of the number of prior instructions executed in that environment. The most natural evaluation for an "adaptation" task—an episode-order performance curve (e.g., SR for episodes 1–100 vs. 101–200 vs. 201–300)—is entirely absent. Moreover, the very low standard errors across three random episode orderings (e.g., GR-DUET on Test-R-Basic: 69.3 ± 0.2 SR) suggest that episode order barely affects outcomes, which actively undermines the adaptation narrative. This is a significant gap between the framing ("continuously improve over time") and the evidence provided.
+- **No evidence that agents actually improve across episodes within a single evaluation run**: The paper's central and repeatedly stated claim is that agents "adapt to specific environments for improved performance over time" (abstract, lines 17, 23, 37, 69). Yet all reported metrics (SR, SPL, nDTW) are aggregates averaged across all 600 episodes per environment. No experiment, plot, or analysis shows that SR in later episodes (e.g., episodes 400–600) is higher than in earlier episodes (e.g., episodes 1–200). The buffer-size ablation (Table 8) provides *indirect* evidence that accumulated history helps—α=1 yields 57.6% SR vs. α=50 yielding 69.3%—but this compares different capacity settings, not temporal improvement within a single run. For a paper whose defining contribution is adaptation *over time*, the absence of per-episode learning curves is a significant evidential gap. A simple SR-vs-episode-number plot (averaged across environments and runs) would be the most natural and important evidence.
 
-- **Map access vs. adaptation conflation**: GR-DUET's primary mechanism is maintaining a global topological graph—essentially giving the agent a growing map. The 11.6% SR improvement over vanilla DUET (Table 4) could be entirely attributed to map access rather than "adaptation." The paper never isolates these factors. A critical control experiment—DUET with an oracle topological map at test time (no adaptation, but map provided)—would distinguish whether the gains come from "adapting" or from "having a map." Without this, the paper's theoretical framing around parameter adaptation (Eq. 3) and memory-based adaptation is not validated by the method itself, which performs *no* parameter updates at evaluation time and only updates the graph.
-
-- **GR-DUET does not implement the task's own formulation for parameter adaptation**: Eq. 3 presents parameter update via unsupervised learning on the memory bank as a core component of GSA-VLN. GR-DUET performs *no* parameter updates at evaluation time—it only updates the topological graph. Meanwhile, the optimization-based baselines (TENT, SAR, BT, MLM, MRC) that do update parameters either fail or provide marginal gains. This creates a tension where the proposed method doesn't implement the task's own theoretical formulation, and the methods that do implement it don't work. The paper acknowledges this indirectly in the conclusion ("we aim to explore more unsupervised learning approaches"), but the disconnect between task formulation and method remains a significant concern.
+- **The ablation does not cleanly isolate the graph mechanism's contribution from privileged pretraining**: Table 7 shows that GR-DUET without graph pretraining achieves 56.8% SR on Test-R-Basic—*worse* than vanilla DUET's 57.7%. The full model (pretrain + PREVALENT augmentation) achieves 69.3%, but the paper does not include the critical control: DUET with the same pretraining strategy (ground-truth full graphs + environment-specific fine-tuning + PREVALENT augmentation) but *without* the cross-episode graph at test time. Without this, the headline "8% improvement" and "11.6% SR increase" conflate the contribution of the proposed graph-adaptation mechanism with the contribution of the pretraining strategy and augmented data. While using ground-truth information during training and building from experience at test time is standard practice (DUET itself uses ground-truth connectivity graphs during training), the degree of privileged information here (complete topological maps) is substantial, and the paper does not disentangle its effect from the cross-episode graph mechanism itself.
 
 ### Minor
 
-- **Unfair comparison against memory-based baselines**: TourHAMT and OVER-NAV achieve catastrophically low performance (14.9% and 22.3% SR on Test-R-Basic, Table 4). The paper attributes this to "excessively long history embeddings as input, which confuses the model"—which is exactly what happens when methods designed for IVLN's ~6–100 episodes per environment are applied unmodified to GSA-R2R's 600 episodes. No accommodation is made (e.g., history truncation, sliding windows). While this reflects how these methods actually perform out-of-the-box, the authors should acknowledge this asymmetry more explicitly and note that these baselines are being evaluated outside their design regime.
+- **Memory-based baselines (TourHAMT, OVER-NAV) were not adapted for the longer-sequence setting**: These methods were designed for IVLN's 6–100 episodes per environment and catastrophically fail at 600 episodes (TourHAMT: 14.9% SR). The paper explains this as "excessively long history embeddings as input, which confuses the model" (Section 4.3.2), but no simple modifications (e.g., history truncation, sliding window) were tested. The comparison is informative about scalability but conflates architectural inadequacy with input-length limitations. The paper should more explicitly frame this as a scalability test rather than a direct comparison of memory mechanisms.
 
-- **Train-test graph quality mismatch not analyzed**: During pretraining, the agent receives the "complete ground truth topological map" (Section 4.1, line 182–183); during evaluation, the graph is built incrementally from potentially failed trajectories. This mismatch is acknowledged but not analyzed—e.g., how much does graph quality degrade, and how does graph completeness correlate with SR? This would strengthen the paper's understanding of its own method.
+- **Disconnect between task definition and proposed method**: The formal task definition includes unsupervised parameter updates (Eq. 3), yet GR-DUET keeps parameters fixed and only updates the graph. The paper notes that optimization-based methods (TENT, SAR) are ineffective, but does not reconcile the task definition's explicit support for parameter adaptation with its proposed method's avoidance of it. A brief discussion would clarify whether Eq. 3 is aspirational (defining the full task scope) or whether parameter adaptation was found to be infeasible.
 
-- **Instruction quality ceiling**: Table 2 shows 23.4% of Scene instructions don't accurately describe their path. This caps achievable SR and makes absolute numbers harder to interpret. The paper discusses this in the human evaluation but could provide more analysis of how this ceiling affects different splits.
+- **Small human evaluation sample**: The user study (Table 2) samples only 20 instructions from 90,000 to assess path-instruction alignment. While the results are encouraging (~80%), this sample is too small to establish reliability, particularly given that 20% of Basic instructions are estimated to be inaccurate—potentially introducing systematic noise into SR as a metric.
+
+- **t-SNE as sole diversity evidence**: Figure 4 uses t-SNE to demonstrate OOD-ness of Scene and User instructions, but t-SNE is known to exaggerate cluster separation and is sensitive to hyperparameters. Quantitative distribution shift metrics (e.g., MMD) would strengthen the claim.
 
 ### Trivial
-
-- The ablation in Table 8 uses α to represent both "proportion" and "buffer size," which is slightly confusing, though the paper does explain this choice (Section 4.4).
+None.
 
 ## Nice-to-Haves
 
-- **Episode-order performance curves**: Plot SR as a function of episode number within each environment (binned by execution order). This would directly validate the "continuous improvement" claim and is the single most impactful addition the paper could make.
-- **DUET + oracle map baseline**: A DUET variant given an oracle topological map at test time would isolate map access vs. adaptation contributions.
-- **Graph quality analysis at evaluation time**: Measuring how accurately the agent-built graph matches ground truth and correlating graph completeness with SR would address the train-test mismatch concern.
+- Per-episode learning curves (SR vs. episode number) would directly validate the paper's core claim and are the single most impactful addition possible.
+- A DUET+pretraining+augmentation baseline without cross-episode graph at test time would cleanly isolate the graph mechanism's contribution.
+- Simple adaptations of memory baselines (e.g., history truncation to last K episodes) would make the scalability comparison more informative.
+- Visualization of the global graph growing over episodes would illustrate the adaptation process.
+- Analysis of instruction accuracy impact on SR (conditioning on correct vs. incorrect instructions) would address concerns about metric validity.
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution:
+These points are flagged to be removed, treat them with caution.
 
-- **Harsh Critic's claim that "low standard errors actively contradict the adaptation narrative"**: The low standard errors mean that *across random orderings* the aggregate performance is consistent, but this doesn't directly contradict adaptation—it could mean that all orderings benefit similarly from adaptation on average. However, it does weaken the case that episode order matters, so a related but softened version of this point is kept as a Major weakness.
+- **"GR-DUET's improvement comes primarily from privileged pretraining, not from the adaptation mechanism"** (Harsh Critic #3, original framing): The original framing overstated the issue by claiming the improvement comes "primarily" from pretraining and calling the graph mechanism alone "worse than vanilla DUET." The 56.8% figure in Table 7 is GR-DUET *without pretraining training on how to use the graph*, not the "graph mechanism alone"—a model cannot effectively use a mechanism it wasn't trained to leverage. The pretraining teaches the model to utilize graph structure, and at test time the graph is built from actual experience (not privileged information). The concern about isolating contributions is retained as a Major weakness above, but the original "primarily from privileged pretraining" framing is misleading.
 
-- **Harsh Critic's claim about the motivating analogy being "misleading"**: The observation that GR-DUET's smallest gains come from instruction style adaptation (Scene: +8.5% vs. Basic: +11.6%) is an interesting analysis point but doesn't make the introduction misleading—the introduction motivates both spatial and stylistic adaptation, and GR-DUET improves on both.
+- **"ScaleVLN data leakage makes Table 3 odd"**: The paper explicitly marks ScaleVLN with † and explains the leakage (line 221–222). Including it is actually informative—it shows the upper bound when training data overlaps with evaluation data. Not a weakness.
 
-- **Data leakage concerns for EnvDrop speaker (Footnote 2)**: The paper discloses that "We include the evaluation splits in the training of EnvDrop to improve quality" (Footnote 2). This is a disclosure/completeness issue rather than a fundamental flaw in the dataset itself, since the speaker is a tool for instruction generation, not the evaluated agent. This is not a critical concern.
+- **"Proportion baseline is not realistic"**: The Proportion method in Table 8 is a legitimate ablation that compares random ground-truth subgraph provision vs. the memory buffer mechanism. It tests whether the gradual construction process matters vs. just having partial graph information. This is a reasonable design choice, not a weakness.
 
-- **ScaleVLN data leakage presentation**: The paper clearly marks ScaleVLN with a † symbol in Table 3 and provides a footnote (Footnote 3) explaining the leakage. The disclosure, while brief, is present. This is a presentation preference rather than a substantive flaw.
+- **"Conclusion contradicts findings about unsupervised methods"**: The paper shows existing unsupervised methods fail but concludes by saying future work will "explore more unsupervised learning approaches." This is a forward-looking statement about developing *better* unsupervised methods, not a contradiction. Minor at best.
 
-- **Demand for "adapted memory baselines" (TourHAMT/OVER-NAV with truncation)**: While it would be nice to see these baselines adapted to the new setting, requiring the authors to redesign competitor methods is unreasonable. The paper already demonstrates what happens with the out-of-the-box implementations and explains why they fail. This is a nice-to-have, not a major flaw.
+- **"Pretraining description is vague for reproducibility"**: This is a nitpick about implementation detail. The paper describes the key idea (providing complete ground truth topological maps during pretraining) and the fine-tuning strategy. Standard in the field.
 
-- **ID/OOD categorization verification**: The claim that HM3D residential buildings may not truly be "in-distribution" because they have different visual characteristics from MP3D is speculative without evidence. The paper's categorization is reasonable (residential = ID since training is on residential), and the performance gaps between R and N splits (Table 3) validate the categorization empirically.
+- **Missing related works**: Cannot verify existence of suggested references; removed per rules.
 
-- **Strength Finder's claim about "Figure 1 effectively motivates the task"**: Generic and does not provide specific evidence beyond what's obvious.
+- **Formatting/style nitpicks**: Removed per rules.
 
 ## Novel Insights
 
-The paper reveals an important distinction between two adaptation mechanisms in VLN: memory-based (graph/map building) and optimization-based (parameter updates). The empirical finding that the former works well while the latter largely fails in this setting—combined with the specific diagnosis that entropy-based TTA fails because "errors accumulate over time, making entropy measures meaningless after an incorrect step" (Section 4.3.2)—suggests that the VLN community's adaptation paradigm may need to shift from test-time parameter optimization toward structural memory accumulation for persistent-environment settings. However, the paper's own method doesn't fully bridge this gap, as it demonstrates "adaptation" only in the sense of accumulating spatial memory, without showing temporal improvement across episodes.
+The paper reveals a fundamental tension in sequential decision-making adaptation: entropy-based TTA methods (TENT, SAR) fail not because the adaptation objective is wrong per se, but because error accumulation in sequential settings corrupts entropy as a confidence signal—a finding that challenges the assumption underlying most TTA work. Similarly, the observation that Back-Translation helps for environment adaptation but not instruction adaptation (due to domain shift between authentic and styled instructions) highlights an asymmetry that future adaptation methods must address. The buffer-size ablation's inverted-U pattern (Table 8: α=50 best, α=100/150 declining) also suggests that more memory is not always better—excessively populated graphs create their own inefficiencies, an important practical consideration for persistent-environment systems.
 
 ## Suggestions
 
-- The single most impactful addition: report performance curves across episodes (e.g., SR for first 100 episodes vs. next 100 vs. last 100 within each building). Even if adaptation effects are small, reporting them (or their absence) is essential for the paper's core claim.
-- Add a DUET + oracle graph experiment to disentangle the contribution of map access from adaptation.
-- In the conclusion or discussion, explicitly acknowledge that GR-DUET demonstrates memory-based spatial accumulation but not temporal improvement or parameter adaptation, and frame the future work accordingly.
+- Add per-episode learning curves (SR as a function of episode number, averaged across environments) as the single most important missing analysis. Even a simple plot grouping episodes into bins (1–100, 101–200, ..., 501–600) would directly address whether adaptation occurs over time.
+- Run DUET with the same pretraining + PREVALENT augmentation but without the cross-episode graph to isolate the graph mechanism's contribution. This is the critical missing control in the ablation.
+
+## Evaluation Assessment
+
+**Originality**: The GSA-VLN task formulation is novel and well-motivated, addressing a genuine gap in VLN evaluation. The dataset contribution significantly advances environmental and instruction diversity over prior work. The method (GR-DUET) is a reasonable extension of DUET with a global graph mechanism, though the architectural novelty is moderate.
+
+**Importance of research question**: High. The persistent-environment adaptation problem is practically relevant and underexplored in VLN. The finding that existing adaptation methods fail in this setting is important for the community.
+
+**Claim support**: Partially supported. The aggregate improvements are real and consistent, but the core claim of "improved performance over time" lacks direct evidence. The ablation does not cleanly isolate the graph mechanism's contribution from the pretraining strategy.
+
+**Experimental soundness**: The benchmarking is comprehensive (8 baselines × 5+ evaluation splits) and the results are consistent. However, the missing per-episode analysis and incomplete ablation control are notable gaps.
+
+**Clarity**: Generally well-written with clear formalization and good use of figures/tables. The three-stage instruction pipeline and ID/OOD categorization are clearly presented.
+
+**Community value**: High. The GSA-R2R dataset with 150 buildings and 90K instructions is a substantial resource that enables new research directions in persistent-environment VLN. The benchmarking of existing methods provides valuable baselines.
 
 ## Score and Decision
 
-**Calibration anchors:**
+**Calibration anchors compared**:
+- **High**: EQA-MX (avg 8.0, Accept Spotlight) — novel embodied QA tasks + large dataset, cleaner experiments with minimal weaknesses. GSA-VLN has comparable dataset scale but more significant methodological gaps.
+- **Medium**: HAZARD (avg 6.75, Accept Poster) — novel dynamic-environment benchmark, relatively minor weaknesses. MrSteve (avg 6.5, Accept Poster) — episodic memory for Minecraft navigation, concerns about task simplicity and missing baselines. SRDF (avg 6.5, Accept Poster) — VLN data flywheel, strong results but generalization concerns. EVA-Bench (avg 5.75, Reject) — new benchmark + method but incremental method and metric issues. DA-Bench (avg 5.75, Reject) — comprehensive benchmark but outdated baselines.
+- **Low**: Z91rwXnJsw (avg 2.0, Reject) — visual object navigation with poor results. N581Nje6fH (avg 1.5, Reject) — long-horizon navigation with poor validation.
 
-High-scoring papers:
-- EQA-MX (avg 8.0, Accept/spotlight): Large-scale dataset with novel multimodal EQA tasks + well-matched VQ-Fusion method — stronger alignment between task formulation and method, comprehensive experiments with no gap between claims and evidence.
-- Selective Visual Representations for Embodied AI (avg 7.5, Accept/spotlight): Novel codebook approach with clear experimental validation.
+This paper sits between the medium-scoring anchors. Compared to HAZARD (6.75), it has a more substantial dataset contribution and formal task definition, but more significant methodological gaps (no per-episode analysis). Compared to MrSteve (6.5), it has a larger-scale dataset but similar concerns about incomplete evaluation. Compared to EVA-Bench (5.75, Reject), it has stronger contributions (dataset + task + method + analysis) and its weaknesses are less severe (EVA-Bench had incremental method and flawed metrics). The dataset contribution alone is comparable to accepted benchmark papers, but the two Major weaknesses prevent a higher score.
 
-Medium-scoring papers:
-- WebCanvas (avg 4.75, Withdrawn): Benchmark dataset with partial evaluation metric — partial coverage of the full task formulation, similar to GSA-VLN's gap between task definition and method.
-- CIL with Pre-trained Models (avg 4.25, Withdrawn): Benchmark + method where simple baseline beats SOTA, claimed adaptation not fully explored.
-- BeGin graph continual learning (avg 4.0, Withdrawn): Benchmark contribution with no novel method proposed.
-
-Low-scoring papers:
-- cPmLjxedbD (avg 1.0, Reject): No contributed techniques, no dataset, no evaluations — far below this paper.
-- MrGca1Q7mK (avg 1.5, Withdrawn): Algorithm never implemented — not comparable.
-
-This paper is substantially better than the low-band papers (real dataset, real method, real experiments). Compared to the high-band papers (EQA-MX at 8.0), it falls short because its method doesn't implement its own task formulation (no parameter adaptation, no episode-order analysis). Compared to the medium-band benchmark papers (WebCanvas at 4.75, BeGin at 4.0), this paper is stronger because GSA-R2R is a more substantial dataset contribution with a genuine (if incompletely validated) method and insightful failure mode analysis. The key tension is: this is a solid dataset paper with a method that works but doesn't validate the core adaptation claim. This lands it in the 5–6 range: the dataset contribution is meaningful, but the incomplete validation of the adaptation narrative and the map-vs-adaptation conflation are significant concerns that prevent acceptance without revision.
-
-MY FINAL SCORE: <pineapple>5.5</pineapple>
-MY FINAL DECISION: <orange>Reject</orange>
+MY FINAL SCORE: <pineapple>6.0</pineapple>
+MY FINAL DECISION: <orange>Accept</orange>
