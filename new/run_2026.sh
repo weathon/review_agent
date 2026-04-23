@@ -1,10 +1,10 @@
 export OPENAI_DEFAULT_MODEL="gpt-5.1"
-export HARSH_MODEL="glm-5.1" 
-export MERGER_MODEL="glm-5.1"
-export NEUTRAL_MODEL="glm-5.1"
+export HARSH_MODEL="moonshotai/kimi-k2.6" 
+export MERGER_MODEL="moonshotai/kimi-k2.6"
+export NEUTRAL_MODEL="moonshotai/kimi-k2.6"
 export CALIBRATION_SET="2026"
-export OUTPUT_CSV="results/bench_scores_glm-5.1_2026.csv"
-export MERGE_LOG="results/pipeline_whole_glm-5.1_2026.log"
+export OUTPUT_CSV="results/bench_scores_kimi-k2.6_2026.csv"
+export MERGE_LOG="results/pipeline_whole_kimi-k2.6_2026.log"
 export CONCURRENCY=10
 ollama serve & 
 git add .

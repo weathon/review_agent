@@ -4,6 +4,7 @@ export OPENAI_DEFAULT_MODEL="z-ai/glm-5.1"
 export HARSH_MODEL="claude_sdk:claude-sonnet-4-6"
 export MERGER_MODEL="claude_sdk:claude-sonnet-4-6"
 export NEUTRAL_MODEL="glm-5.1"
+export CALIBRATION_SET="2026"
 export OUTPUT_CSV="bench_scores_claude_sonnet_2026.csv"
 export MERGE_LOG="pipeline_whole_claude_2026.log"
 ollama serve & 
