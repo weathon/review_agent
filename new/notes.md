@@ -204,3 +204,13 @@ ICLR2025 unbalanced, random 200 sample, seed 2545463167。N=19 partial 结果:
 - calibration prompt 里的阈值必须写成硬数字 (>7, <3), 不要 `~7+` / `~3 or below`。`~` 等于给模型留了后门。
 - anchor 要求要带数值门槛 ("至少一篇 >7, 至少一篇 <3"), 不要写 "at least one low-scoring / high-scoring" 这种让模型自己定义 low/high 的话。
 - 修这类回归的最小成本方式: grep `.claude/projects/**/*.jsonl` 找 phrase 第一次出现在 `role=assistant` 的 session, 就能定位是哪一次对话引入的, 不用翻 git log 猜。
+
+### 更一般的 meta-教训 (AnchorReview 这轮踩坑总结)
+
+1. **Prompts are code.** 每次 prompt 编辑都要按 code diff 的标准 review, 读合并后的整 prompt, 不只看 diff 片段。小改动可以无声撤销几个小时前的工作。
+
+2. **反射性的 hedging 是警报.** 当被要求"soften"一条规则时, LLM 会默认补上 "use the center / use the median / be careful with outliers" 这类话术。这些 hedge 经常正好重新引入最初想避免的 bias。每次加新句子问自己: 是在移除一个约束, 还是在加一个反向约束?
+
+3. **Metric regression → bisect prompt.** 编辑后 metric 异常, 先 diff prompt 文件对比上次有效版本, 隔离新增的那几句。不要让 prompt 无节制增长, 冲突藏在长 prompt 里。
+
+4. **每个 guardrail 都有失败模式.** 硬的 anchor-range rule 在 LOW 端 over-correct, 软的 "center" rule 在 HIGH 端 under-correct。不是二选一, 而是每加一条规则都会在某个 regime 失效。所以加规则要 reluctant, 出问题立刻删, 不要堆。从更少规则开始, 让模型自己判断。
