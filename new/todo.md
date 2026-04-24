@@ -2,3 +2,7 @@ check if CSPaper has data leakage since it has web access, due to weird paper ge
 if the data leakage is from the pdf itself with "published xxx", check when removed
 
 mainly on 2026 mixed data, also validate on 2025 200/300 papers 
+
+
+not that ollama is bad, glm is bad 
+benchmark open source models?
