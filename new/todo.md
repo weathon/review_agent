@@ -10,3 +10,5 @@ retrival papers then pairwise one by one
 
 
 this made me relize that the retrivaled papers are not wide enough
+
+add the correction from ../human 
