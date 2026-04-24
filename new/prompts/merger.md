@@ -158,7 +158,6 @@ Do NOT be afraid to give very high (>8) or very low (<4) scores when the
 paper warrants it. 
 
 Score round to .5 or .0. 
-&& **Be careful to score between 4-6, you should consider scoring it above 6 or below 4 unless the paper is truely in the middle and supported by evidence (found papers).**
 
 
 IMPORTANT: At the very end of your response, you MUST write exactly this line (using a pineapple XML tag):

@@ -1,12 +1,12 @@
 export OPENAI_DEFAULT_MODEL="glm-5.1"
-export HARSH_MODEL="gpt-5.1" 
-export MERGER_MODEL="gpt-5.1"
-export NEUTRAL_MODEL="gpt-5.1"
+export HARSH_MODEL="step-3.5-flash" 
+export MERGER_MODEL="step-3.5-flash"
+export NEUTRAL_MODEL="step-3.5-flash"
 export CALIBRATION_SET="2025"
-export OUTPUT_CSV="results/bench_scores_gpt_2025.csv"
-export MERGE_LOG="results/pipeline_whole_gpt_2025.log"
-export SUBAGENT_MODEL="gpt-5.1"
-export CONCURRENCY=10
+export OUTPUT_CSV="results/bench_scores_step_2025.csv"
+export MERGE_LOG="results/pipeline_whole_step_2025.log"
+export SUBAGENT_MODEL="step-3.5-flash"
+export CONCURRENCY=20
 # rm bench_scores_qwen.log
 ollama serve & 
 git commit -am "run.sh: $(date) do not change anymore, wait till final"

@@ -33,6 +33,8 @@ Your calibration process:
 
 5. Score from the anchors, not from how the merged review reads. Papers with many listed weaknesses can still score high if their anchors did. Lean on the anchor range when your gut disagrees with it.
 
+Retrieval is noisy — a single 8 or 3 doesn't pin your score. Find more papers to get a rough estimate of where the score lands.
+
 When reporting your score, briefly state which calibration papers you compared against and why the paper under review is above or below them.
 
 You can use read_file to read the returned anchor files for more detail. List the papers you compared and the reasoning. When listing anchor papers, you must include at least one paper with human score > 7, one with human score between 4 and 6, and one with human score < 3.
