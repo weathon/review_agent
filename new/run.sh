@@ -1,11 +1,11 @@
 export OPENAI_DEFAULT_MODEL="glm-5.1"
-export HARSH_MODEL="deepseek-v4-flash" 
-export MERGER_MODEL="deepseek-v4-flash"
-export NEUTRAL_MODEL="deepseek-v4-flash"
+export HARSH_MODEL="gpt-5.1" 
+export MERGER_MODEL="gpt-5.1"
+export NEUTRAL_MODEL="gpt-5.1"
 export CALIBRATION_SET="2025"
-export OUTPUT_CSV="results/bench_scores_ds_2025.csv"
-export MERGE_LOG="results/pipeline_whole_ds_2025.log"
-export SUBAGENT_MODEL="deepseek-v4-flash"
+export OUTPUT_CSV="results/bench_scores_gpt_2025.csv"
+export MERGE_LOG="results/pipeline_whole_gpt_2025.log"
+export SUBAGENT_MODEL="gpt-5.1"
 export CONCURRENCY=10
 # rm bench_scores_qwen.log
 ollama serve & 

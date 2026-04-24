@@ -56,7 +56,7 @@ class ExtractedReview(BaseModel):
 
 def parse(review):
     response = client.chat.completions.parse(
-        model="gpt-5.4",
+        model="gpt-5.4-nano",
         messages=[
             {
                 "role": "system",
