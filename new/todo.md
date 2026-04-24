@@ -6,4 +6,7 @@ mainly on 2026 mixed data, also validate on 2025 200/300 papers
 
 not that ollama is bad, glm is bad 
 benchmark open source models?
-retrival papers then pairwise one by one 
+retrival papers then pairwise one by one
+
+
+this made me relize that the retrivaled papers are not wide enough

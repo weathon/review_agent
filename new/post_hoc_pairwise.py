@@ -56,7 +56,7 @@ class ExtractedReview(BaseModel):
 
 def parse(review):
     response = client.chat.completions.parse(
-        model="gpt-5.4-mini",
+        model="gpt-5.4",
         messages=[
             {
                 "role": "system",
@@ -132,7 +132,8 @@ rating = pd.read_csv("../iclr2025/ratings.csv")
 reviews = os.listdir("bench_reviews")
 with open("pair_wise.csv", "w") as f:
     f.write("paper_id,gt_score,pred_score\n")
-
+import random
+random.shuffle(reviews)
 for review_name in reviews:
     print(review_name)
     if review_name.split(".")[0] not in rating["paper_id"].values:
@@ -151,13 +152,19 @@ for review_name in reviews:
 
     print(anchors)
     reviewer1_string = review
+    scores = []
+    for anchor in anchors:
+        scores.append(human_review_score_index[f"{anchor}.md"])
+
+    print(scores)
+    if max(scores) - min(scores) < 4:
+        print(f"[DEBUG ONLY] Skipping {review_name} because the score difference between anchors is too small.")
+        continue
+    futures = []
     with ThreadPoolExecutor(max_workers=len(anchors)) as executor:
-        futures = []
-        scores = []
         for anchor in anchors:
             with open(f"../human_reviews/{anchor}.md", "r") as f:
                 review_content = f.read().split("## Human Reviews")[1]
-            scores.append(human_review_score_index[f"{anchor}.md"])
             futures.append(executor.submit(compare_reviews, reviewer1_string, review_content))
         
     pred_score = estimate_score(scores, [f.result() for f in futures])

@@ -184,3 +184,23 @@ ICLR2025 unbalanced, random 200 sample, seed 2545463167。N=19 partial 结果:
 ### TODO
 
 - 检索更多 paper 来对比 (现在只用 review 里 explicit 提到的 anchor, 数量少且偏向 merger 自己已经看过的; 应该再额外 retrieve 一批 topic-similar paper 进 pair-wise 池, 让 BT 估计更稳, 也覆盖更广的 score range)。
+
+---
+
+## 2026-04-24  教训: Claude Code 改 prompt 时偷偷加回 "don't pin on extremes" 的 hedge
+
+`prompts/cal_with_claude.md` 和 `cal_with_openai.md` 的 calibration 指令里长期有一句:
+
+> "Retrieval is noisy — a single 8 or 3 doesn't pin your score. Use the center of the anchor cluster, weighted by topical similarity, and move outside that range only if the paper clearly beats or falls below most of the anchors."
+
+这句是 2026-04-18 23:34 UTC 的一次 Claude Code 会话里 (session `9f2e2e6b-adbc-4d1e-97c6-c5de01660fe7`) 被 assistant 自己加进 prompt 的, 当时用户的意图只是去掉 caps / 语气强调 ("you still have so many emphize in it, just not in caps"), 不是让模型加新规则。
+
+这句 + 同文件里"~7+" / "~3 or below"的软阈值 + "at least one low/medium/high anchor" 不给数字阈值, 组合起来直接把 merger 推回"不敢给极端分、中心化到 4-6"的老路, 正是 04-17 调查里最头疼的 regression mode。换句话说: **之前花了很长时间 + 很多 API 钱调出来的 extreme-score calibration, 被 Claude Code 一次无关的 prompt cleanup 静悄悄抹掉了。**
+
+### 教训
+
+- Claude Code 改 prompt 文件时会主动"润色"周边句子, 哪怕用户只让它改 tone / caps / 格式。每次它改 prompt 一定要 `git diff` 看完再 accept, 不能只看被要求改的那几行。
+- prompt 里的 "soft hedge" (比如 "noisy", "don't pin", "move outside only if clearly…") 对 calibration 是毒药: LLM 会优先服从最保守的那一条, extreme anchor 的信号被 hedge 吃掉。
+- calibration prompt 里的阈值必须写成硬数字 (>7, <3), 不要 `~7+` / `~3 or below`。`~` 等于给模型留了后门。
+- anchor 要求要带数值门槛 ("至少一篇 >7, 至少一篇 <3"), 不要写 "at least one low-scoring / high-scoring" 这种让模型自己定义 low/high 的话。
+- 修这类回归的最小成本方式: grep `.claude/projects/**/*.jsonl` 找 phrase 第一次出现在 `role=assistant` 的 session, 就能定位是哪一次对话引入的, 不用翻 git log 猜。

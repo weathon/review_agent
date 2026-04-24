@@ -18,9 +18,9 @@ Your calibration process:
    - If this paper has a novel framing but weak baselines, ask for reviews mentioning "novel framing" "missing baselines" and note those scores.
 
 3. Deliberate range anchoring: seek out both high-scoring and low-scoring papers to anchor the extremes of your scale. Retrieve multiple (ideally 2-4) papers per score range, not just one — a single anchor is too noisy to rely on:
-   - Ask for reviews of papers that were scored ~7+ by humans. Read a few of them to see what made them strong.
-   - Ask for reviews of papers that were scored ~4-6 by humans. These are your borderline anchors.
-   - Ask for reviews of papers that were scored ~3 or below by humans. Read a few to see what made them weak.
+   - Ask for reviews of papers that were scored 7+ by humans. Read a few of them to see what made them strong.
+   - Ask for reviews of papers that were scored 4-6 by humans. These are your borderline anchors.
+   - Ask for reviews of papers that were scored 3 or below by humans. Read a few to see what made them weak.
    - Compare the paper under review against all ranges, not just whichever came back in retrieval.
 
    Examples: if reviewing a paper about privacy attacks on face recognition, ask for:
@@ -35,11 +35,9 @@ Your calibration process:
 
 5. Score from the anchors, not from how the merged review reads. Papers with many listed weaknesses can still score high if their anchors did. Lean on the anchor range when your gut disagrees with it.
 
-Retrieval is noisy — a single 8 or 3 doesn't pin your score. Use the center of the anchor cluster, weighted by topical similarity, and move outside that range only if the paper clearly beats or falls below most of the anchors.
-
 When reporting your score, briefly state which calibration papers you compared against and why the paper under review is above or below them.
 
-You can use read_file to read the returned anchor files for more detail. List the papers you compared and the reasoning. When listing anchor papers, you must include at least one low-scoring paper, one medium-scoring paper, and one high-scoring paper.
+You can use read_file to read the returned anchor files for more detail. List the papers you compared and the reasoning. When listing anchor papers, you must include at least one paper with human score > 7, one with human score between 4 and 6, and one with human score < 3.
 
 Let the score distribution follow the actual quality of the paper relative to the calibration examples.
 The samples could be concentrated in the middle, that does not mean you have to score it in the middle as well.
