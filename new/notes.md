@@ -156,3 +156,31 @@ ICLR2025 unbalanced, random 200 sample, seed 2545463167。N=19 partial 结果:
 
 - 这次是 **unbalanced random sample**, gt 分布本身就集中 (bin 6 占 33%), 所以 decision accuracy 看起来高一部分是 sample 本身偏 middle。Pearson 0.83 不受这个影响因为是 scale-invariant, 但 MAE 和 decision_match 在 balanced sample 上会比现在难看。
 - 这些改动是 **组合拳**, 单独拿任何一个单改动都只能移动 0.5-1 分, 效果不显著。只有多个改动一起上才打开极端分的 ceiling 和 floor。
+
+---
+
+## 2026-04-24  Pair-wise post-hoc scoring (`post_hoc_pairwise.py` + `pair_wise.py`)
+
+不再让 pipeline 直接出一个绝对分数, 而是用 pair-wise 比较把 pipeline review 锚到已知人类分数上, 反推出一个连续分。
+
+### 流程 (`post_hoc_pairwise.py`)
+
+1. **parse**: 用 GPT-5.4-mini 把 bench review 抽成 normalized Summary/Strengths/Weaknesses, 同时抽出 review 里实际引用过的 anchor 文件名 (e.g. `DvU8ijSn1p`)。没有 anchor 就 skip。
+2. **anchor lookup**: 对每个 anchor 找 `../human_reviews/<id>.md` (取 `## Human Reviews` 后的人类原文) 和 `human_review_score_index.pkl` 里的人类分数。任何一个 anchor 缺人类 review 就整篇 skip。
+3. **pair-wise compare** (`compare_reviews`): 给 GPT-5.4 两个 review (target pipeline review + 一个 anchor 的 human review), 用随机 5 字母代号防 position/name bias, 让它判哪一篇 paper 质量更高。返回 1=target 赢, 0=target 输。多个 anchor 用 ThreadPoolExecutor 并发跑。
+4. **Bradley-Terry 反推分数** (`estimate_score`): 已知 anchor 分数 + target 对每个 anchor 的胜负, 用 BT 模型 `P(target beats anchor) = sigmoid(target - anchor)` 做 1-D MLE (`scipy.optimize.minimize_scalar`, bounded), 解出 target 的 latent score。
+5. 写 `pair_wise.csv` (paper_id, gt_score, pred_score)。
+
+### 评估 (`pair_wise.py`)
+
+读 `pair_wise.csv`, 算 Spearman / Pearson 看 pred 和 ICLR2025 `avg_score` 的 rank/linear 相关。
+
+### 为什么这么做
+
+- 直接打分有 "挤在 4.5-5.5" 的 calibration 病 (见 04-17 的调查)。pair-wise 比绝对打分容易 — LLM 判 "A 比 B 好" 比判 "A=6.5" 稳, 也不依赖 model 自己有没有 internal 分数尺。
+- BT 把 pair-wise 的离散输赢转回连续分, 而且只要 anchor 自己的分数覆盖广, target 分数就能落在合理区间, 不会被 calibration drift 拖回 middle。
+- Anchor 是 pipeline review 自己引用过的 paper, 已经 topic-relevant, 不需要额外 retrieval。
+
+### TODO
+
+- 检索更多 paper 来对比 (现在只用 review 里 explicit 提到的 anchor, 数量少且偏向 merger 自己已经看过的; 应该再额外 retrieve 一批 topic-similar paper 进 pair-wise 池, 让 BT 估计更稳, 也覆盖更广的 score range)。

@@ -1,62 +1,111 @@
-## Summary
+Now let me search for calibration anchors.Now I have enough to write the full review. Let me compile all my findings.---
 
-This paper proposes Tabby, a post-training architectural modification for transformer-based LLMs that replaces select MLP or language-modeling-head blocks with column-dedicated parameter sets (framed as Mixture-of-Experts layers) to improve synthetic tabular data generation. The authors evaluate multiple variants (MMLP, MH, MMLP-MH) across six standard datasets and introduce a per-column loss tracking diagnostic. While the problem motivation is timely and some empirical observations are useful, the central empirical claims are inconsistent with the paper's own results table and the main comparisons are structurally confounded by uncontrolled parameter scaling.
+## Summary
+TABBY introduces a Mixture-of-Experts (MoE) post-training architecture modification to transformer-based LLMs for tabular data synthesis. By replacing standard MLP blocks or LM heads with column-dedicated expert sets (MMLP and MH variants), the paper claims higher-fidelity synthetic data generation. Experiments on six tabular datasets show that Plain-trained Tabby MH outperforms prior LLM-based tabular synthesis methods on 4/6 datasets in MLE, and matches real-data performance on the three classification benchmarks.
+
+---
 
 ## Strengths
 
-- **Per-column training diagnostics.** Tabby’s column-separate loss formulation yields fine-grained visibility into which columns a model struggles to learn (Figure 4, Section 4.3). This is a practical and genuinely novel diagnostic tool for tabular synthesis that standard monolithic losses cannot provide.
-- **Honest baseline observation.** The paper shows that simple left-to-right “Plain” training without shuffling or pretraining often matches or outperforms far more elaborate LLM pipelines (GReaT/TapTap/Tabula) (Table 2). This is a valuable negative result for the community.
-- **Strong performance on select datasets.** Plain-trained Tabby MH achieves the best overall MLE on the House dataset (0.75) and is competitive on several others, while successfully generating valid samples on Rainfall where prior LLM methods fail completely (Table 2, Section 4.1).
+- **Strong empirical performance of Plain MH Tabby on classification datasets (Table 2):** Tabby MH under Plain training matches or exceeds the real-data MLE ceiling on Diabetes (74.3 ± 0.4 vs. 73.3), Travel (87.7 ± 1.2 vs. 87.5), and Adult (84.5 ± 0.2 vs. 84.5) — something no prior method achieved on all three simultaneously.
+
+- **Robustness advantage on the Rainfall dataset (Table 2):** GReaT NT fails to generate any valid samples on Rainfall in any of three runs (N/A*), while Plain Tabby MH successfully generates data in all runs and achieves the best MLE of 0.58 among all methods — a qualitative failure mode the paper honestly documents with the asterisk convention.
+
+- **Identification of a strong and overlooked baseline (Plain training, Section 4.0.1):** The paper shows that a simple, fixed-column-order LLM fine-tuning baseline with no shuffling substantially outperforms GReaT-family methods on several datasets. This finding directly challenges the field's reliance on more complex column-shuffling techniques and is a genuine, transferable insight.
+
+- **Comprehensive empirical table (Table 2):** 15+ model and training-technique combinations across 6 datasets with variance over 3 runs, covering classification, regression, MLE, and discrimination metrics — more thorough than typical tabular synthesis papers.
+
+- **Per-column loss monitoring as a training diagnostic (Figure 4, Section 4.3):** Because each column's loss is computed separately, practitioners can identify columns that are slow to learn (e.g., Median Income) or start very high but converge (e.g., Occupancy). This is a concrete, practical advantage over single-scalar-loss baselines.
+
+---
 
 ## Weaknesses
 
 ### Fatal
-None. The methodology is not fundamentally invalid; however, the interpretation of results is sufficiently flawed that the core claims are not credibly established.
+None.
 
 ### Major
 
-- **Empirical claims are directly contradicted by Table 2.** Section 4.1 states: “*Tabby models achieve the highest MLE in 4 out of 6 datasets*.” Table 2 shows that Tabby is strictly highest overall on only **one** dataset (House). On Diabetes, the best Tabby variant (GTT MMLP-MH, 75.3) merely **ties** with the Non-Tabby Plain baseline (75.3); on Adult, Plain MH (84.5) **ties** with Non-Tabby Plain (84.5); and on Travel, Abalone, and Rainfall, Tab-DDPM outperforms every Tabby variant. The abstract’s claim of “higher-quality synthetic data for 4 out of 6 datasets” and the conclusion’s claim of “two out of three evaluated datasets” (line 365) are similarly inconsistent with the evidence presented. A paper whose headline claims are directly refuted by its own results table cannot stand without major revision.
-- **Uncontrolled parameter scaling confounds architectural claims.** Tabby MH increases model parameters from 80M to 270M (Table 3), and MMLP variants increase them further. Yet every LLM baseline in Table 2 uses the 80M Distilled-GPT2. Because parameter count is a primary driver of language-model performance, Claims 1 and 2 are structurally confounded: the observed gains may reflect increased capacity rather than the claimed architectural inductive bias of column-dedicated experts. The paper contains no parameter-matched non-Tabby baseline (e.g., standard GPT-2 Medium or a width-scaled Distilled-GPT2), so the experimental framework cannot isolate the architectural effect.
-- **Core “Gated MoE” mechanism is underspecified.** The submission advertises “Gated Mixture-of-Experts layers” (Abstract, Section 2), yet Section 3.1 describes only that “the *i*-th column is modeled by *L*_{a,i}” with no gating function, no routing logic, and no explanation of how variable-length token sequences are mapped to fixed experts during autoregressive generation. Without this description the mechanism is not fully reproducible, and the “MoE” framing may be a misnomer for simple position-dependent layer duplication.
+- **Parameter count confound undermines the central mechanistic claim (Tables 2 & 3):** Tabby MH expands the parameter count by a factor of V (the number of columns). Table 3 explicitly reports this: NT Distilled-GPT2 has 80M parameters while MH DGPT-2 has 270M (3.4×). No parameter-matched dense baseline is ever compared against. The paper attributes gains to the "dedicated expert per column" routing mechanism (Sections 3.1, 4.4), but this cannot be distinguished from a plain parameter-scaling effect without a controlled experiment. This is the most consequential methodological gap: if a 270M-parameter dense GPT-2 achieved similar results, the entire MoE routing contribution collapses to a scale story.
+
+- **Expert routing under GReaT column-order shuffling is unexplained (Sections 3.1–3.3):** Section 3.1 states "the i-th column in the dataset is modeled by L_{a,i}." GReaT training (Section 4.0.1) randomizes the order ℓ_1, ℓ_2, …, ℓ_V at every step. The paper never clarifies whether expert selection is identity-based (column v_i always activates expert i regardless of its position in the sequence) or position-based (the j-th token position activates expert j). If position-based, different columns are processed by different experts each step, defeating the "dedicated expert per column" purpose. If identity-based, the mechanism for tracking which expert to activate for a given column in an arbitrary sequence is not described. This ambiguity is potentially load-bearing: it may explain why GReaT+Tabby consistently underperforms Plain+Tabby across Table 2, yet the paper provides no analysis or explanation of this pattern.
+
+- **MMLP and MMLP-MH catastrophically fail on regression datasets (Table 2):** Plain MMLP achieves R² = 0.00 ± 0.00 on House (vs. Plain NT at 0.70 ± 0.11) and Plain MMLP-MH also achieves 0.00. This is not a marginal underperformance — these variants are completely non-functional on a major dataset category. The paper does not mention, let alone analyze, this failure. Since MMLP and MMLP-MH are two of the three Tabby variants tested, the paper's scope of applicability is implicitly restricted without being stated. Understanding this failure mode is important for establishing Tabby's actual use cases.
 
 ### Minor
 
-- **MMLP variants systematically underperform, undermining generality.** The paper presents both MMLP and MH as core variants, yet Table 2 shows MMLP and MMLP-MH frequently collapse or degrade performance (e.g., Plain MMLP on Adult: 77.4 vs. NT 84.5; Plain MMLP-MH on House: 0.00 vs. NT 0.70). Only MH performs reliably. Because the paper offers no diagnosis for this failure, the evidence supports at best a narrow LM-head modification rather than a general architectural contribution.
-- **Conclusion contains factual errors.** The conclusion states results are measured with a “Decision Tree Classifier” (Section 5), but the paper explicitly uses random forest throughout (Section 4.0.3). It also claims evaluation on “two out of three evaluated datasets,” contradicting the body’s six-dataset evaluation.
+- **Internal inconsistencies in the conclusion:** The conclusion (Section 5) states "Tabby reaches parity with non-synthetic data in two out of three evaluated datasets, according to machine learning efficacy with a Decision Tree Classifier." Multiple errors: (a) the evaluation used a Random Forest (Section 4.0.3), not a Decision Tree Classifier; (b) "two out of three evaluated datasets" conflicts with six datasets being evaluated in Section 4.1 and parity on three classification datasets claimed in the abstract and Section 4.1. These are straightforward internal inconsistencies that erode reader confidence.
+
+- **Weak evidence base for Claim 2 (Section 4.2):** The model-size scaling experiment uses a single dataset (a 6-column, 5160-row subset of House), only 5 training epochs (vs. 50 in Section 4.1), and a single pair of model comparisons (DGPT-2 vs. Llama). The conclusion that "Tabby allows smaller LLMs to achieve fidelity more similar to that of LLMs with higher parameter counts" is drawn from this narrow evidence. This claim would need at least the same six-dataset scope as Claim 1 to be credible as a general architectural property, and ideally would compare Tabby DGPT-2 to a parameter-matched dense model.
 
 ### Trivial
-None.
 
-## Nice-to-Have
-- A parameter-matched non-Tabby baseline (e.g., GPT-2 Medium or width-inflated Distilled-GPT2) to disentangle capacity from architecture in Table 2.
-- Visualization or formal description of the expert selection mechanism (learned gating, hard-coded column indexing, or token-triggered switching) to justify the “Gated MoE” label.
-- An analysis of why MMLP fails where MH succeeds, or a reframing of the contribution around MH alone.
+- The description of the routing mechanism uses the term "Gated Mixture-of-Experts" in the title/citations but implements a fully deterministic, hard routing (column index → expert). There is no learned gate. This minor terminological mismatch between the Shazeer (2017) citation and the actual mechanism could be clarified with one sentence.
+
+---
+
+## Nice-to-Haves
+
+- A parameter-matched ablation (e.g., full GPT-2 Medium or Large at ~270M parameters, as a dense baseline) would definitively establish whether improvements come from the routing mechanism or from scale.
+- An ablation comparing position-based vs. identity-based routing under GReaT would clarify whether the mechanism functions as intended under column shuffling, and would explain the consistent GReaT+Tabby vs. Plain+Tabby gap.
+- Expanding the Claim 2 experiment to all six datasets with the same 50-epoch budget would substantially strengthen the architectural scaling claim.
+- Analysis of why MMLP fails on regression: are numerical columns particularly poorly served by MoE MLPs? This would clarify the scope of each Tabby variant.
+
+---
 
 ## Removed Points
-These points are flagged to be removed; treat them with caution.
-- **LoRA confound in Section 4.2:** The observation that Llama 3 uses LoRA while Distilled-GPT2 does not is true but explicitly disclosed by the authors. It is a minor training-regime difference, not a hidden confound.
-- **Plain training “weakens the case for architectural modification”:** The fact that simple baselines are strong is an empirical finding the authors report honestly. This is a strength of intellectual honesty, not a weakness.
-- **Missing appendix proofs or references:** The parser strips appendices from all papers; these exist in the original submission and should not be criticized.
+
+*These points are flagged to be removed — treat them with caution.*
+
+- **Harsh Critic: "Gated MoE" is misleading terminology (Section 3.1).** The paper cites Shazeer et al. (2017) for MoE but uses deterministic routing. This was classified as a trivial terminological imprecision rather than a substantive structural error; the mechanism is described correctly in the equations regardless of the label.
+
+- **Harsh Critic: EOC token initialization not specified (Sections 3.2–3.3).** The paper introduces `<EOC>` without detailing tokenizer vocabulary changes or initialization. Under the hard rule on trivial implementation details, this is not a substantive weakness — it is a minor reproducibility note about a small engineering decision.
+
+- **Harsh Critic: Claim 3 (per-column loss tracking) "inflates apparent scope."** While the criticism that observational training byproducts do not constitute a research contribution has merit, the per-column loss diagnostic is presented honestly and modestly. It is retained as a minor strength but removed from the "weakness" roster.
+
+- **Strength Finder: "Tabby enables smaller models to punch above their weight class" (Table 3/Figure 3).** This strength directly conflicts with the major weakness about the parameter count confound. A 270M-parameter model outperforming an 80M-parameter model is not architecturally surprising. Since the weakness wins when strength and weakness conflict, this strength is removed from the main review.
+
+- **Harsh Critic: "Plain NT turns out to be quite competitive — contributions are entangled."** While the entanglement point is partially valid, the paper's value-add is clearly the Tabby MH architecture, and Plain MH consistently beats Plain NT. The contribution is not fully disentangled from Plain training gains but this is already covered under the parameter confound weakness.
+
+---
 
 ## Novel Insights
-None beyond the paper's own contributions. The per-column loss diagnostic and the Plain-training negative result are the most genuinely useful observations, though they are secondary to the overstated architectural claims.
+
+The most genuinely underappreciated finding in the paper is not the MoE routing itself but the Plain training baseline result: a plain fixed-order LLM fine-tuning with no shuffling beats GReaT-family methods (which use column-order randomization, pretraining on tabular corpora, and categorical encoding tricks) on most datasets. This suggests that the column-shuffling technique central to GReaT may introduce distributional artifacts that hurt more than help, and that the community has been over-engineering the training pipeline relative to what a simpler approach can already achieve. If this finding holds broadly, it constitutes an important correction to prior LLM-based tabular synthesis literature.
+
+---
 
 ## Suggestions
-1. **Correct all empirical claims to match Table 2.** Rewrite the abstract, Section 4.1, and conclusion to accurately reflect that Tabby is best on only a minority of datasets and that the Non-Tabby Plain baseline is highly competitive.
-2. **Add a parameter-matched baseline.** Include a ~270M parameter non-Tabby model in Table 2 to isolate whether the MH modification outperforms simple width scaling.
-3. **Specify the routing mechanism.** If expert selection is fixed by column index, state this clearly and justify why it constitutes a meaningful architectural bias; if it is learned, show gate distributions.
-4. **Focus on MH or explain MMLP failure.** If MH is the only reliable variant, center the paper on that and either explain MMLP’s poor performance or drop it.
+
+1. Add a 270M-parameter dense GPT-2 baseline (GPT-2 Medium/Large) evaluated on the same six datasets. If Tabby MH DGPT-2 (270M) outperforms it, the routing mechanism gets credit; if not, the paper's story needs to be reframed around scale.
+2. Explicitly state and ablate the routing policy (position-based vs. identity-based) under GReaT shuffling, and explain the consistent performance gap between GReaT+Tabby and Plain+Tabby.
+3. Fix the conclusion: replace "Decision Tree Classifier" with "Random Forest," and correct the dataset count ("three out of six" or "three out of three classification datasets").
+4. Provide a brief diagnostic analysis of why MMLP fails on the House regression dataset, and scope the recommendations accordingly.
+
+---
 
 ## Score and Decision
 
 **Calibration anchors:**
-- **High:** TabSyn (`/home/wg25r/review_agent/human_reviews/4Ay23yeuz0.md`, avg 6.75, Accept oral) — solid tabular synthesis with sound experiments and clear claims. Tabby is well below this due to confounded comparisons and claim-table contradictions.
-- **Medium:** TabDAR (`/home/wg25r/review_agent/human_reviews/kkGIbmpCHU.md`, avg 4.75, Reject) — autoregressive tabular synthesis with notation and scope weaknesses but a sound core method. Tabby has more severe claim contradictions.
-- **Low:** j5EbZEyK9I (`/home/wg25r/review_agent/human_reviews/j5EbZEyK9I.md`, avg 4.50, Reject) — abstract claims directly contradicted by results tables, similar to Tabby’s “4 out of 6” claim. tFpqGk5hR5 (`/home/wg25r/review_agent/human_reviews/tFpqGk5hR5.md`, avg 4.25, Reject) — unfair baseline comparisons, analogous to Tabby’s parameter confounding.
 
-**Reasoning:** This paper sits between the low and medium anchors. It shares the fatal flaw of claim-table contradiction with j5EbZEyK9I (4.50) and the unfair comparison issue with tFpqGk5hR5 (4.25). However, unlike those papers, Tabby does introduce a coherent architectural idea and a genuinely useful diagnostic (per-column loss tracking). The parameter confounding and overstated claims mean the core empirical contribution is not credibly established, warranting a score below the medium band. Relative to the low anchors, Tabby is less fundamentally broken (no invalid proofs or completely missing baselines), so it sits slightly above the very bottom of the low range.
+| Path | Avg Score | Decision | Relevance to TABBY |
+|---|---|---|---|
+| 4Ay23yeuz0 (TabSyn) | 6.75 | Accept (Oral) | Strongest tabular synthesis anchor; clear methodology, no parameter confound, strong results |
+| QPtoBPn4lZ (CDTD) | 5.50 | Accept (Poster) | Tabular diffusion synthesis; accepted despite incremental novelty concerns |
+| wT1aFmsXOc (tabular diffusion memorization) | 5.00 | Reject | Tabular synthesis with methodology gaps |
+| hz2zhaZPXm (TabFMs) | 3.50 | Reject | LLM fine-tuning for tabular data; unclear results, rejected |
+| 3qDhqj6qfu (TabKANet) | 3.00 | Withdrawn/Reject | Tabular data modeling with KAN, limited novelty |
+| zB6uMznFuZ (TimeAutoDiff) | 3.00 | Withdrawn/Reject | Tabular synthesis with weak methodology |
+| kzePnQWUvC (tabular data distillation) | 3.33 | Withdrawn/Reject | Tabular synthesis with overclaims and gaps |
 
-**Score: 4.0**
+**Positioning:** TABBY is clearly above the 3.0–3.5 cluster: it introduces a genuinely novel architectural idea (first LLM arch modification for tabular synthesis), provides comprehensive experiments, and identifies a practically important finding about Plain training. However, it falls short of the CDTD (5.5) level because: (i) the central mechanistic claim is undermined by an uncontrolled parameter count confound; (ii) two of three Tabby variants catastrophically fail on regression without explanation; (iii) the conclusion contains factual errors; and (iv) the routing mechanism is ambiguous under the primary GReaT training condition. These gaps are real but not fatal — the best Tabby variant (Plain MH) does show strong results, and with a parameter-matched ablation the contribution could be substantially established. A score of **4.5** places it between the rejected tabular papers and the borderline-to-weak accepted papers like CDTD.
 
-MY FINAL SCORE: <pineapple>4.0</pineapple>
+**Originality:** Moderate — first LLM architecture modification for tabular synthesis, but the mechanistic case for why MoE routing specifically helps is unestablished.  
+**Importance of research question:** High — tabular synthesis is underserved relative to text/image.  
+**Claims vs. support:** Partially supported — headline results hold for one variant (MH) under one training method (Plain), but confounded by scale; regression claims are undermined by MMLP failure.  
+**Soundness of experiments:** Moderate — broad but inconsistently reported, missing critical parameter ablation.  
+**Clarity of writing:** Fair — the main body is readable but the conclusion has factual errors that undermine credibility.  
+**Value to community:** Moderate — the Plain training insight and the failure analysis of GReaT on Rainfall are genuinely useful; the MoE contribution needs better validation.
+
+MY FINAL SCORE: <pineapple>4.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

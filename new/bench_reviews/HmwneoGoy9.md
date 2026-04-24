@@ -1,28 +1,23 @@
-Now let me search for calibration papers to properly score this work.Now I have enough information to write the final consolidated review. Let me also quickly look at one more high-scoring paper for calibration.Now I have all the information I need to write the final consolidated review.
-
----
+Now I have a good understanding of the paper. Let me search for calibration anchors.Now I have enough information. Let me compile the final review.
 
 ## Summary
-
-SeerAttention introduces a learnable block-level gating module (AttnGate) that adaptively identifies sparse blocks in attention maps during inference, replacing static or heuristic-based sparse attention methods. To enable scalable training, the authors develop a customized FlashAttention kernel that extracts block-level attention ground truth (via row-max rescaling and column-max pooling) with negligible overhead. The method is evaluated in both post-training and long-context fine-tuning (YaRN) settings, with Table 3 showing near-lossless accuracy (PG19: 8.81 vs. 8.79 baseline) at 50% sparsity and 5.47× kernel speedup at 128k / 90% sparsity.
+SeerAttention introduces a learning-based sparse attention mechanism that augments standard attention with a trainable *AttnGate* module, which adaptively predicts block-level sparsity patterns via pooling and a lightweight linear layer. A key technical contribution is a customized FlashAttention kernel that efficiently extracts block-level max-pooled attention maps as ground truth for training, without the quadratic memory cost of naive implementations. The method is evaluated in both post-training (gate-only) and long-context fine-tuning settings, demonstrating improved accuracy over heuristic sparse attention baselines (MoA, MInference) alongside meaningful inference speedup.
 
 ---
 
 ## Strengths
 
-- **Customized FlashAttention training kernel (Section 4.2, Figure 3, Figure 8)**: Modifying FlashAttention to store and rescale the per-block row-max and then apply column-max pooling is a concrete and non-trivial engineering contribution. Figure 8 demonstrates that the overhead is negligible compared to FlashAttention-2, whereas naive PyTorch attention OOMs beyond 4k tokens — enabling scalable training that would otherwise be infeasible.
+- **Custom FlashAttention kernel with negligible overhead (Section 4.2, Figure 8):** The modification of FlashAttention to emit block-level max-pooled attention maps by storing and rescaling the per-tile row maxima (Eq. 1–2) is technically sound and genuinely useful. Figure 8 validates that this has near-identical memory footprint to FlashAttention-2 and avoids the OOM failures of naïve PyTorch at >4k sequences, solving a concrete practical obstacle for long-context training.
 
-- **Flexible inference-time sparsity control (Section 4.1, Figure 4)**: A single AttnGate checkpoint can serve arbitrary Top-k ratios at inference time, allowing the accuracy/speed tradeoff to be tuned without retraining. Figure 4 cleanly demonstrates stable perplexity across sparsity ratios 0–0.9 for multiple context lengths from a single model checkpoint.
+- **Competitive post-training accuracy (Table 1, Table 2):** SeerAttention at s=0.4–0.7 outperforms MInference and MoA on PG19 perplexity across most context lengths, and Table 2 shows consistent advantages on LongBench downstream tasks over both baselines at comparable or higher sparsity — providing concrete evidence for the "learned > heuristic" thesis.
 
-- **Additional RoPE in AttnGate enables length generalization (Section 3.1, Figure 9)**: The identification that pooling destroys relative positional information and the solution of re-encoding block positions with θ' = θ/B is an insightful and well-supported design choice. Figure 9 shows that without this, perplexity explodes beyond the training length (~16k), while with it, the gate generalizes stably to 128k.
+- **Near-lossless fine-tuning at high sparsity (Table 3, Figure 1a):** YaRN+SeerAttention at 50% sparsity matches the dense YaRN baseline almost exactly (PG19: 8.81 vs 8.79), and even at 90% sparsity the gap is small (9.16 vs 8.79). The loss curves in Figure 1a confirm that the 90% sparsity model converges similarly to the dense baseline.
 
-- **Learned pattern diversity (Figure 7)**: The visualization showing AttnGate recovers A-shape, vertical, slash, diagonal, and random patterns without hand-coded priors is a direct empirical demonstration that the learning-based approach subsumes and extends the pattern space of heuristic methods (MoA, MInference).
+- **RoPE ablation for length extrapolation (Section 3.1, Figure 9):** The block-level RoPE inside AttnGate is clearly motivated and its necessity is rigorously demonstrated — without it, perplexity diverges beyond training length (e.g., jumping to 30+ at 128k despite 8k training), while with it the performance remains stable. The ablation is properly isolated.
 
-- **Long-context fine-tuning integration (Table 3)**: Incorporating SeerAttention into YaRN fine-tuning is a practical and well-executed demonstration. Table 3 shows YaRN+SeerAttention at 0.5 sparsity achieves 8.81 (PG19) vs. 8.79 baseline — correctly evaluated on both PG19 and Proof-pile at the same 32k context length.
+- **Single-checkpoint flexibility (Section 4.1):** Training the gate with MSE on max-pooled attention maps and adjusting Top-k at inference allows a single trained checkpoint to operate at arbitrary sparsity ratios, unlike MoA which requires a separate exhaustive offline search per sparsity target.
 
-- **Negligible gate overhead (Figure 5)**: AttnGate and Top-k operations account for only ~1–3% of total latency, with the overhead diminishing further at longer sequence lengths.
-
-- **Practical post-training cost (Section 4.3)**: Training only AttnGate parameters on 500 steps with 4 A100 GPUs (hours of compute) is a concrete, low-barrier deployment claim.
+- **Visualization of diverse learned patterns (Figure 7):** AttnGate learns A-shape, vertical, slash, diagonal block, and random patterns without prior specification, substantiating the "learning encompasses and exceeds heuristic patterns" claim qualitatively.
 
 ---
 
@@ -33,63 +28,57 @@ None.
 
 ### Major
 
-- **MoA TTFT comparison is likely polluted by non-attention overhead (Table 4)**. MoA at only 35% sparsity runs at 1.29s (8k), 10.34s (32k), and 36.34s (64k), compared to FlashAttention-2's 0.90s, 4.63s, and 10.09s — a 2.2–3.6× *slowdown* relative to dense attention despite being a sparse method. Figure 6 corroborates this: MoA's kernel speedup sits near 1.0 across all sparsity levels, meaning MoA's block-sparse kernel provides essentially zero kernel-level speedup. The paper explains this by noting "MoA requires an exhaustive search for sparse configurations…therefore we only compared against its default configuration," which suggests MoA's TTFT measurement may include sparse pattern search or other offline-calibration steps, not just inference. If so, Table 4 is not measuring inference latency of sparse attention vs. dense attention: it is measuring MoA's total pipeline cost, which is not a fair efficiency comparison. The efficiency advantage over MoA — one of two headline baselines — therefore cannot be taken at face value. SeerAttention's own speedup over FlashAttention-2 (Table 4, Figure 5) remains credible on its own terms; the problem is specifically the comparison against MoA.
+- **Abstract reports kernel-level speedup without disclosure, while end-to-end speedup is substantially lower.** The headline claim "offering a 5.67x speedup over FlashAttention-2" in the abstract refers exclusively to the block-sparse attention kernel at 90% sparsity (Figure 1c is labeled "Kernel Speedup"). The actual end-to-end TTFT shown in Table 4 at 32k (70% sparsity) is 3.60s vs 4.63s — a 1.28× end-to-end speedup. At 128k (95% sparsity), it is 2.66×. The abstract never uses the qualifier "kernel-level," which means most readers will take 5.67× as a wall-clock inference speedup. The paper does clearly distinguish the two in Section 5.3, but the abstract framing materially overstates the practical benefit. The 5.67× and 1.28× figures refer to the same claimed setting (32k, high sparsity) but differ by a factor of ~4.5×. This mismatch should be corrected or clearly qualified.
 
-- **Figure 1b compares two different test distributions, making the headline display result misleading (Figure 1b)**. The figure plots "YaRN Baseline (PG19)" (perplexity ≈10) and "YaRN w/ SeerAttention (Proof-pile)" (perplexity ≈3) on the same axis across sparsity levels 0.5–0.9. These are entirely different test distributions with very different absolute perplexity scales. A reader examining Figure 1b and the associated caption ("50% sparsity achieves near-lossless performance, and even at 90% sparsity, the loss remains minimal") cannot extract a valid comparison — the SeerAttention curve is lower simply because Proof-pile has intrinsically lower perplexity than PG19. The correct evidence lives in Table 3, which properly compares on matched datasets, but Figure 1b appears as the headline result and is likely read first. This is a genuine presentation flaw that should be corrected by showing both curves on the same dataset.
+- **Fine-tuning claim "near-lossless at 90% sparsity" is backed only by perplexity (Section 5.2, Table 3).** The paper positions fine-tuning as a key contribution. Yet Section 5.2 provides no downstream task evaluation (e.g., LongBench or RULER) for the YaRN+SeerAttention model. Perplexity on PG19/Proof-pile measures fit to the training distribution, not instruction-following or retrieval ability. LongBench evaluation exists only for post-training (Table 2). The absence of task-based evaluation in the fine-tuning setting weakens the "near-lossless" claim for practical deployment.
 
 ### Minor
 
-- **SeerAttention underperforms MInference at the most important setting (128k context, high sparsity)**. Table 1 shows that at 128k context and s=0.9, SeerAttention achieves 13.20 perplexity while MInference achieves 10.89 at matched sparsity (s=0.9). The paper acknowledges this as arising from MInference's per-head sparsity adaptation vs. SeerAttention's fixed global ratio, and flags per-head sparsity as future work. This is a real performance gap at the highest-priority target use case (long context, high sparsity). The framing in Section 5.1 that SeerAttention "consistently outperforms both MoA and MInference in most cases" is technically correct but undersells this failure mode.
+- **Efficiency comparison mixes kernel implementation quality with sparsity prediction quality (Table 4, Figure 6).** Table 4 shows MoA at 8k is 1.29s vs FlashAttention-2's 0.90s — MoA is 43% *slower* than dense attention despite 35% sparsity. The paper attributes SeerAttention's efficiency advantage to better learned sparsity, but the MoA implementation demonstrably does not benefit from its own sparsity. This means the comparison is partly between SeerAttention's optimized Triton block-sparse kernel and less efficient pattern kernels used by the baselines. These two sources of gain are never disentangled. The paper should acknowledge this and ideally quantify the contribution of each.
 
-- **Prefill-only scope is not prominently disclosed in the abstract or introduction**. Section 5 briefly states "AttnGate currently solely applies in the prefill stage," and the conclusion flags decoding as future work. However, the abstract presents SeerAttention as improving "long-context LLMs" efficiency without qualification. For production deployments, decode latency (which depends on KV cache access, not prefill computation) often dominates total cost. This limitation should appear in the abstract, not solely in a parenthetical clause in the experiments section.
+- **"Significantly outperforms" claim fails at the longest (128k) context length (Table 1).** At 128k, SeerAttention at s=0.9 achieves perplexity 13.20 vs MInference's 10.89. The paper attributes this to fixed global sparsity ratio vs. per-head variable sparsity, which is plausible, but the gap is substantial and the abstract's "significantly outperforms" claim is not uniformly true. This limitation is only briefly noted ("which remains a topic for future work").
 
 ### Trivial
 
-- **Block size B=64 is fixed throughout without ablation**. Block size directly determines the accuracy-efficiency frontier: smaller B allows finer-grained sparse patterns but increases gate overhead, while larger B reduces overhead but introduces coarser approximations. An ablation on at least one model would confirm B=64 is near-optimal rather than arbitrary.
-
-- **Pooling configuration was selected on Llama-3.1-8B at 32k without cross-architecture validation**. The winning Qavg/Kmax+min pooling was identified via Figure 10 on a single architecture. Whether this generalizes to Mistral or other GQA models is not empirically confirmed.
+- The decoding-stage limitation (currently prefill-only) is mentioned as a single sentence in the conclusion rather than in a dedicated limitations section. This is a significant practical gap for generation-heavy workloads that deserves more prominent acknowledgment.
 
 ---
 
 ## Nice-to-Haves
 
-- **Equal-sparsity accuracy comparison against MInference**: A table holding sparsity fixed (e.g., s=0.5, 0.7, 0.9) for both methods at 32k and 128k context would resolve the sparsity-mismatch ambiguity in Tables 1–2 and cleanly establish whether learned sparsity is strictly better than heuristic sparsity.
-
-- **Block recall analysis**: Measuring recall@k (what fraction of the truly top-k blocks are selected by AttnGate) would provide a more principled characterization of gate prediction quality than perplexity alone, and would directly explain the accuracy degradation at 128k / high sparsity.
-
-- **Training supervision signal comparison (max-pool vs. sum-pool)**: The gate is supervised on the row-max of softmax blocks (Eq. 2), but block contribution to the attention output depends on the softmax-weighted V sum. Whether sum-pool supervision would improve accuracy is an interesting ablation.
-
-- **Head-level sparsity distribution analysis**: Showing the natural per-head sparsity distribution at different context lengths would motivate per-head sparsity adaptation (flagged as future work) and explain why the 128k performance gap vs. MInference appears.
+- **Block recall / attention mass coverage metric:** A plot of "fraction of top-k attention mass captured" at varying Top-k ratios would directly validate whether AttnGate selects the right blocks, independent of perplexity, and would strengthen the "learned > heuristic" narrative with a cleaner measurement.
+- **Disentangled efficiency analysis:** Measuring sparsity prediction accuracy (e.g., block recall@k vs. MInference heuristic) separately from kernel speedup would let readers understand how much of the end-to-end gain comes from better pattern selection vs. better kernel engineering.
+- **Training cost analysis:** Quantifying the post-training cost (500 steps, 4× A100) relative to the inference savings amortized over deployment volume would help practitioners evaluate the method's practical value.
 
 ---
 
 ## Removed Points
 
-*These points are flagged to be removed; treat them with caution.*
+*These points are flagged to be removed, treat them with caution.*
 
-- **"5.67× vs 5.47× discrepancy" (Harsh Critic)**: The 5.67× quoted in the abstract refers to end-to-end kernel speedup at 32k / 90% sparsity (in the fine-tuning scenario, per Figure 1c), while the 5.47× is the kernel-level speedup at 128k / 90% sparsity (Figure 5 caption). These measure different things (different sequence lengths, different evaluation modes). This is not a real inconsistency.
+- **Pooling ablation data leakage concern (Harsh Critic, Section 6):** The critic notes that Figure 10 (pooling ablation) is evaluated on PG19 and Table 1 is also evaluated on PG19, raising a data leakage concern. However, the pooling ablation trains with *32k* length data and evaluates at *128k*, while Table 1 evaluates across multiple context lengths. The overlap is between the *test* split of the same dataset, which is standard practice. This is not a meaningful data leakage concern — architecture selection on a test distribution is the norm for post-training calibration, and the train split (RedPajama) is distinct. **Removed as it misunderstands evaluation practice.**
 
-- **RoPE alternative comparisons demanded (Harsh Critic)**: Requesting comparisons to NTK-aware scaling or ALiBi in the AttnGate is out of scope for the paper; the ablation in Figure 9 is sufficient to justify the design choice made.
+- **Strength Finder, "SeerAttention at s=0.1 scores 55.91, above dense baseline (55.32), showing it 'outperforms'":** This minor numerical difference is within noise and correctly identified by the Harsh Critic as not meaningful. **Removed as generic/unsupported strength.**
 
-- **Max-pool vs. sum-pool supervision "design mismatch" as a flaw (Harsh Critic)**: This is a speculative concern. The paper chose max-pool empirically and it works well (Table 3). This is a nice-to-have ablation, not a structural flaw.
-
-- **Cross-architecture pooling ablation demanded as a Major issue (Harsh Critic)**: Lacking cross-architecture validation for the pooling configuration is a genuine but minor concern (trivial tier at most), not a fatal or major weakness.
+- **Strength Finder, generic claim that "LLM efficiency is an important topic":** Dropped as generic, lacking paper-specific evidence. **Removed per rules.**
 
 ---
 
 ## Novel Insights
 
-The most genuinely novel observation across both reviewers is the RoPE treatment in AttnGate: because pooling disrupts relative positional information, applying a separate block-level RoPE with reduced rotational angle (θ' = θ/B) is necessary for length generalization, and this is cleanly demonstrated by the degradation in Figure 9 without it. This insight is transferable to other gating mechanisms over pooled sequence representations. The second notable insight is that the customized FlashAttention training kernel — which extracts per-block attention statistics by storing and rescaling intermediate row-maxima — is a broadly applicable technique that may benefit other methods requiring block-level attention supervision.
+None beyond the paper's own contributions. The most non-obvious idea is the block-level RoPE inside AttnGate, which prevents positional embedding from being corrupted by sequence-dimension pooling and enables length extrapolation at inference time beyond training length. This is a clean, practically important design decision that could apply to other token-reduction modules in future work.
 
 ---
 
 ## Suggestions
 
-1. Fix Figure 1b to show both the YaRN baseline and YaRN+SeerAttention on the *same* test dataset, or replace it with a properly matched accuracy vs. sparsity plot. Table 3 has the right data; Figure 1b should reflect it.
-2. Clarify in the abstract and early introduction that SeerAttention currently addresses only the prefill (TTFT) phase.
-3. Profile and report MoA's latency breakdown separately (kernel time vs. pattern search time) to distinguish whether the MoA TTFT overhead is genuine kernel cost or pipeline overhead, and cite MoA's own reported numbers if available.
-4. Add an equal-sparsity head-to-head row in Table 1 at 128k to honestly characterize where SeerAttention stands relative to MInference at the longest context.
-5. Include a block size ablation (B=32, 64, 128) on at least one model in the appendix.
+1. **Fix the abstract:** Change "offering a 5.67x speedup over FlashAttention-2" to "offering a 5.67x attention kernel speedup and up to 2.66× end-to-end prefill speedup over FlashAttention-2" so both numbers are present in the abstract.
+
+2. **Add downstream evaluation for fine-tuning:** Run at least one LongBench subset on the YaRN+SeerAttention model at 32k to provide a task-based validation of the "near-lossless" fine-tuning claim.
+
+3. **Explain MoA's negative efficiency:** The paper should diagnose why MoA is slower than dense attention in Table 4 and note that the efficiency comparison includes kernel implementation differences, not just sparsity quality differences.
+
+4. **Address per-head sparsity gap:** A targeted experiment varying the Top-k ratio per head (even a simple constant fraction per layer/head profile) would address the identified weakness at 128k and move this from future work to a concrete ablation.
 
 ---
 
@@ -97,27 +86,26 @@ The most genuinely novel observation across both reviewers is the RoPE treatment
 
 **Calibration anchors:**
 
-| Paper | Avg Score | Decision | Comparison |
+| Paper | Path | Avg Human Score | Comparison to SeerAttention |
 |---|---|---|---|
-| FastGen (uNrFpDPMyo) | 8.0 | Accept (oral) | High bar: profiling-guided adaptive KV cache, exhaustive task coverage, uniform 8s — SeerAttention is narrower in scope and has a presentation flaw |
-| FlashMask (wUtXB43Chi) | 7.0 | Accept (poster) | Engineering contribution to FlashAttention masking; comparable depth to SeerAttention's kernel work |
-| SEA (JbcwfmYrob) | 6.67 | Accept (poster) | Learns sparse attention mask, custom Triton kernel — directly comparable scope; SeerAttention has broader evaluation (post-training + fine-tuning, multiple models) |
-| ZETA (j9VVzueEbG) | 7.0 | Accept (poster) | Top-k attention variant; comparable novelty |
-| ShadowKV (vHO9mU87dc) | 6.75 | Reject | Long-context inference efficiency, rejected despite moderate scores; SeerAttention's efficiency story is partially weakened by the MoA comparison issue |
-| Hierarchy-Aided Sparse Attention (Hjk1tWIdvL) | 5.0 | Reject | Prefill sparse attention — narrower contribution, missing baselines, weaker engineering; SeerAttention clearly above this |
-| Recycled Attention (8qYuxV4lRu) | 5.4 | Reject | Sparse attention inference for long context; missing baselines, narrower evaluation — SeerAttention is more complete |
-| LM-Infinite (pOujzgHIRY) | 4.0 | Withdrawn | Low-quality long-context method; clearly below SeerAttention |
+| HASA (Sparse attention, LLM prefill) | Hjk1tWIdvL.md | 5.0 (Reject) | SeerAttention is clearly stronger: learned sparsity vs. fixed diagonal, more ablations, custom kernel contribution |
+| MoA (Heuristic sparse attention, this paper's baseline) | konDsSUSqg.md | 5.5 (Reject) | SeerAttention supersedes MoA; SeerAttention is more technically rigorous |
+| SEA (Sparse attention with estimated mask) | JbcwfmYrob.md | 6.67 (Accept) | Closest in concept; SEA targets pre-trained model application and retraining efficiency; SeerAttention has stronger and more comprehensive empirical results |
+| LongLoRA (Long-context fine-tuning) | 6PmJoRfdaK.md | 7.0 (Accept, oral) | LongLoRA has cleaner framing, broader downstream evaluation; SeerAttention has more kernel innovation but weaker abstract framing and missing fine-tuning task evaluation |
+| Efficient Streaming LLM (Attention sinks) | NG7sS51zVF.md | 7.5 (Accept) | Cleaner contribution with strong clarity; above SeerAttention in rigor |
+| IntelLLM (Low-quality KV cache work) | 4QWPCTLq20.md | 3.0 (Reject) | SeerAttention is clearly superior; IntelLLM lacks novelty and rigorous evaluation |
 
-SeerAttention is solidly above the 5.0–5.4 tier (HASA, Recycled Attention): it has stronger baselines, richer ablations, a concrete kernel engineering contribution, and results on two application settings. It is broadly comparable to the 6.67–7.0 tier (SEA, FlashMask, ZETA), sharing the profile of a focused attention-efficiency paper with a custom kernel and competitive empirical results. The major weaknesses (MoA comparison anomaly, Figure 1b mismatch) prevent it from matching the cleanness of the 7.0+ papers, but they do not invalidate the core claim that learned sparsity outperforms static patterns.
+**Positioning:** SeerAttention is comfortably above HASA (5.0) and MoA (5.5). It has real technical contributions — the custom kernel, the learned sparsity framework, and the RoPE design — that are concretely validated. It falls short of LongLoRA (7.0) primarily because of the abstract's misleading headline speedup figure and the absence of downstream task evaluation for the fine-tuning contribution. It is most comparable to SEA (6.67), a borderline-accept paper with similar scope and depth. Placing it at **6.0** reflects that the paper clears the acceptance bar with meaningful content but has correctable presentation and evaluation issues that prevent a higher score.
 
-**Final score: 6.5**
+**Evaluation axes summary:**
+- *Originality:* Good — learning sparsity rather than predefining it is a concrete step forward; custom kernel is non-obvious
+- *Importance:* High — long-context LLM efficiency is a central practical problem
+- *Claims well-supported:* Partially — post-training claims are well-supported; fine-tuning claims rely only on perplexity; headline speedup is overstated in the abstract
+- *Soundness of experiments:* Mostly sound — perplexity and LongBench evaluation for post-training; kernel + end-to-end efficiency breakdown is informative
+- *Clarity of writing:* Good — the technical sections are clear, though the abstract framing needs correction
+- *Value to community:* Moderate-high — the custom kernel and learning methodology are useful building blocks
 
-Originality: Good — learning sparsity rather than predefined patterns is well-motivated, and the RoPE-in-gate insight is novel.
-Importance: High — prefill efficiency for long-context LLMs is a pressing practical problem.
-Claim support: Partially well-supported — the fine-tuning and kernel results are convincing; the MoA comparison and Figure 1b weaken the efficiency story.
-Experimental soundness: Good for self-contained experiments; the MoA TTFT comparison is suspect.
-Writing clarity: Reasonable, with Figure 1b being a notable presentation flaw.
-Value to community: High — the customized FlashAttention kernel and the RoPE design insight are transferable.
+**Decision: Weak Accept**
 
-MY FINAL SCORE: <pineapple>6.5</pineapple>
+MY FINAL SCORE: <pineapple>6.0</pineapple>
 MY FINAL DECISION: <orange>Accept</orange>

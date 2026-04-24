@@ -1,11 +1,25 @@
-## Summary
+Now let me search for calibration anchors.Now I have enough context to write the final review. Let me compile my findings.Now I have all the information needed to write the final review.
 
-This paper proposes MixUnlearn, an approximate machine unlearning framework that uses a lightweight adversarial generator (MixBlock) to synthesize challenging mixup samples between *Forgetting* and *Remaining* data. An unlearner is then trained on these synthetic samples using novel contrastive losses to mitigate catastrophic unlearning. The authors evaluate the method on CIFAR-10, SVHN, MNIST, and Fashion-MNIST in both label-aware and label-agnostic settings, reporting results close to full retraining in several class-level scenarios.
+---
+
+## Summary
+MixUnlearn proposes a generator-unlearner adversarial framework for approximate machine unlearning. The central contribution is using mixup samples—interpolations between forgetting and remaining data—to regularize the intermediate feature space that is most susceptible to catastrophic unlearning effects. A learnable MixBlock generator is trained adversarially via a novel contrastive loss to produce hard mixed samples that challenge the unlearner, while two contrastive losses guide the unlearner to forget selectively. Notably, the framework operates label-agnostically via a sharpening operation on the initial model's predictions. Experiments span four datasets across class-level and data-level unlearning.
+
+---
 
 ## Strengths
-- **Novel contrastive formulation on mixed samples.** The paper introduces a new way to apply contrastive losses (Eqs. 5–6) to mixup interpolations for unlearning. This is a sensible and empirically effective regularization strategy, especially in class-level (disjoint-label) settings where the method achieves retention accuracy close to the retrained gold standard (Table 1).
-- **Lightweight and efficient design.** The MixBlock generator adds only 66K parameters and is updated sparingly (once every four iterations), keeping the computational cost low relative to full retraining and many advanced baselines.
-- **Label-agnostic capability.** The framework can operate without explicit labels by using sharpened predictions from the initial model (Eq. 4), which is practically relevant for semi-supervised or weakly labeled scenarios.
+
+- **Novel, principled motivation for catastrophic unlearning** (Figure 1, Section 4): The paper articulates clearly why retaining on remaining data alone is insufficient—intermediate interpolation regions between forgetting and remaining classes receive no regularization. This is a specific, non-trivial insight, and the toy example and t-SNE visualizations (Figure 3, panel d) concretely validate the phenomenon with the airplane→bird spillover effect.
+
+- **Label-agnostic unlearning via Sharpen operation** (Eq. 4, Table 1): Using the initial model's sharpened predictions as pseudo-labels enables the method to operate without ground-truth labels. The label-agnostic variant achieves 86.32% Test_r / 0% Test_f on CIFAR-10 class-level unlearning, substantially outperforming the label-agnostic baselines LAF (82.01%) and L-Mix (82.34%), while even being competitive with several label-aware methods. This is a practically significant and underexplored capability.
+
+- **Well-structured ablation isolating component contributions** (Table 3): The ablation systematically removes MixBlock (replaced with vanilla mixup at various α), L_mix, L_real, and the sharpening mechanism. The resulting analysis clearly shows: (a) removing L_real collapses Test_r from 86.32% to 29.30% on CIFAR-10, demonstrating its central importance; (b) L_mix removal degrades ASR alignment (68.48%→61.30%); (c) MixBlock provides ~1% Test_r and ~3% ASR improvement. Each component's role is made interpretable.
+
+- **Visualization evidence directly supporting the catastrophic unlearning narrative** (Figure 3, Figure 4): The t-SNE plots show that when L_mix is removed (panel d), the bird class becomes dispersed when forgetting airplane—a direct visual confirmation. MixUnlearn (panel e) matches the Retrain clustering. The KDE plots (Figure 4) show MixUnlearn's loss distribution closely tracks the Retrain's, unlike LAF.
+
+- **L-Mix baseline cleanly isolates adversarial contribution** (Table 1): By comparing the proposed L-Mix (vanilla mixup + LAF) at 82.34% to full MixUnlearn at 86.32%, and noting the ablation variant (w/o MB + adversarial losses) at 85.42%, the paper provides a legible decomposition: vanilla mixup alone contributes ~0.3%; the contrastive losses + standard generator contribute ~3%; the adversarial generator adds ~1%.
+
+---
 
 ## Weaknesses
 
@@ -13,50 +27,78 @@ This paper proposes MixUnlearn, an approximate machine unlearning framework that
 None.
 
 ### Major
-- **Comparative claims rely on suspiciously poor baseline results and a confounded main comparison.** Several baseline results in Tables 1–2 are near-random with no explanation: SCRUB achieves 23.89–34.12% test accuracy on CIFAR-10 (barely above chance), Boundary drops to 52.89% in data-level unlearning, and SISA falls to 54.49%. These are far below the operational ranges reported in the original papers and even below naive fine-tuning (NegGrad). Broad claims of “significant” superiority over these methods are therefore unreliable. Furthermore, the proposed L-Mix baseline in the main tables uses MSE loss, whereas MixUnlearn uses contrastive losses. The fair baseline—vanilla mixup with the *same* contrastive losses (“w/o MB, α=0.75” in Table 3)—is hidden in an ablation and performs within 0.9% on CIFAR-10/SVHN and exceeds the full model on MNIST. This confounds whether the gains come from the adversarial generator or simply from the loss design.
-- **Overclaiming broad superiority without statistical support.** The abstract claims the method “significantly outperforms state-of-the-art approaches,” yet the results are mixed: on CIFAR-10 class-aware (Table 1), MixUnlearn underperforms LAF+R on retention accuracy (87.10 ± 0.78 vs. 87.70 ± 0.69); on MNIST class-aware it trails DSMixup and LAF+R; and on data-level SVHN/MNIST it is virtually tied with L-Mix and LAF (e.g., SVHN agnostic Test 92.46 vs. 92.44). No significance tests are reported, and the largest margins appear almost exclusively in class-level (disjoint-label) settings rather than across the full range of tasks advertised.
-- **Conceptual mismatch for data-level unlearning with overlapping classes.** In the data-level setup, $D_f$ and $D_r$ share classes (e.g., forgetting 40% of classes 5–9 while retaining the other 60%). When $x_i$ and $x_j$ belong to the same class, $p(x_i) \approx p(x_j)$, causing the generator loss (Eq. 3) and unlearner loss (Eq. 5) to issue contradictory signals—simultaneously demanding similarity and dissimilarity to the same target. The paper never acknowledges or resolves this. The empirical data-level gains are marginal or nonexistent versus L-Mix/LAF (Table 2), consistent with the method failing to handle intra-class forgetting.
+
+- **Unexplained anomalous performance of SCRUB on CIFAR-10 and SVHN undermines the comparative evaluation**: In Table 1, SCRUB achieves only 34.12% Test_r on CIFAR-10 and 20.33% on SVHN—results so low they represent near-total model collapse, far below even random chance for a 10-class problem. In Table 2 (data-level), SCRUB achieves 29.05% Train_r and 23.89% Test on CIFAR-10. SCRUB is a well-established, competitive approximate unlearning baseline (Kurmanji et al., 2024) explicitly designed to balance forgetting and retention. Yet the same SCRUB achieves 99.12% Test_r on MNIST (Table 1), indicating the implementation is not fundamentally broken—the collapse is dataset-specific. The paper presents these results without comment, as though a 34% Test_r from a retention-focused baseline is unremarkable. This anomaly is the most serious weakness: if SCRUB is experiencing hyperparameter-related collapse (e.g., excessive gradient steps to forget), then every comparison citing superiority over SCRUB is potentially a comparison against a misconfigured method rather than the actual method. The paper should at minimum acknowledge and explain this pattern, as it affects the credibility of all headline claims about comparative advantage.
 
 ### Minor
-- **Qualitative visualizations lack disentanglement.** The t-SNE (Figure 3) and KDE (Figure 4) plots provide only anecdotal evidence for catastrophic unlearning mitigation; they do not isolate the effect of $L_{\text{mix}}$ from $L_{\text{real}}$, which the ablation shows is the dominant retention driver.
-- **Key experimental details omitted from the main text.** The number of unlearning epochs, learning rates, batch sizes, and baseline optimizer settings are deferred to the appendix, making it difficult to assess fairness of comparison in the main paper.
-- **Overstated novelty of the generator component.** While the adversarial objective (Eq. 3) is novel in formulation, the ablation study (Table 3) demonstrates that the learnable MixBlock contributes only marginal improvements over vanilla mixup in class-level settings, undermining the architectural emphasis placed on adversarial generation.
+
+- **Notation inconsistency in Eq. 5: outer sum indexed over B_f instead of B_r**: Throughout the paper, x_j consistently denotes a remaining sample (B_r) and x_i a forgetting sample (B_f). Eq. 3 (L_gen) correctly sums over x_j ∈ B_r in the outer loop. However, Eq. 5 (L_mix) writes the outer sum as ∑_{x_j ∈ B_f}. The inner sum in both Eq. 5 and Eq. 6 uses x_i ∈ B_f. If taken literally, Eq. 5 sums over forgetting-forgetting pairs and the mixed sample x_ij^mix would mix two forgetting samples—inconsistent with the paper's definition of x_ij^mix = g(x_i ∈ B_f, x_j ∈ B_r, λ). The text immediately following says the loss "works in reverse" of Eq. 3, strongly suggesting x_j ∈ B_r is intended and B_f is a typo. The code release allows independent verification, but the discrepancy should be corrected in the paper.
+
+- **Marginal gain from the adversarial generator (MixBlock) relative to its claimed centrality**: The ablation shows replacing the adversarial generator with vanilla mixup (best case α=0.75) costs ~0.9% Test_r and ~3.3% ASR on CIFAR-10. This is a real but modest improvement. The paper frames the adversarial generator as "the core" of MixUnlearn (abstract, Section 4), but the ablation places L_real as the overwhelmingly dominant component (removing it causes ~57% Test_r drop vs. ~1% for removing MixBlock). The contribution of adversarial generation over vanilla mixup is real but should be represented more proportionally in the framing.
+
+- **Label-agnostic outperforming label-aware variants in some comparisons**: In Table 1, label-agnostic MixUnlearn on CIFAR-10 (86.32%) outperforms some label-aware baselines—in part because SCRUB collapses on this dataset. The paper acknowledges the gap between label-agnostic and label-aware MixUnlearn variants (87.10% vs. 86.32%), but does not adequately discuss why the method performs so well in the label-agnostic regime relative to label-aware baselines. This is a mild presentation gap.
 
 ### Trivial
-- The conceptual diagram in Figure 1 is a high-level cartoon; a more precise schematic linking the toy example to the actual loss terms would improve clarity.
+
+- **Eq. 5 notation consistency** (likely typo described above): Correct B_f → B_r for the outer sum to match paper notation.
+
+---
 
 ## Nice-to-Haves
-- Include the vanilla mixup + contrastive loss configuration (w/o MB, α=0.75) as a first-class baseline in the main comparison tables to properly isolate the generator’s contribution.
-- Add explicit discussion or a sampling mechanism to handle same-class pairs in data-level unlearning, where the current contrastive objectives are contradictory.
-- Provide quantitative analysis of what the generator learns (e.g., effective $\lambda$ distribution, feature-space distances) to verify that adversarial mixes occupy challenging regions rather than acting as generic noise.
-- Report sample-level membership inference attack results on $D_f$ in data-level settings to verify that individual points are unlearned, not just aggregate accuracy.
+
+- Larger-scale experiments (ImageNet/ViT) are mentioned as appendix material (A.11). Elevating these to the main body or expanding them would increase the method's practical relevance.
+- An ablation comparing adversarial (maximizing the contrastive objective) vs. non-adversarial (merely flexible/learned) generator could more precisely isolate whether the adversarial direction—not just the learned mixing flexibility—contributes to the result.
+- A brief discussion explaining SCRUB's dataset-specific collapse would substantially improve the paper's credibility and help readers understand the comparative landscape.
+
+---
 
 ## Removed Points
-*These points are flagged to be removed; treat them with caution.*
-- **Figure 1 “conceptually incoherent.”** The harsh critic’s claim that the conceptual cartoon is incoherent is overly pedantic; while it lacks algorithmic precision, it serves as standard motivational scaffolding.
-- **Dependence on $L_{\text{real}}$ framed as a weakness.** The observation that removing $L_{\text{real}}$ causes catastrophic collapse (Section 5.5) is not a flaw—it simply confirms that real-sample retention losses are a necessary component of the framework.
-- **Formatting, typos, and appendix-deferred proofs.** Per instructions, these are parser artifacts or standard practice and do not reflect author errors.
-- **Demands for confidence intervals / statistical tests as a generic requirement.** The paper reports means and standard deviations over five seeds, which is standard in the field; formal significance testing is nice-to-have but not a community requirement for empirical unlearning work.
+
+*These points are flagged to be removed, treat them with caution.*
+
+- **Harsh Critic: DSMixup should be close to Retrain**: The critic claims DSMixup, as an exact unlearning method, should approach Retrain accuracy. However, the paper explicitly states in Section 2 that "DSMixup prioritizes efficiency, sometimes at the expense of accuracy." Its design involves mixing data shards rather than maintaining full-dataset fidelity. The 64.31% Test_r is consistent with the paper's own description. *Removed: strawman misunderstanding of what DSMixup is designed to do.*
+
+- **Harsh Critic: Temperature asymmetry in Eq. 3**: The critic notes that τ_gen appears only in the denominator of Eq. 3 but not the numerator. The paper explicitly explains this design: the numerator and denominator measure different objectives (disrupting retention vs. revealing forgetting), and the asymmetry reflects intentional weighting. This is unconventional but the paper acknowledges it (footnote 6). *Removed: the paper provides a justification, and asymmetric temperature in contrastive objectives is not inherently wrong.*
+
+- **Harsh Critic: ASR statistical significance**: The critic notes differences in ASR metric are small and not statistically tested. Standard practice in machine unlearning benchmarks does not require significance testing on ASR; the paper reports 5-run means and standard deviations. *Removed: moves the goalposts on community norms.*
+
+- **Harsh Critic: Generator collapse/degenerate mixing policy**: The critic suggests the generator might collapse. The paper provides ablation evidence (MixBlock adds ~1% gain), t-SNE visualizations, and an appendix visualization of a mixed sample (A.9). While the marginal gain is modest, the concern about collapse is speculative and not evidenced. *Removed: speculation without evidence.*
+
+- **Strength Finder: "Consistent superiority across diverse datasets"** — weakened because MNIST data-level results show MixUnlearn at 98.60% Test while DSMixup achieves 98.97% and GLI achieves 99.03%, indicating the method is competitive but not uniformly superior. *Removed as stated: replaced with a more precise characterization in Strengths.*
+
+---
 
 ## Novel Insights
-The most insightful observation from the reviews is that the paper’s contrastive objectives (Eqs. 3 and 5) become *logically contradictory* in data-level unlearning whenever the forgetting and remaining samples share a class label. Because the data-level setup explicitly creates such overlap (random subsets of classes 5–9), the method has no coherent gradient signal for mixed pairs from the same class. This neatly explains why the data-level empirical gains over simple baselines are negligible and suggests that the method, as formulated, is not genuinely equipped for the broad “data-level” unlearning it claims to address. This is a genuinely novel criticism that the authors should address.
+
+The paper's most genuinely novel observation is that catastrophic unlearning can be understood geometrically: the failure mode is not in the main retained data region but in the interpolation manifold between forgetting and remaining data, where no regularization has traditionally been applied. Using adversarially-generated mixup samples to populate and regularize this interpolation space is a principled solution to a previously under-specified problem. The ablation's finding that L_real (regularization on original real samples) is the load-bearing loss while the adversarial generator adds incremental improvement suggests that the geometry-aware regularization principle is more fundamental than the adversarial mechanism used to generate the hard samples—an insight that could inspire simpler implementations.
+
+---
 
 ## Suggestions
-- Restate the main claims to focus on class-level (disjoint-label) unlearning, where the method is well-posed and empirically strong, or redesign the sampling/negative sets to avoid identical-class pairs in data-level settings.
-- Either fix the SCRUB, SISA, and Boundary implementations to match published operational ranges or explicitly justify the poor results (e.g., budget constraints, hyperparameter sensitivity); otherwise, drop them from the main comparison to avoid misleading superiority claims.
-- Move the “w/o MB (α=0.75)” configuration into the main tables as the primary ablative baseline to fairly credit the contrastive loss design versus the learned generator.
+
+1. **Address the SCRUB anomaly**: Add a paragraph in the experiments or appendix explaining why SCRUB collapses on CIFAR-10/SVHN but not MNIST/FASHION-MNIST. If it is a known hyperparameter sensitivity of SCRUB (e.g., requiring dataset-specific tuning of the forgetting step count), say so explicitly. This would convert a credibility concern into an informative comparison.
+2. **Correct the B_f → B_r notation in Eq. 5** to match the surrounding text and Eq. 3/6.
+3. **Reframe Section 4 to reflect ablation findings**: Describe the adversarial generator as a component that provides improved regularization over vanilla mixup, with L_real and L_mix as the primary mechanisms. The current framing oversells the adversarial generator's marginal gain.
+4. **Add MNIST data-level failure analysis** (Section 5.4): The method achieves 98.60% Test vs. DSMixup at 98.97% and GLI at 99.03%—understanding when and why the advantage diminishes on simpler tasks would strengthen the paper.
+
+---
 
 ## Score and Decision
 
 **Calibration anchors used:**
-- **High (7.50):** `gn0mIhQGNM` (SalUn) — strong novel concept (weight saliency), thorough cross-domain experiments, and clear baseline wins. MixUnlearn has an interesting idea but does not match this level of empirical rigor or broad validity.
-- **High (6.67):** `9OJflnNu6C` (I2I controllable unlearning) — well-motivated algorithm with theoretical convergence guarantees. MixUnlearn lacks theoretical grounding and has more severe experimental gaps.
-- **Medium (5.33):** `iQIQT88prm` (Stackelberg game unlearning) — novel formulation but limited experimental scope and unclear methodological details. MixUnlearn has broader benchmarks but comparably serious issues (broken baselines, confounded comparisons), placing it in a similar band.
-- **Medium (5.00):** `lgnAEBE1Xq` (Contrastive Unlearning) — simple contrastive idea with limited datasets and confusing presentation. MixUnlearn is broader in scope but suffers from baseline misconfiguration and overclaiming, making it roughly comparable overall.
-- **Low (4.00):** `p7mgNvOD9Q` (SUN) — training-free method with weak motivation and minimal analysis. MixUnlearn is more sophisticated and better empirically grounded, so it sits above this anchor.
-- **Low (3.00):** `hwXUmwJAq5` (UGradSL) — fundamental misunderstandings of unlearning evaluation. MixUnlearn does not exhibit such conceptual errors and is safely above this anchor.
 
-Relative to these anchors, MixUnlearn clusters around the **5.0** range: it contributes a plausible lightweight framework and promising class-level results, but major experimental flaws—unexplained near-random baselines, confounded main comparisons, and a conceptual contradiction in data-level settings—prevent it from reaching the acceptance threshold.
+| Paper | Avg Score | Comparison |
+|---|---|---|
+| UGradSL (hwXUmwJAq5) | 3.00 | Fundamentally flawed evaluation; incorrect understanding of MU. MixUnlearn is far above this. |
+| Contrastive Unlearning (lgnAEBE1Xq) | 5.00 | Similar contrastive approach for MU, narrower (2 datasets), no adversarial component, no label-agnostic. MixUnlearn is modestly above this. |
+| Adversarial MU Stackelberg (iQIQT88prm) | 5.33 | Also adversarial unlearning, but narrower scope. MixUnlearn has broader experiments and better ablation. Slightly above. |
+| Towards Aligned Data Forgetting (liqUhMECuY) | 4.50 | Method with unsound methodology; scored 3,5,5,5. MixUnlearn's methodology is sounder. |
+| LoKU (1ExfUpmIW4) | 6.00 | Solid LLM unlearning with few weaknesses. Similar quality tier, MixUnlearn has suspicious SCRUB results. Comparable or slightly below. |
+| SalUn (gn0mIhQGNM) | 7.50 | Spotlight paper with broader applications (classification + generation), cleaner methodology, no baseline anomalies. MixUnlearn clearly below this. |
 
-MY FINAL SCORE: <pineapple>5.0</pineapple>
+**Positioning:** MixUnlearn is a genuine contribution to approximate unlearning: the adversarial mixup framework is principled, the label-agnostic capability is novel and useful, the experiments are reasonably broad, and the ablation is informative. However, the unexplained SCRUB anomaly (~34% Test_r on CIFAR-10 vs. 99% on MNIST) substantially reduces confidence in the comparative evaluation. The main advertised innovation—the adversarial generator—contributes only ~1% Test_r improvement over vanilla mixup with the same losses, though the L_mix + L_real combination is clearly impactful. 
+
+Relative to the anchor cluster: above the ≈5.0–5.33 adversarial/contrastive MU papers (more complete, label-agnostic, better ablation), but below the ≈6.0+ accepted papers (suspicious baselines, modest adversarial generator gains). I place this at **5.5**, consistent with a borderline reject: the contribution is real but the unexplained SCRUB results and the disconnect between claimed and demonstrated contribution of the core component reduce confidence enough to warrant clarification before acceptance.
+
+MY FINAL SCORE: <pineapple>5.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

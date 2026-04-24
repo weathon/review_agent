@@ -1,13 +1,23 @@
-## Summary
+Now let me do calibration searches.Now I have enough information to write the final review. Let me synthesize.---
 
-TABDIFF proposes a continuous-time diffusion model for mixed-type tabular data that operates in the original data space, avoiding latent encodings used by prior work. It combines a variance-exploding SDE for numerical features with a masked absorbing diffusion for categorical features, trained end-to-end via a unified ELBO. The paper introduces feature-wise learnable noise schedules and a mixed-type stochastic sampler, and reports state-of-the-art average performance across seven datasets and eight metrics.
+## Summary
+TabDiff introduces a joint continuous-time diffusion framework for mixed-type tabular data generation that directly operates on numerical features (via Gaussian VE-SDE) and categorical features (via masked absorbing diffusion) in their native formats, without encoding to a latent space. The paper's key innovations are feature-wise learnable noise schedules (parameterized per-column), a mixed-type stochastic sampler that enables error correction during sampling, and classifier-free guidance extended to the mixed-type setting for imputation. Extensive experiments on seven datasets across eight metrics show that TabDiff achieves consistent improvements over the prior state-of-the-art (TabSyn), with the strongest result being a 22.6% average improvement on pairwise column correlation (Trend) across all seven datasets.
+
+---
 
 ## Strengths
 
-- **Native-space continuous-time formulation for mixed-type data.** The paper avoids latent-space encodings by directly diffusion-modeling normalized numerical features and one-hot categorical features (with a [MASK] state) in their original representations, and trains both modalities with a single joint ELBO (Eq. 12). This is a clear practical advantage over latent-space methods such as TabSyn.
-- **Feature-wise learnable schedules improve fidelity.** Table 5 shows that enabling learnable schedules reduces average Shape error from 1.39 (fixed, deterministic) to 1.24 (learnable, deterministic) and reduces training losses (Figure 2). This demonstrates that per-column schedule flexibility provides real empirical benefit.
-- **Stochastic sampler improves generation quality.** Table 5 isolates the stochastic sampler’s impact: with fixed schedules, switching from deterministic to stochastic sampling improves Shape from 1.39 to 1.20 and Trend from 2.29 to 1.93. This is evidence that the proposed corrector-like mechanism helps.
-- **Strong average empirical results.** Across seven datasets, TABDIFF achieves the best average Shape (1.17 vs. TabSyn 1.35) and Trend (1.80 vs. TabSyn 2.33), and competitive or best results on MLE and missing-value imputation (Tables 1–4).
+- **Feature-wise learnable noise schedules backed by ablation (Table 5, Figure 2):** The power-mean schedule for numerical features (Eq. 10, parameter ρᵢ) and log-linear schedule for categorical features (Eq. 11, parameter kⱼ) are jointly learned end-to-end. Table 5 shows they reduce Shape from 1.24→1.17 and Trend from 1.92→1.80 (paired with stochastic sampler), and Figure 2 confirms substantially lower training losses for both categorical and numerical components compared to fixed-schedule baselines.
+
+- **Joint continuous-time diffusion in original data space:** Unlike TabSyn (which uses a VAE encoder to convert all features to a continuous latent space) and CDTD (which uses score interpolation in an embedding space), TabDiff applies principled Gaussian VE-SDE to numerical features and masked absorbing diffusion to categorical features directly in their native types. The continuous-time ELBO (Eqs. 9, 12) avoids the discretization-induced bound looseness of discrete-time methods like TabDDPM/CoDi.
+
+- **Mixed-type stochastic sampler with demonstrated effectiveness (Table 5):** Algorithm 2 introduces an intermediate forward perturbation step at each backward iteration, allowing self-correction of already-decoded categorical features that would otherwise be frozen. The ablation is clean: under fixed schedules, Shape improves from 1.39→1.20 and Trend from 2.29→1.93; under learnable schedules, improvements are 1.24→1.17 and 1.92→1.80. The stochastic sampler alone provides a larger Shape improvement than the learnable schedule alone (0.19 vs 0.15), confirming its practical value.
+
+- **Consistent and large margin on Trend metric (Table 2):** The 22.6% average improvement over TabSyn on pairwise column correlation is the paper's most convincing result — it holds across all seven datasets, with improvements ranging from 4.4% (Beijing) to 37.3% (Diabetes). This is the paper's core empirical claim and it is fully supported.
+
+- **CFG extension to mixed-type conditional generation (Table 4):** The unified CFG framework handles both numerical (Eq. 15) and categorical (Eq. 16) guided sampling without requiring a separate classifier. With ω=0.6, TabDiff achieves 5.60% average imputation improvement vs. the non-generative XGBoost baseline, outperforming TabSyn's 4.99%, and confirming CFG's efficacy on 5/7 datasets.
+
+---
 
 ## Weaknesses
 
@@ -15,54 +25,77 @@ TABDIFF proposes a continuous-time diffusion model for mixed-type tabular data t
 None.
 
 ### Major
-- **Critical inconsistency between numerical training objective and sampling algorithm.** Equation (5) trains the numerical denoising network $\boldsymbol{\mu}_\theta^{\text{num}}$ to predict the noise $\boldsymbol{\epsilon}$, yet Algorithm 2 (line 12) computes the probability-flow direction as $(\mathbf{x}^{\text{num}} - \boldsymbol{\mu}_\theta^{\text{num}})/\boldsymbol{\sigma}^{\text{num}}$, which is the correct ODE update only if $\boldsymbol{\mu}_\theta^{\text{num}}$ predicts the clean data $\mathbf{x}_0$. For the variance-exploding formulation (Eq. 3–4), a noise-predicting model implies the ODE direction is $\boldsymbol{\mu}_\theta^{\text{num}}$ itself (since $d\mathbf{x} = \boldsymbol{\epsilon}\, d\sigma$), whereas an $\mathbf{x}_0$-predicting model implies the direction $(\mathbf{x} - \boldsymbol{\mu}_\theta^{\text{num}})/\sigma$. The paper cannot have it both ways as written. Because the sampler and the loss refer to two incompatible parameterizations, the core generative procedure is ambiguous and irreproducible from the text alone. This is a serious flaw for a methods paper.
-- **Evaluation relies on externally sourced baselines without statistical validation.** With the exception of TabSyn (reproduced by the authors) and the Diabetes subset, all baseline numbers are imported directly from Zhang et al. (2024). This raises fair-comparison concerns: differences in preprocessing, data splits, or hyperparameter tuning can easily affect the small absolute gaps reported (e.g., Magic Trend: 0.88 vs. 0.76; Beijing Trend: 3.13 vs. 2.59). The paper reports no statistical significance tests, and the headline claim of “superior average performance … across all eight metrics” is therefore not firmly established.
+
+- **Asymmetric baseline evaluation: TabSyn reproduced by the authors, all other baselines taken from the original TabSyn paper (Zhang et al., 2024).** As stated in footnote 1 of Table 1: "TaBSYN's performance is obtained via our reproduction. The results of other baselines except on Diabetes are taken from Zhang et al. (2024)." This creates a structural asymmetry where the principal competitor is evaluated under the TabDiff authors' training environment, while all other baselines are evaluated under TabSyn's authors' (likely tuned) environment. If the reproduction of TabSyn is even slightly sub-optimal in any hyperparameter, all improvements over it are inflated. The paper provides no analysis of where the reproduction matches or diverges from original TabSyn numbers, and does not report the original TabSyn published numbers as a cross-check. This is the most methodologically significant concern.
 
 ### Minor
-- **Central motivation for feature-wise schedules is not validated.** The paper claims the schedules “counteract the high heterogeneity across different feature distributions” (Sec. 2.3), but the ablation (Table 5) only shows that learnable schedules outperform fixed ones. It does not analyze the learned values of $\rho_i$ or $k_j$, nor show any correlation between a feature’s marginal statistics (variance, skewness, category count) and its learned schedule. Without this, the schedules may simply act as per-feature capacity knobs rather than adaptive allocations that respect distributional disparity.
-- **Classifier-free guidance implementation deviates from its theoretical derivation.** Equations (13)–(16) derive CFG assuming a single model $\theta$ that can be evaluated either conditionally or unconditionally. The actual implementation uses the full joint model (with $\mathbf{y}$ fixed) as the conditional model and a separate, smaller model trained only on the missing columns as the unconditional model. Because the two models differ in architecture and training distribution, the interpolation in Eq. (15)–(16) is not theoretically grounded for this setup, and the paper does not discuss this approximation.
-- **Categorical stochastic sampler lacks theoretical justification.** The approximate reverse kernel in Eq. (8) assumes that once a categorical feature is unmasked it stays fixed. The stochastic sampler in Sec. 2.4 relaxes this by re-perturbing decoded features, but the paper provides no argument that the resulting Markov chain preserves the correct marginal distribution. Citing continuous-diffusion samplers (Karras et al., 2022) does not automatically justify the categorical case.
-- **MLE is acknowledged to be unreliable yet counted in the overall superiority claim.** The paper notes that “the MLE score evaluated under the current setting may not be a reliable indicator of data quality” (Sec. 4.3), yet MLE is still one of the eight metrics used to claim overall superiority. This weakens the strength of that aggregate claim.
+
+- **MLE "15% improvement" framing is misleading relative to the paper's own self-qualification.** Section 4.3 reports TABDIFF "outperforms TaBSYN by 15.0%," derived from the Average Gap column in Table 3 (gap from real-data performance: 5.76% vs. 6.78%). In absolute AUC/RMSE values, the differences are trivially small: Adult .912 vs. .909, Default .763 vs. .763 (tied), Magic .936 vs. .937 (TabSyn marginally better), News .866 vs. .862. Critically, the paper itself immediately concedes: "methods with varying performance on data fidelity metrics might have very close MLE scores. This suggests that the MLE score evaluated under the current setting may not be a reliable indicator of data quality." Foregrounding a 15% claim from a metric the authors themselves call unreliable, when absolute differences are within standard error, is a real presentation problem even though the paper partially self-corrects.
+
+- **Shape metric is not consistently superior to TabSyn at the per-dataset level.** The abstract claims "superior average performance over existing competitive baselines across all eight metrics," but on Shape (Table 1), TabDiff loses to TabSyn on two of seven datasets: Default (1.24 vs. 1.01, a meaningful regression) and News (2.35 vs. 2.06). For the Trend metric, TabDiff's wins are consistent, but the Shape claim requires qualification — the paper only delivers consistent superiority in aggregate, not uniformly.
+
+- **CFG is load-bearing for imputation claims, but this is underemphasized.** Table 4 shows that without CFG (ω=0.0), TabDiff achieves only 3.76% average improvement vs. XGBoost, compared to TabSyn's 4.99% — TabDiff without guidance underperforms TabSyn on 5/7 datasets. The stated improvement of 5.60% requires CFG. The reliance of the conditional generation result on CFG should be stated more prominently.
+
+- **No sensitivity analysis for λ_num and λ_cat loss weights.** Eq. 12 introduces two balancing weights for the joint loss. Because the numerical loss (MSE of ε) and categorical loss (cross-entropy) have fundamentally different scales, this balance is a real design choice. Neither the main text nor a visible ablation reports the chosen values or sensitivity to them.
 
 ### Trivial
-- The loss weights $\lambda_{\text{num}}$ and $\lambda_{\text{cat}}$ in Eq. (12) are introduced without any discussion of how they are set or whether they are tuned.
-- The relationship between the two categorical parameterizations—$\alpha_t=\exp(-\sigma^{\text{cat}}(t))$ in Sec. 2.2 and $\alpha_{k_j}^{\text{cat}}(t)=1-t^{k_j}$ in Eq. (11)—is left implicit rather than explicitly reconciled.
-- The ablation in Table 5 averages results across all datasets, masking per-dataset variance.
 
-## Nice-to-Have
-- Correlation analysis plotting learned $\rho_i$ and $k_j$ against feature statistics (standard deviation, skewness, category count) to validate the heterogeneity-adaptation claim.
-- Self-contained baseline re-runs or paired statistical significance tests for the small gaps against TabSyn.
-- Architecture specification (input dimensions, embedding strategy, number of layers, attention details) in the main text to aid reproducibility.
-- Evaluation on true missing-value imputation with random missingness patterns (MCAR/MAR) and multiple simultaneous missing columns, rather than only the single target column of each dataset’s built-in task.
+- The fixed schedule baselines in the ablation use ρ_i = 7 and k_j = 1 as defaults. The motivation for these specific values is not discussed; reporting the distribution of learned ρ_i and k_j values for representative datasets would strengthen the argument that learning meaningfully adapts schedules rather than simply recovering reasonable fixed values.
+
+---
+
+## Nice-to-Haves
+
+- A runtime comparison (training + sampling time) against TabSyn would be valuable for practitioners, since TabSyn's VAE-based latent approach may be faster at inference and the paper makes no claim about computational efficiency.
+- Formal statistical significance tests (e.g., paired t-tests across 20 samples) on key comparisons, particularly where margins are small (Shape on Default, MLE scores), to solidify the empirical claims.
+- A visualization of the distribution of learned noise schedule parameters (ρ_i and k_j) across features on a representative dataset, which would confirm that learning produces meaningful per-feature adaptation rather than near-uniform convergence.
+
+---
 
 ## Removed Points
-These points are flagged to be removed, treat them with caution.
 
-- **“Joint” forward process criticism.** The reviewer argues that Eq. (1) factorizes independently across numerical and categorical features, so calling it a “joint continuous-time diffusion process” overstates novelty. This misunderstands diffusion models: even standard image diffusion has a factorized forward process $q(\mathbf{x}_t|\mathbf{x}_0)=\prod_i q(x_t^i|x_0^i)$; the coupling arises in the learned reverse process. The paper’s usage is conventional and correct.
-- **Claim that “no existing method explores mixed-type diffusion framework in the continuous-time limit” is too strong.** The reviewer says this is false because the forward process is separable. But the paper’s claim is about operating in the original data space (not latent) with continuous-time diffusion for mixed types. Prior work either uses latent encodings (TabSyn) or discrete-time processes (CoDi, TabDDPM). The claim is accurate in context.
-- **Characterization of TabSyn as suffering from “encoding overhead” and “low model capacity.”** The reviewer finds this questionable because TabSyn wins on two datasets. However, the paper never singles out TabSyn for these criticisms; it describes latent-space methods generally, and TabDiff does outperform TabSyn on average. This criticism is a misreading.
-- **Evaluation metrics deferred to Appendix A.2.** Under space constraints, deferring metric definitions to the appendix is standard practice and not a meaningful weakness.
-- **Missing appendix / proofs.** The parser strips appendix sections; they exist in the original submission.
+*These points are flagged to be removed, treat them with caution.*
+
+- **"Ablation reveals the backbone alone is competitive with TabSyn"** (Harsh Critic): Factually incorrect. TABDIFF-Fix.+Det. achieves Shape = 1.39, which is actually *worse* than TabSyn's 1.35. The backbone without the key innovations *underperforms* TabSyn, meaning both innovations genuinely contribute. The critic misread the table direction.
+
+- **"Stochastic sampler contributes more than learnable schedule as the primary innovation"** (Harsh Critic): This is a framing preference, not a flaw. Both components contribute independently and are clearly supported by the 2×2 ablation in Table 5. Per Shape metric: stochastic sampler adds 0.19, learnable schedule adds 0.15; for Trend: both contribute ~0.37. The relative magnitudes are close enough that calling either "primary" is reasonable. Not a weakness.
+
+- **Strength: "Consistent state-of-the-art results across all eight metrics"** (Strength Finder): Partially dropped. The claim of *consistent* superiority is not supported at per-dataset resolution for Shape (losses on Default and News). Retained as a qualified strength for Trend only, which is genuinely consistent across all 7 datasets.
+
+- **Strength: "End-to-end training with no special encoding/decoding pipelines"** (Strength Finder): Dropped as generic and insufficiently grounded in a specific contribution beyond architecture design. The main novelty is what is modeled in that pipeline, not that training is end-to-end.
+
+---
 
 ## Novel Insights
 
-None beyond the paper's own contributions.
+The stochastic sampler design reveals a fundamental tension specific to masked absorbing diffusion for categorical features: once a token is "unmasked" during the backward process, standard DDPM-style sampling leaves it frozen for the remainder of the trajectory (Eq. 8), making it impossible to correct early decoding errors in the presence of inter-column correlation. TabDiff's sampler directly addresses this by re-masking intermediate decoded tokens before each denoising step, which is a natural but non-obvious extension of continuous stochastic sampling to mixed-type settings. The ablation confirms this is the *individually* stronger contribution for Shape correction (0.19 Shape improvement from stochastic sampler alone vs. 0.15 from learnable schedules alone), suggesting that the categorical frozen-state pathology is a bigger bottleneck than schedule heterogeneity for marginal distribution matching.
+
+---
 
 ## Suggestions
 
-1. **Clarify the training–sampling parameterization.** The authors must explicitly state whether $\boldsymbol{\mu}_\theta^{\text{num}}$ predicts noise $\boldsymbol{\epsilon}$ or clean data $\mathbf{x}_0$, and ensure Eq. (5) and Algorithm 2 agree. If the network predicts $\boldsymbol{\epsilon}$, the sampler should use $d\mathbf{x}^{\text{num}} = \boldsymbol{\mu}_\theta^{\text{num}}\, d\sigma$ (or the equivalent discretization). If it predicts $\mathbf{x}_0$, Eq. (5) should be rewritten as a loss on $\mathbf{x}_0$ or the appropriate preconditioning should be shown.
-2. **Add significance tests or self-contained baselines.** Either re-run all baselines with identical preprocessing and splits, or report confidence intervals and paired statistical tests (e.g., bootstrap or t-test on the 20 random samples) for the small average gaps, especially on Trend where several per-dataset margins are narrow.
-3. **Validate the adaptive-schedule hypothesis.** Plot the learned schedule parameters against simple feature statistics. If they do not correlate, the paper should soften its claim from “counteract heterogeneity” to “increase per-feature capacity.”
+1. Add comparison against TabSyn's published (original) numbers as a sanity check alongside the reproduction, or explain why the reproduction differs, to address the asymmetric baseline concern.
+2. Revise the MLE claim in the abstract and Section 4.3 to reflect that the 15.0% is a gap-reduction figure on a metric the authors themselves qualify, not an absolute accuracy improvement.
+3. Qualify the "consistent superiority" claim to note that the paper loses to TabSyn on the Shape metric for two specific datasets (Default and News), and note this in the conclusion as a limitation.
+4. Report learned ρ_i and k_j distributions for at least one dataset to validate the claim that the model meaningfully specializes schedules per feature.
+5. Add a brief analysis of λ_num, λ_cat sensitivity (even a 3-point sweep) to establish robustness.
+
+---
 
 ## Score and Decision
 
 **Calibration anchors:**
-- **TabSyn** (`/home/wg25r/review_agent/human_reviews/4Ay23yeuz0.md`, avg 6.75, Oral): Clean methodology, strong results, available code, well-written. TABDIFF has comparable empirical strength but is marred by the Eq. 5/Algorithm 2 inconsistency and weaker experimental controls, placing it clearly below TabSyn.
-- **CDTD** (`/home/wg25r/review_agent/human_reviews/QPtoBPn4lZ.md`, avg 5.50, Poster): Similar topic (continuous diffusion for mixed-type tabular data). Reviewers found it incremental but methodologically sound. TABDIFF introduces more novel components (native-space modeling, stochastic categorical sampler) and stronger average results, but pays a price in methodological clarity because of the training–sampling mismatch. Overall comparable to or slightly below CDTD.
-- **TabDAR** (`/home/wg25r/review_agent/human_reviews/kkGIbmpCHU.md`, avg 4.75, Reject): Strong empirical results but messy notation, correctness questions, and unclear methodology. TABDIFF is better written and its contributions are clearer, but it shares the liability of a concrete algorithmic inconsistency. TABDIFF sits above TabDAR.
-- **CATDM** (`/home/wg25r/review_agent/human_reviews/JD6j7XSluo.md`, avg 3.50, Withdrawn): Serious baseline discrepancies and weak overall performance. TABDIFF is well above this anchor.
 
-**Reasoning:** TABDIFF presents genuinely useful ideas—native-space continuous diffusion, feature-wise schedules, and a stochastic categorical sampler—and backs them with strong average empirical results. However, the inconsistency between Eq. (5) and Algorithm 2 is a severe methodological flaw for a methods paper: a reader cannot implement the core algorithm from the text alone because the training objective and sampler assume incompatible network outputs. Combined with the reliance on externally sourced baseline numbers and the lack of statistical validation for small gaps, the paper falls below the standard of a clean accept. If the authors resolve the training–sampling mismatch and provide stronger experimental validation, the work would rise to the level of a strong poster or better.
+| Paper | Path | Avg Score | Decision | Comparison |
+|---|---|---|---|---|
+| CDTD (mixed-type tabular diffusion, adaptive schedules, embedding space) | QPtoBPn4lZ.md | 5.50 | Accept Poster | Very close topic; TabDiff is clearly superior (native space, stronger results on Trend, stochastic sampler) |
+| TabSyn (tabular diffusion in VAE latent space) | 4Ay23yeuz0.md | 6.75 | Accept Oral | TabDiff's direct SOTA baseline; its own contributions received similar "mostly incremental but solid" characterization |
+| CardiCat (VAE for high-cardinality tabular) | vW6rsXAGrz.md | 4.00 | Reject | Low anchor; weaker methodology and thinner empirical evidence |
+| TabDAR (diffusion-nested autoregressive) | kkGIbmpCHU.md | 4.75 | Reject | Low anchor; mixed results and methodological issues |
 
-MY FINAL SCORE: <pineapple>5.0</pineapple>
-MY FINAL DECISION: <orange>Reject</orange>
+**Reasoning:** TabDiff sits clearly above CDTD (5.50): it is more principled (native data space vs. embedding interpolation), has cleaner theoretical grounding, and consistently outperforms TabSyn on the Trend metric across all seven datasets, which CDTD could not demonstrate. The key weaknesses (MLE overclaiming, Shape losses on 2/7 datasets, TabSyn reproduction asymmetry) are real but do not invalidate the core contribution. The 22.6% consistent Trend improvement over TabSyn is the paper's crown result and it holds up to scrutiny. At the same time, TabDiff does not reach TabSyn's oral quality (6.75): TabSyn's contribution was paradigmatic for the subfield (introduced the latent-space approach), while TabDiff's improvements are incremental over it, and the presentation issues are non-trivial. A score of **6.5** positions TabDiff above CDTD and below TabSyn, which matches the qualitative comparison well.
+
+**Score: 6.5 — Accept (Poster)**
+
+MY FINAL SCORE: <pineapple>6.5</pineapple>
+MY FINAL DECISION: <orange>Accept</orange>

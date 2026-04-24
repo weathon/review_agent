@@ -1,12 +1,23 @@
+Now I have enough of the paper. Let me do calibration searches.Now I have enough information to write the final consolidated review. Let me synthesize the findings.Now I have everything I need. Let me write the final consolidated review.
+
+---
+
 ## Summary
 
-TULiP proposes a post-hoc uncertainty estimator for OOD detection inspired by linearized (lazy-regime) training dynamics. The paper derives a bound on epistemic uncertainty (Theorem 3.1 and Proposition 3.3) that relates test-time sensitivity to the distance from a test point to the training set in gradient-embedding space, and introduces a weight-perturbation algorithm to estimate this bound without training data or explicit Jacobians. Empirically, TULiP achieves competitive or state-of-the-art near-OOD detection performance on the OpenOOD benchmark across multiple datasets and architectures.
+TULiP is a post-hoc uncertainty estimator for OOD detection that grounds its design in linearized training dynamics (NTK theory). The core theoretical contribution is Theorem 3.1, which bounds the effect of a hypothetical pre-convergence perturbation on a trained network's prediction by the NTK-distance between the test point and the training set. Proposition 3.3 then eliminates the need for training data by upper-bounding this quantity using only the trained parameters. Practically, TULiP constructs surrogate posterior samples via layer-wise-scaled weight perturbation and derives an entropy-based uncertainty score; it achieves particularly strong near-OOD detection on CIFAR-10 and ImageNet-200 in the OpenOOD benchmark.
+
+---
 
 ## Strengths
 
-- **Novel theoretical bound on training-fluctuation uncertainty.** Theorem 3.1 (Eq. 5) bounds the discrepancy between perturbed and unperturbed converged networks by the gradient-embedding distance to the training set, and Proposition 3.3 converts this into a tractable test-time quantity. This addresses a genuine gap in post-hoc OOD detection by connecting uncertainty to training dynamics rather than logits alone.
-- **Strong near-OOD empirical results.** Table 1 shows TULiP achieves top-1 or top-2 near-OOD AUROC on OpenOOD for CIFAR-10, CIFAR-100, ImageNet-200, and ImageNet-1K (e.g., best FPR@95 33.80 and AUROC 89.67 on CIFAR-10). Figure 3 further demonstrates consistent gains across MobileNet-V3, VGG-16, and RegNet-Y on ImageNet-1K.
-- **Efficient, training-data-free post-hoc design.** The practical algorithm (Alg. 1) avoids explicit Jacobian computations via finite-difference Jacobian-vector products (Eq. 13) and Hutchinson-style trace estimation (Proposition 4.1), yielding roughly a 3× speedup over training-data-dependent methods such as ViM (Sec. 5.2).
+- **Theorem 3.1 is a genuine theoretical result** (Section 3.3, Eq. 5): the bound on training fluctuations is dominated by the Frobenius-norm distance between the test-point Jacobian and the nearest training-point Jacobian, yielding a clean NTK-distance interpretation (Eq. 6). The proof idea — triangulating via a pivot in the training set and leveraging near-perfect convergence (A4) — is non-trivial and well-motivated.
+- **Synthetic validation is convincing** (Figure 2): using exact NTK computation via `neural-tangents`, the bound (Eq. 5) correctly encapsulates the ground-truth ensemble variance on Splines regression, and the Two-Moons classification map (right panel) closely matches the simulated prediction variance (middle panel), directly validating Theorem 3.1 under ideal conditions.
+- **Strong near-OOD empirical results** (Table 1): On CIFAR-10, TULiP achieves FPR@95 of 33.80 and AUROC 89.67, compared to the best non-training-data baseline (GEN: 53.67 FPR@95, 88.20 AUROC) — roughly a 20 percentage-point FPR improvement. On ImageNet-200, TULiP achieves the best near-AUROC of 83.84. These are genuinely state-of-the-art for methods that do not use training data.
+- **Cross-architecture validation** (Figure 3): TULiP consistently outperforms MLS and ODIN across MobileNet V3, VGG 16, and RegNet Y 16GF on ImageNet-1K, suggesting the method is not narrowly tuned to ResNet-specific behavior.
+- **Computationally efficient**: The method requires only O(M) forward passes with no backward passes, making it practical for large-scale evaluation. The paper notes it evaluates ~3× faster than ViM on large benchmarks.
+- **Transparent about limitations**: The paper explicitly acknowledges the heuristic layer-wise scaling (Section 4.1: *"such scaling is highly heuristic"*), the near/far OOD tradeoff (Figure 4, Section 6), and poor transformer performance (Appendix C.4).
+
+---
 
 ## Weaknesses
 
@@ -14,47 +25,95 @@ TULiP proposes a post-hoc uncertainty estimator for OOD detection inspired by li
 None.
 
 ### Major
-- **Structural disconnect between lazy-regime theory and practical algorithm.** Theorem 3.1 and Proposition 3.3 are derived under infinite-width, constant-NTK, gradient-flow assumptions, whereas TULiP is evaluated on finite ResNets, VGGs, and MobileNets trained with SGD. Figure 1a shows that the empirical NTK evolves significantly during training, directly violating the constant-NTK assumption. The layer-wise scaling heuristic (Eq. 12) is introduced precisely because the empirical NTK at convergence differs from the theoretical one, yet the paper provides no theoretical justification for why scaling by $1/\sqrt{|\theta_l|}$ preserves the bound. Consequently, the theoretical framework does not rigorously transfer to the evaluated setting, and claims that the method is “theoretically-driven” for practical architectures are overstated.
-- **The closeness assumption (Eq. 8) is critical but only coarsely validated.** Proposition 3.3 relies on this pointwise geometric inequality for every test point $\mathbf{z}$. The paper’s only empirical check is Figure 1d, which aggregates over a sample of points from a single ImageNet-1K ResNet-18. Because OOD detection must be valid for each input individually, a dataset-level average is insufficient to guarantee that Eq. 8 holds pointwise. If the assumption fails for even a subset of points, the tractable bound in Eq. 9 ceases to upper-bound the uncertainty, undermining the theoretical bridge to the implementation.
+
+- **Theory-to-practice gap undermines the "theoretically-driven" framing.** The abstract and introduction claim TULiP is a *theoretically-driven* method with "direct theoretical justifications regarding the training process," but Algorithm 1 departs from the theoretical framework at multiple key design decisions, each acknowledged in the paper:
+  - The layer-wise scaling (Eq. 12, $\Gamma_l = (1/\sqrt{|\theta_l|})\cdot I$) is explicitly called "highly heuristic" in Section 4.1. Its empirical justification (Figure 1b) holds at Epoch 20 but the paper itself notes this relationship "disappears at t=200" (Figure 1c), so it does not capture the full training trajectory.
+  - The hyperparameter $\lambda$ is substituted for the theoretically determined constant $K$ from Lemma 3.2 (Section 4.2), without a principled connection between the two.
+  - The term $\mathbb{E}_\mathbf{x}[\Theta(\mathbf{x},\mathbf{x})]$ is dropped from Eq. 9 (Section 4.3) on the grounds of tractability and being "irrelevant to $\mathbf{z}$" — acceptable for ranking but it means the theoretical bound (Eq. 9) and the implemented score $S$ differ by an unquantified dataset-dependent constant.
+  - $\theta_{t_s} \leftarrow \mathbf{0}$ (Algorithm 1, line 1) approximates the initialization mean rather than an actual initialization draw, as the theory requires.
+  
+  Individually each departure is acknowledged and reasonable; cumulatively they mean Algorithm 1 is more accurately described as *theoretically inspired* than *theoretically derived*. The paper's identity claim ("theoretically-driven") would be better supported if it quantified how much each approximation costs, or if it showed that the score $S$ correlates monotonically with the theoretical bound in practice. The claim should be scoped accordingly.
+
+- **"Consistently improves previous state-of-the-art" is overstated.** The abstract (and Introduction bullet iii) state TULiP *consistently* improves prior methods. Table 1 contradicts this for far-OOD on ImageNet-1K: TULiP AUROC 88.03 vs ASH AUROC 95.74 (a 7.7-point gap), and FPR@95 48.01 vs ASH 19.49 (a 28-point gap). The paper offers a post-hoc explanation (ResNet-50 redundant representations) in Section 5.2, but no theory-driven prediction of when TULiP should or should not outperform ASH. The near-OOD results *are* consistently strong; the headline claim should be scoped to that regime.
 
 ### Minor
-- **Missing statistical dispersion in benchmark results.** Table 1 reports averages over only three runs with no standard deviations or confidence intervals. This makes it impossible to judge whether small AUROC differences are statistically meaningful (e.g., CIFAR-100 near-OOD: TULiP 81.29 vs. GEN 81.31).
-- **Large finite-difference perturbations lack bias analysis.** Proposition 4.1 and Eq. 13 assume $\epsilon, \delta \to 0$, but the implementation uses $\epsilon=2.0$ and $\delta=2$—far from the asymptotic regime—without analyzing the finite-$\epsilon$ bias of the Jacobian-vector product or trace estimators.
-- **Generality beyond classification is unsubstantiated.** The abstract claims TULiP is “not limited to classification problems,” yet Algorithm 1 is classification-specific (softmax + entropy) and all large-scale experiments are on image classification. Only a synthetic regression task (Fig. 2a) is shown, with no real-world regression or structured-prediction benchmark.
+
+- **Closeness assumption (Eq. 8) is only validated on ID data** (Figure 1d): The experiment uses 256 ID samples from ImageNet-1K and 128 OOD samples per dataset, but validation is presented as confirming the assumption holds by "a large margin." However, Figure 1d appears to check whether the assumption holds generally, not whether it holds *more tightly for ID vs. near-OOD inputs* — which is the critical question given that near-OOD is the use case. If the assumption barely holds for the hardest near-OOD inputs, the bound may not be informative there.
+
+- **Exponential constant in Theorem 3.1 may render the bound vacuous for practical settings.** The constant $C = \frac{\alpha \bar{\Theta}_X^{1/2}}{\lambda_{\max}}(e^{(T-t_s)L\lambda_{\max}} - 1)$ grows exponentially in $(T-t_s)L\lambda_{\max}$. At $t_s = 0$ (the implementation choice), $C$ is exponentially large in the full training horizon times $L\lambda_{\max}$. The synthetic validation (Figure 2) uses infinite-wide networks in the exact lazy regime, which may have very small $\lambda_{\max}$. The paper does not discuss whether the bound is informative in the practical finite-width setting, or provide numerical estimates of $C$.
+
+- **Finite-difference step size is far from the theoretical limit.** Equation 13 approximates a Jacobian-vector product with $\delta \rightarrow 0$, but in practice $\delta \in \{2, 5, 8\}$ — large values that introduce $O(\delta)$ bias in the approximation. This affects $D$ in line 12 of Algorithm 1, which feeds directly into the uncertainty score $S$. The sensitivity of results to $\delta$ is partially explored (ablation search) but the bias introduced relative to the theoretical quantity is not characterized.
 
 ### Trivial
-- **Proof sketch clarity for Theorem 3.1.** The proof sketch mentions bounding the fluctuation “with an arbitrarily chosen pivot point $\mathbf{x}^*$,” while the theorem statement uses $\inf_{\mathbf{x}\in X}$. The relationship between the proof argument and the infimum could be spelled out more clearly.
+
+- The ablation (Figure 4) varies $\lambda$ and $\epsilon$ but never compares against a condition using the raw perturbed predictions ($\tilde{f}_i^{\text{raw}}$) without the $\gamma$-scaling step (i.e., no surrogate ensemble construction). This would isolate whether TULiP's gains come from the bound-matching construction or simply from raw weight perturbation as a variance-estimation heuristic (analogous to MC-Dropout without dropout layers).
+
+---
 
 ## Nice-to-Haves
-- Ablation comparing the raw tractable bound (Eq. 9) directly against the surrogate ensemble + entropy score (Alg. 1, lines 14–18) to isolate whether empirical gains stem from the theoretical quantity or from the ad hoc ensemble construction.
-- Real-world regression or dense-prediction benchmark to substantiate claims of applicability beyond classification.
-- Finite-$\epsilon$ error analysis for the Jacobian and trace estimators to justify the large perturbation magnitudes used in practice.
+
+- A principled extension of the layer-wise scaling (Eq. 12) to transformer architectures (attention layers and layer norms), which the paper acknowledges as future work but would meaningfully broaden TULiP's applicability given transformers' dominance in large-scale vision.
+- An experiment directly plotting the score $S$ (lines 11–13 of Algorithm 1) against held-out OOD-ness across inputs, to empirically establish whether the theoretical scoring mechanism (not just the surrogate samples) correlates with OOD detection on real networks.
+- Sensitivity analysis of the layer-wise scaling across different training setups (e.g., Adam vs. SGD, different learning-rate schedules) to assess how broadly the Epoch-20 Jacobian ratio justification (Figure 1b) generalizes.
+
+---
 
 ## Removed Points
-These points are flagged to be removed; treat them with caution.
-- **Strawman about synthetic experiments:** The critic claims Sec. 5.1 “does not validate TULiP’s heuristic approximations on real networks.” The paper never makes this claim; synthetic validation is explicitly scoped to the lazy-regime bound, so this criticism is unfounded.
-- **Speculative hyperparameter tuning on OOD data:** The critic suggests semantic-shift hyperparameters in Table 1 may have been tuned on a near-OOD validation set. The paper states it follows the OpenOOD protocol and conducts hyperparameter search “on a small validation set whenever possible.” There is no evidence that OOD data were used for tuning; this is pure speculation.
-- **Surrogate posterior samples as a strength:** Moved here because the claim that TULiP generalizes beyond classification is only supported by a synthetic task (Fig. 2a), conflicting with the verified weakness that no real-world non-classification task is shown.
-- **Layer-wise scaling as a supporting strength:** Moved here because, while Fig. 1 provides limited empirical support, the scaling remains a highly heuristic, load-bearing component with theoretical justification only on a single CIFAR-10 ResNet-18 run.
+
+*These points are flagged to be removed; treat them with caution as they may reflect reviewer misreadings.*
+
+- **"K is arbitrary in Lemma 3.2"** (Harsh Critic): The paper explicitly says λ is "a proxy to the constant K in Lemma 3.2" (Section 4.2). This is a known approximation the authors acknowledge, not a silent substitution. Removed as strawman.
+- **"Surrogate samples have no valid probabilistic interpretation"** (Harsh Critic): The paper consistently calls these "surrogates to posterior samples," never claiming exact equivalence. Equation 10 justifies variance matching to an upper bound, and the paper is explicit that significant simplifications were made. The claim is appropriately hedged throughout. Removed as strawman.
+- **"Setting θ_{t_s}←0 conflates initialization mean with actual initialization"** (Harsh Critic): The paper explicitly says "we take $t_s = 0$ and substitute $\theta_{t_s}$ with $\mathbb{E}[\theta_0] = \mathbf{0}$" (Section 4), presenting it as an acknowledged practical approximation. Removed as strawman.
+- **"ASH outperforms TULiP — unfair comparison"**: This is not an unfair comparison asymmetry favoring baselines; ASH genuinely outperforms TULiP on far-OOD ImageNet-1K. Kept as a real weakness (Major section).
+- **Hyperparameter asymmetry vs. parameter-free baselines** (Harsh Critic): The paper follows OpenOOD protocol with a small validation set search, which is standard for the benchmark. EBO and MLS are not strictly "parameter-free" relative to score computation (threshold tuning is standard). Removed as not substantive enough to change assessment.
+- **"The bound's constant is exponentially large — synthetic validation is in a different regime"** — partially valid; retained as Minor weakness but weakened from the Harsh Critic's "structural" framing.
+- **"Closeness assumption validated only on ID data"** — kept as Minor but weakened from the Harsh Critic's characterization (the paper does validate it on 5 OOD datasets, just not specifically showing the margin difference for near-OOD).
+- **Strength Finder: "Theory-predicted near-OOD advantage is empirically confirmed"** — dropped from Strengths because the closeness assumption is only validated on ID/OOD data but not specifically on the mechanism driving the near/far tradeoff; the near-OOD advantage is confirmed empirically but the theoretical prediction is post-hoc.
+
+---
 
 ## Novel Insights
-None beyond the paper's own contributions.
+
+The most genuinely novel observation in this paper — one that partially survives the theory-to-practice criticisms — is the connection between the *parameter count of a layer* and *how much it deviates from the NTK at early vs. late training* (Figure 1a–b). The empirical finding that layers with more parameters train slower and that their Jacobian ratio correlates with $|\theta_l|^{-1/2}$ at Epoch 20 suggests a structured relationship between parameter count, training speed, and NTK trajectory that could have applications beyond TULiP's specific use case. This is a concrete, potentially reusable empirical finding about training dynamics that the paper uses as a heuristic but which could underpin more principled future methods.
+
+---
 
 ## Suggestions
-- Explicitly qualify the scope of the theoretical claims: state that the lazy-regime bound motivates the practical heuristic rather than guaranteeing it for finite networks, or develop theoretical justification for the layer-wise scaling and finite-difference approximations under realistic training conditions.
-- Report standard deviations or confidence intervals across the three benchmark runs to strengthen the evidential case.
-- Include at least one standard non-classification benchmark (e.g., a UCI regression task) if the paper wishes to maintain the claim of broad applicability.
+
+1. **Reframe the theory-practice connection honestly**: Replace "theoretically-driven" with "theoretically-motivated" or "theoretically-inspired," and add a summary table in the paper (or appendix) enumerating each approximation from theory to Algorithm 1, with a sentence on its impact. This would make the paper's actual contribution clearer and more defensible.
+2. **Quantify the exponential constant**: For the practical settings used in experiments, compute numerical estimates of $C$ in Theorem 3.1 to establish whether the bound is informative or merely qualitative.
+3. **Add a near/far closeness assumption check**: In Figure 1d, overlay the closeness margin specifically for near-OOD vs. far-OOD subsets to test whether the theory predicts the empirically observed near-OOD advantage.
+4. **Scope the "consistently improves" claim**: Change the abstract and Introduction bullet iii to specify that TULiP "achieves state-of-the-art or competitive near-OOD detection performance" across all datasets — consistent with what Table 1 actually shows.
+5. **Add raw-perturbation ablation**: Include an experimental condition using variance of $\tilde{f}_i^{\text{raw}}$ directly (without γ-scaling to match the bound), to separate the contribution of the theoretical scoring from the weight-perturbation ensemble.
+
+---
 
 ## Score and Decision
 
-**Calibration anchors used:**
-- `/home/wg25r/review_agent/human_reviews/xUO1HXz4an.md` (NegLabel, avg human score 7.50): Broader domain evaluation and stronger theoretical grounding; TULiP is below this because of the significant theory–practice gap.
-- `/home/wg25r/review_agent/human_reviews/N6ba2xsmds.md` (HamOS, avg human score 6.75): Similar profile (novel method, strong empirical results, some overclaim); TULiP is slightly weaker due to a more fundamental disconnect between its lazy-regime theory and its finite-network implementation.
-- `/home/wg25r/review_agent/human_reviews/ym0ubZrsmm.md` (SSOD, avg human score 5.33): Accepted poster with strong experiments but missing comparisons and practical concerns; TULiP has stronger benchmark coverage and fewer deployment flaws.
-- `/home/wg25r/review_agent/human_reviews/am7BPV3Cwo.md` (ImOOD, avg human score 5.75): Rejected due to limited scope and missing large-scale validation; TULiP has broader experiments and stronger results, placing it above this band.
-- `/home/wg25r/review_agent/human_reviews/Oo5spZRpH6.md` (HAct, avg human score 3.67): Rejected over serious methodological and evaluation issues; TULiP is substantially above this low anchor.
+**Calibration anchors:**
 
-TULiP delivers real empirical contributions—most notably state-of-the-art near-OOD detection on OpenOOD—and introduces an interesting theoretical perspective. However, the transfer from lazy-regime theory to the practical algorithm is not rigorously established, and key assumptions (e.g., Eq. 8) are only coarsely validated. These issues keep it below the strongest accepted papers in the area but well above the rejected band. Relative to the calibration cluster, it sits near the lower end of the accepted range.
+| Paper | Path | Avg Score | Decision | Comparison |
+|---|---|---|---|---|
+| NECO: Neural Collapse-based OOD | `/human_reviews/9ROuKblmi7.md` | 5.75 | Accept (poster) | Most similar profile: post-hoc OOD + theoretical explanation + competitive benchmark results; TULiP has stronger near-OOD margins but weaker theory-practice connection |
+| SCALE: Activation Shaping for OOD | `/human_reviews/RDSTjtnqCg.md` | 6.25 | Accept (poster) | Post-hoc OOD with mechanism analysis + SoTA; simpler method than TULiP but broader SoTA claim support |
+| DNNs Tend to Extrapolate Predictably | `/human_reviews/ljwoQ3cvQh.md` | 7.00 | Accept (poster) | OOD/uncertainty with novel theoretical insight + strong empirical; more cohesive theory-experiment alignment than TULiP |
+| Streamlining Prediction in BDL | `/human_reviews/pW387D5OUN.md` | 7.00 | Accept (poster) | Bayesian DL with linearization + strong empirical; tighter theory-practice link than TULiP |
+| Unified Uncertainty Estimation | `/human_reviews/56jIlazr6a.md` | 5.25 | Reject | Uncertainty estimation framework that also conflates epistemic/aleatoric concerns |
+| Exact Path Kernels for OOD | `/human_reviews/gZRfDWLlGY.md` | 4.33 | Reject | OOD via kernel path decomposition — weaker empirical results and more fragmented theory than TULiP |
+| Pre-trained Networks Detect Familiar OOD | `/human_reviews/Pb9PIECnNF.md` | 4.00 | Withdrawn | OOD with pre-trained models — incremental, limited scope, weaker than TULiP |
+| TTA for OOD (HAct-like) | `/human_reviews/H65sp7ztys.md` | 3.67 | Withdrawn | Modest OOD contribution with limited theoretical backing — clearly weaker than TULiP |
 
-MY FINAL SCORE: <pineapple>6.0</pineapple>
+TULiP sits between NECO (5.75, accepted) and SCALE (6.25, accepted). It has a more ambitious theoretical framework than NECO and stronger near-OOD margins, but its theory-practice gap is wider and its SoTA claims are less fully supported. The most natural score is **5.5**, with a borderline-Accept decision. The paper's near-OOD results are genuinely strong (especially CIFAR-10), the theoretical framework is a real contribution, and the paper is honest about limitations — all of which merit acceptance. The major weaknesses (overclaimed framing, heuristic-heavy implementation) do not invalidate the contribution but should be addressed in revision.
+
+**Originality**: Moderate-to-good. Connecting NTK training fluctuations to post-hoc OOD detection is a novel framing.  
+**Importance of research question**: High. Post-hoc OOD detection with theoretical grounding is an important open problem.  
+**Claims supported**: Partially. Near-OOD claims are well-supported; far-OOD SoTA claims are not.  
+**Soundness of experiments**: Good. OpenOOD benchmark is comprehensive; ablations are present but limited.  
+**Clarity of writing**: Good. Paper is clearly written and honest about limitations.  
+**Value to the research community**: Moderate-to-high. Practical method with genuine near-OOD improvements and a reusable theoretical framework.
+
+**Score: 5.5** — borderline accept.
+
+MY FINAL SCORE: <pineapple>5.5</pineapple>
 MY FINAL DECISION: <orange>Accept</orange>

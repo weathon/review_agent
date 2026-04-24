@@ -3,7 +3,7 @@
 - Decision: Withdrawn (Treated as Reject)
 - Scores: 5, 3, 6
 
-## Abstract
+## Abstract 
 Continual learning (CL) aims to train a model on a sequence of tasks (i.e., a CL scenario) while balancing the trade-off between plasticity (learning new tasks effectively) and stability (retaining prior knowledge). The dominantly adopted conventional evaluation protocol for CL algorithms selects the best hyperparameters within a given scenario and then evaluates the algorithms
 using these hyperparameters in the same scenario. However, this protocol has significant shortcomings: it overestimates the CL capacity of algorithms and relies on unrealistic hyperparameter tuning, which is not feasible for real-world applications. From the fundamental principles of evaluation in machine learning, we argue that the evaluation of CL algorithms should focus on assessing the generalizability of their CL capacity to unseen scenarios. Based on this, we propose a revised two-phase evaluation protocol consisting of a hyperparameter tuning phase and an evaluation phase. Both phases share the same scenario configuration (e.g., number of tasks) but are generated from different datasets. Hyperparameters of CL algorithms are tuned in the first phase and applied in the second phase to evaluate the algorithms. We apply this protocol to class-incremental learning, both with and without pretrained models. Across more than 8,000 experiments, our results show that most state-of-the-art algorithms fail to replicate their reported performance, highlighting that their CL capacity has been significantly overestimated in the conventional evaluation protocol.
 
