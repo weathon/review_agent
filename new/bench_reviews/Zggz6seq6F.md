@@ -1,68 +1,51 @@
 ## Summary
-
-The paper introduces **FIOVA**, a benchmark for comparing large vision-language models (LVLMs) to human video understanding. It comprises 3,002 long videos (average 33.6 s) covering 38 themes, each annotated by five humans, yielding captions 4–15× longer than prior work. A synthesized groundtruth is created via GPT‑3.5‑turbo, and six LVLMs are evaluated using traditional metrics, the event‑based AutoDQ, and a novel weighted variant (FIOVA‑DQ). The analysis groups videos by inter‑annotator variation and compares model vs. human consistency across difficulty levels.
+This paper introduces FIOVA (Five In One Video Annotations), a benchmark designed to evaluate the gap between Large Vision-Language Models (LVLMs) and human video comprehension. By curating 3,002 long-form videos with five distinct human annotations each, the authors aim to establish a robust human baseline and propose FIOVA-DQ, an event-based evaluation metric that attempts to weight events by their perceived importance to annotators. The work further explores how model consistency and descriptive accuracy shift as human annotator disagreement increases.
 
 ## Strengths
-
-- **Large-scale multi‑annotator dataset** – 3,002 long videos with five diverse captions each, establishing a rich and challenging benchmark that addresses key limitations of existing datasets (short duration, single annotation) (Section 2.1; Table 1; Figure 2).
-- **Explicit modeling of human variation** – Using coefficient of variation across multiple quality dimensions and caption length to stratify videos into difficulty groups provides a nuanced lens for analyzing model behavior (Section 2.2; Figure 3).
-- **Comprehensive evaluation suite** – The paper employs traditional, event‑based, and weighted metrics, and analyzes overall, per‑group, and ranking‑based consistency, yielding insights such as Tarsier’s temporal strength and ShareGPT4Video’s redundancy (Section 4; Table 2; Figures 6–7).
-- **Novel weighted event metric concept** – FIOVA‑DQ attempts to align evaluation with human preferences by weighting events according to annotator‑derived importance (Section 4.1; Figure 4).
+- **Substantial multi-annotator dataset:** Collecting 15,010 distinct human annotations across 3,002 long-form videos (averaging 33.6 seconds) directly addresses the pervasive single-ground-truth bias of legacy video captioning benchmarks (Table 1, Sec 2.1).
+- **Event-granular evaluation direction:** Moving away from brittle n-gram overlap toward semantic-level event matching via FIOVA-DQ represents a valuable step forward for evaluating open-ended, long-form generation.
+- **Difficulty-stratified analytical framework:** Attempting to group videos by the degree of human annotator disagreement (Coefficient of Variation) to analyze how models handle ambiguous or complex content is a highly useful methodological concept for future video-LLM diagnostics.
 
 ## Weaknesses
 
 ### Fatal
-- **Unvalidated AI‑as‑judge evaluation pipeline** – The entire benchmark relies on GPT‑3.5‑turbo for critical steps: scoring human caption quality (Section 2.2), synthesizing the groundtruth (Section 2.3), extracting events from captions (Section 3.2), and implicitly in metric computation. No human validation of GPT‑3.5’s judgments is provided. This undermines the reliability of all quantitative results and invalidates the paper’s central claim of a robust human‑machine comparison.
+None
 
 ### Major
-- **Groundtruth synthesis by AI** – The “comprehensive human baseline” is not raw human consensus but a GPT‑3.5‑generated consolidation of five annotations (Section 2.3). This introduces potential AI bias and deviates from a pure human reference, weakening the interpretation of LVLM performance against “human” understanding.
-- **Arbitrary difficulty grouping** – Videos are divided into eight groups based on the average coefficient of variation across five quality scores **plus annotation length** (Section 2.2; Fig. 3(f)). Mixing semantic disagreement with length variation conflates distinct sources of difficulty and complicates the batch analysis in Section 4.3.
-- **Missing ablation of groundtruth construction** – No comparison between the chosen GPT‑3.5 synthesis method and alternatives (e.g., majority voting, human expert consolidation) is provided. Without this, the robustness of the baseline is unknown.
-- **Limited model coverage** – Only open‑source LVLMs are evaluated; closed‑source models (GPT‑4V, Gemini) are omitted, restricting the scope of conclusions about state‑of‑the‑art capabilities.
+- **Severe text-to-figure contradiction in the central difficulty gradient analysis:** In Section 4.2, the text explicitly states, *"we observe a general decline in performance for most LVLMS in Group H"* and that models *"struggled to maintain descriptive completeness"* for the most difficult videos. However, Figure 6 (the radar plots for sub-groups A-H) and its accompanying caption completely contradict this, explicitly stating and visually showing the opposite: *"The plots show that performance generally improves from Group A to Group H for most metrics."* This glaring internal inversion means the paper's most important claims regarding how LVLMs handle complex, high-disagreement videos are entirely unsupported. 
+- **Complete systemic circularity around GPT-3.5-turbo:** The entire analytical pipeline of the benchmark relies on a single LLM at every critical stage: GPT-3.5 scores the humans to derive the central difficulty groups (Groups A-H are grouped by the CV of GPT-3.5's 1-10 scores); GPT-3.5 synthesizes those human captions into the final ground truth (Sec 2.3); and GPT-3.5 performs the event extraction to evaluate the models (Sec 3.2). Consequently, the benchmark does not inherently measure alignment with human understanding; it measures alignment with GPT-3.5's specific summarization and cognitive biases, leaving the findings vulnerable to the idiosyncrasies of an outdated proprietary model.
+- **Under-specified and uninterpretable FIOVA-DQ weighting mechanism:** The primary contribution of FIOVA-DQ is its incorporation of human-weighted cognitive emphasis on events. However, the paper provides no algorithmic prompt, formula, or procedural mapping explaining how to convert the five global quality dimensions (scored 1-10 by the LLM in Sec 2.2) into granular, event-level probability weights. Without this derivation, the metric operates as an opaque black box, rendering its claimed superiority over standard AutoDQ uninterpretable and difficult to reproduce.
 
 ### Minor
-- **Inconsistent stance on traditional metrics** – The paper correctly notes BLEU/METEOR/GLEU limitations (Section 4.2) but still highlights Tarsier’s BLEU superiority as evidence of “outstanding performance,” which may overstate those scores.
-- **No statistical significance reporting** – Differences between models (e.g., in recall) lack confidence intervals or significance tests, making it hard to assess whether observed gaps are meaningful.
-- **Sparse qualitative error analysis** – The paper would benefit from concrete examples showing *which* events LVLMs omit or hallucinate, and *why* (e.g., peripheral actions, brief events).
+- **Absence of raw human-to-human agreement metrics:** The paper defines video difficulty entirely based on the variance of an LLM's scoring of human captions. It lacks traditional Inter-Annotator Agreement (IAA) metrics (e.g., ROUGE-L, SPICE, or Krippendorff's alpha) computed strictly between the five human annotators, failing to establish an independent linguistic baseline of human consensus before the data is processed by an LLM.
+- **Statistical significance and metric variance:** Table 2 reports narrow performance deltas between models across open-ended generation (e.g., AutoDQ F1 differences in the 0.02–0.04 range) without confidence intervals, standard deviations, or bootstrap significance tests. Given the high variance inherent in generative model outputs and sampling over 3,002 videos, it is unclear which deltas reflect true architectural advantages versus random generation noise.
 
 ### Trivial
-- Minor notation inconsistencies in figure captions (e.g., “METRO” vs. “METEOR”).
+- **Notation inconsistencies:** Minor formatting artifacts and inconsistent notation in Figure 6 captions (e.g., "SharedPTW-Video" vs "ShareGPT4Video") and equation formatting, which will need to be cleaned up for the final camera-ready version.
 
-## Nice‑to‑Have
-- Human evaluation of LVLM outputs against the five raw human annotations (not the synthesized groundtruth) to directly assess human alignment.
-- Release of the five original captions per video alongside the groundtruth to enable alternative consensus methods.
-- Calibration of GPT‑3.5’s scoring and event extraction against human annotators to validate the evaluation pipeline.
-- Inclusion of closed‑source LVLMs for a more complete picture of the state‑of‑the‑art.
-- Confidence intervals via bootstrapping over videos for metric stability.
+## Nice-to-Haves
+- **Investigate the Group H metric inflation artifact:** If the authors resolve the text-figure contradiction and confirm that *performance scores do indeed increase* for videos where humans disagree the most, they should deeply investigate why. It strongly suggests an artifact where models easily match generic events in an overly aggregated "Frankenstein" LLM ground truth, or that longer synthesized references artificially inflate recall metrics.
+- **Release the raw 5-annotation dataset separate from the LLM-synthesized groundtruth:** Ensuring the raw 15,010 human captions are available so the community can compute true human metrics and test alternative consensus methods would greatly increase the paper's utility.
 
 ## Removed Points
-These points are flagged to be removed, treat them with caution.
-- **Harsh Critic Point 4 (Recall misreading)** – The critic asserted that all models have weighted Recall < 0.25; Table 2 shows Tarsier’s weighted Recall is 0.584, making this factually incorrect. Removed.
-- **Strength Finder “Systematic groundtruth synthesis”** – Cited as a strength, but GPT‑3.5‑mediated synthesis is actually a methodological weakness (see Fatal/Major). Removed.
-- **Strength Finder “Rigorous human annotation quality assessment”** – The quality scoring uses unvalidated GPT‑3.5, so the rigor is questionable. Downgraded to moderate rather than a core strength.
-- **Trivial formatting nitpicks** – Comments about typos, appendix omissions, or broken characters, which are parser artifacts and not paper issues.
+- "Category Error in Human vs Machine Consistency Comparison": *Removed due to reviewer misunderstanding.* Comparing the intra-video variance of 5 human annotators to the intra-video variance of 6 LVLMs is exactly the correct experimental design for answering the research question "Do LVLMs describe videos like humans?". It is not a category error to observe whether machine output variance scales with human output variance.
+- "Stale model selection and omission of proprietary models": *Removed due to scope creep.* The paper explicitly focuses on evaluating and benchmarking SOTA open-source LVLMs. Benchmarking proprietary closed-source models like GPT-4o is outside its stated scope.
+- "Inconsistent decoding hyperparameters across models": *Removed as standard practice.* The paper utilizes the official, publicly released "default settings" for each model. While temperatures vary (e.g., 0.0 to 1.0), evaluating open-source models at their official out-of-the-box configurations is a standard and acceptable benchmarking practice.
 
 ## Novel Insights
-The paper inadvertently highlights a systemic risk in current LLM‑driven benchmarks: using powerful but unvalidated language models as both judges and data processors can silently embed model biases into the evaluation, potentially yielding misleading conclusions about model capabilities. This underscores the need for rigorous validation of any automated evaluation component, especially when claiming human‑level comparisons.
+By attempting to group videos based on how much humans naturally disagree with one another, FIOVA raises the fascinating question of whether AI models converge or diverge on ambiguous visual data. However, this insight is practically undermined by the paper's heavy reliance on GPT-3.5-turbo as the omniscient mediator. Because the model scores the humans, synthesizes the ground truth, *and* judges the evaluated outputs, the paper inadvertently demonstrates that LVLMs will appear "consistent" or "accurate" primarily when they align with GPT-3.5's biases—creating a closed, self-validating loop rather than capturing a raw, human-grounded divergence.
 
 ## Suggestions
-- Conduct a human study to evaluate GPT‑3.5’s caption‑quality scores and event extraction on a representative sample; report inter‑annotator agreement.
-- Compare alternative groundtruth construction methods (e.g., majority vote, expert curation) to ensure the current approach does not skew conclusions.
-- Provide confidence intervals for all reported metric differences (e.g., via bootstrap over videos).
-- Release raw human annotations and model outputs to support reproducibility and future metric development.
-- Consider evaluating a small set of closed‑source models (e.g., GPT‑4V) for reference.
+- **Decouple the difficulty groups from the LLM evaluator:** Calculate the Coefficient of Variation (CV) for Groups A-H using standard, raw text-based human agreement metrics (e.g., pairwise SPICE or BERTScore between the 5 human annotations) rather than relying on the variance of an LLM's subjective 1-10 scoring to define "human disagreement."
+- **Reconcile the Group A to Group H contradiction immediately:** The authors must explain why the text in Section 4.2 claims performance declines while the corresponding radar charts in Figure 6 and its caption show performance improving as human disagreement increases. Determining whether this is a data plotting error or a fundamental failure of the evaluation metrics to penalize complexity is crucial.
+- **Provide the FIOVA-DQ weighting algorithm:** Include the exact mathematical formula or prompt pipeline used to transform global caption dimension scores into the event-level weights seen in Figure 4.
 
-## Calibration Anchors
-**High‑scoring (≥6)** – Papers like *InternVid* (7.0, Spotlight), *Dense Video Object Captioning* (7.5, Spotlight), *OpenVid‑1M* (7.0, Poster), *ViLMA* (6.0, Poster), *TOMATO* (6.75, Poster), and *F³Set* (7.0, Poster) succeeded due to large‑scale datasets, sound evaluation methodologies, and validated metrics.
-
-**Medium (~5)** – *eIO1YcEdE6* (4.75, Withdrawn), *j3BWS9kDYm* (5.0, Withdrawn), *UHHOAe1uIS* (5.25, Reject), *kjVgyR3RFr* (5.5, Reject), *yIN4yDCcmo* (5.0, Reject), *L4nH3j7L94* (4.75, Withdrawn), *QnjUf0VytI* (4.67, Reject), *EFzBhrEp8Y* (5.0, Withdrawn). Many were rejected due to limited novelty, narrow scope, or insufficient experimental validation.
-
-**Low (≤4)** – *FFUmPQM8c5* (4.0, Withdrawn), *wMRFTQwp1d* (4.0, Withdrawn), *LixtB4TYY2* (3.5, Withdrawn), *kUsXwE98Cs* (3.75, Withdrawn), *UndmcWatBN* (3.5, Withdrawn), *uBhqll8pw1* (4.0, Reject). Low scores commonly resulted from unvalidated metrics, missing baselines, or unclear methodology.
-
-**Comparison** – FIOVA’s dataset ambition rivals high‑scoring papers, but its evaluation pipeline (unvalidated AI judge and AI‑generated groundtruth) is a fatal weakness more typical of low‑scoring benchmarks (e.g., *AutoBench‑V* at 3.75). The presence of a valuable dataset does not offset the invalidation of the core comparative claims. Relative to anchors, FIOVA falls into the low‑score band.
+---
 
 ## Score and Decision
-After calibrating against the provided anchors and weighing the strengths against the fatal methodological flaws, the paper receives a **3.5**. The dataset is a genuine contribution, but the unvalidated AI‑mediated evaluation destroys confidence in the reported findings. The decision is **Reject**.
+To calibrate, I compared FIOVA to several anchors. High-scoring benchmarks like **InternVid** (7.0) and **CHOTA** (7.5) are characterized by rigorous, self-consistent evaluations and clear validation of their novel metrics. Medium-scoring papers like **TransCues** (5.33) and **BLOOD** (5.50) often suffer from missing ablations or incremental claims but maintain methodological soundness. Low-scoring papers like the **2.00 Reject** anchor feature unconvincing claims and superficial treatment. 
 
-MY FINAL SCORE: <pineapple>3.5</pineapple>
+While the data collection effort of FIOVA (15,000 human annotations) is commendable and on par with higher-tier dataset papers, the complete analytical breakdown—specifically the direct contradiction between the main text and the figures regarding Group H, and the systemic circularity of using the exact same LLM scorer to define difficulty, synthesize ground truth, and judge the models—invalidates its core comparative claims. The paper falls below typical medium-scoring borderline papers because its central findings cannot be trusted in their current state. 
+
+MY FINAL SCORE: <pineapple>4.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

@@ -1,71 +1,79 @@
-## Summary  
-This paper proposes an incremental learning architecture that uses task-specific adapters with co-training of the backbone network to separate invariant and task-specific representations, aiming to improve both stability and plasticity. The authors demonstrate that adapter-enhanced variants of several regularization-based methods (EWC, MAS, PathInt, LwF, LwM) yield higher average accuracy on CIFAR-100 compared to their non-adapter counterparts, and show benefits on ImageNet and when combined with DualPrompt/iTAML.
+## Summary
 
-## Strengths  
-- **Novel architectural split via adapters** – Repurposing adapters as feature modifiers while co-training the backbone is a fresh perspective for incremental learning, clearly described in Section 3.2 and Figure 2.  
-- **Consistent gains on CIFAR-100** – Figure 3 shows adapter-augmented methods outperform baselines by 3–5% on average across 10 tasks, demonstrating a strong empirical signal.  
-- **Robustness to task ordering** – Figure 5 confirms the advantage persists under coarse-grained and iCaRL random orderings, highlighting resilience to inter-task diversity.  
-- **Broad compatibility** – Adding adapters to DualPrompt and iTAML yields >1% improvements (Table 2), and the proposed Adapter+LwF surpasses TAMiL (74.0% vs 71.4%).  
-- **Scalability to larger datasets** – Adapter variants of LwF and LwM show non-trivial gains on ImageNet-Subset (Table 1), though results are mixed for EWC.
+This paper proposes integrating task-specific adapters with co-training of both the backbone and adapters for incremental learning, contrasting with prior adapter-based IL approaches that freeze the backbone. A backbone distillation regularizer (for prediction-based methods) or adapter parameter masking (for weight-based methods) enforces stability in the shared representational space. The method integrates cleanly across five classical regularization baselines (EWC, MAS, PathInt, LwF, LwM) and demonstrates consistent 3–5% accuracy gains across CIFAR-100 orderings and task scales, with preliminary (but underspecifed) results on ImageNet-Subset.
 
-## Weaknesses  
+## Strengths
 
-### Fatal  
-None.  
+- **Method-agnostic adapter integration with consistent gains.** As shown in Figure 3, the approach lifts accuracy by 3–5% across five diverse regularization baselines (both weight-regularized and prediction-regularized) without algorithm-specific re-engineering. The modifications—backbone distillation for prediction methods (§3.2.1, Eq. 1) and adapter parameter exclusion from consolidation for weight methods (§3.2.1, Eq. after line 136)—are minimal drop-in additions.
+- **Robust evaluation across task orderings and scales.** Figures 4–5 demonstrate gains persist across alphabetical, coarse-grained, and iCaRL orderings, and at 5/10/20 classes-per-task. This breadth of evaluation exceeds what is typical in many IL papers that rely on a single fixed ordering.
+- **Co-training backbone empirically outperforms frozen-backbone adapter paradigm.** Table 2 shows LwF-A (co-trained) at 74.0% vs. LwF-A-FrB (frozen backbone) at 72.9%, providing direct evidence that continuous backbone updates contribute beyond the adapter architecture alone—noting this validates the architectural choice but does not fully validate the deeper mechanistic claim (see Weakness 1).
+- **Clean, minimal modifications enabling broad adoption.** Unlike prior adapter-based IL methods that rely on custom complex losses (e.g., TAMiL's attention modules), this approach requires only additive loss terms or parameter exclusions.
 
-### Major  
-- **Unsupported primary-driver claim** – The abstract states that “inter-task differences are the primary driver of catastrophic forgetting,” but the only evidence is that coarse-grained ordering (higher inter-task diversity) harms LwF performance (Figure 1). This shows correlation, not primacy over other factors like architecture, optimization, or data shifts. The central motivation is therefore not validated.  
-- **Overstatement regarding the stability-plasticity dilemma** – The paper claims the approach “effectively addressing” (abstract) and “resolve[s]” (conclusion) the dilemma, but Figure 3 shows all methods—including adapter variants—exhibit declining accuracy as tasks increase. The trade-off persists; adapters only shift the curve upward. This misrepresents the contribution as eliminating a fundamental dilemma rather than improving it.  
-- **Adapters not isolated as the source of improvement** – Adapter-enhanced methods differ from baselines in three ways: (1) the adapter modules themselves, (2) co-training the backbone (vs. frozen backbones in prior adapter work), and (3) method-specific regularization adjustments (e.g., extra backbone distillation for LwF, exclusion of adapter parameters from EWC penalties). The “frozen backbone” ablation (LwF-A vs. LwF-A-FrB in Table 2) isolates (2), but no experiment isolates (1). Without comparing baseline + co-training + identical regularization versus baseline + co-training + adapter, the attribution of gains to the adapter architecture itself is uncertain; the improvements could stem from the extra regularization alone.  
-- **Inconsistent performance on ImageNet** – EWC-A underperforms the non-adapter EWC baseline on all later tasks (Table 1), contradicting the claim of universal superiority. The authors attribute this to hyperparameter transfer from CIFAR-100, but this reveals a lack of robustness and suggests the adapter approach may not generalize without careful tuning.  
-- **Missing contemporary SOTA comparisons** – While the paper benchmarks against some recent techniques (DualPrompt, iTAML, TAMiL), it omits dominant rehearsal-based methods such as DER++ and GDumb. Without these, the reader cannot judge whether the adapter framework advances the state of the art in incremental learning.  
+## Weaknesses
 
-### Minor  
-- **No statistical analysis** – All results report means over 10 runs but provide no standard deviations or confidence intervals. For marginal gains (1–3%), statistical significance is unclear.  
-- **Backbone regularizer lacks justification** – The additional distillation term on backbone outputs (Eq. 1) is introduced without theoretical motivation and without an ablation showing its necessity. It might be that co-training alone suffices, or that this regularizer could benefit non-adapter baselines.  
-- **Ambiguous TAMiL comparison** – The statement “aligning our setup with theirs” does not clarify whether training epochs, learning rates, or data splits were identical. Without identical protocols, the reported 74.0% vs 71.4% may not be a fair comparison.  
-- **Class‑IL results confined to appendix** – The more practical class-incremental setting is relegated to Appendix B without any discussion in the main text, making it harder to evaluate the method’s real-world applicability.  
+### Fatal
+None
 
-### Trivial  
-- Minor notation and phrasing nits.  
+### Major
 
-## Nice-to-Haves  
-- Theoretical analysis of why the adapter bottleneck dimension c = number of classes is effective.  
-- Per-class accuracy heatmaps or confusion matrices to illustrate forgetting prevention.  
-- Visualization of adapter activation patterns across tasks and layers.  
-- Quantification of computational overhead (training time, memory) beyond parameter count.  
-- Ablations separating adapter effect from backbone regularization (e.g., LwF with backbone regularizer but no adapter; EWC with adapters but full regularization).  
-- Use of consistent architectures across datasets (e.g., ResNet-32 for CIFAR, ResNet-50 for ImageNet).  
-- Statistical significance testing for reported improvements.  
-- Direct comparison with recent SOTA (DER++, GDumb) on standard class‑IL benchmarks.  
-- Relocate class‑IL results to main paper with proper discussion.  
+- **The core mechanistic claim—invariant vs. task-specific feature separation—is confounded with parameter capacity and remains unverified.** The paper's central thesis (§3.2, §3.2.1) is that adapters capture task-specific knowledge while the backbone learns shared invariant features. However, every adapter-augmented baseline gains 3–5% over its non-adapter counterpart, which trivially increases the number of trainable parameters per task. The bottleneck-width ablation (Figure 6) shows that wider adapters (128, 256) sustain higher accuracy than narrower ones (16, 32), which is consistent with a capacity-scaling interpretation. No parameter-matched control baseline is provided (e.g., expanding classification heads or appending equivalent dense layers to the backbone without adapters). Without this, it is impossible to attribute the gains specifically to the proposed invariant/task-specific architectural separation rather than simply having more parameters. This matters because the paper's theoretical framing (eliminating the stability-plasticity dilemma via feature separation) is distinct from the pragmatic result (adapters help). The claim that inter-task differences are "the primary driver of catastrophic forgetting" (line 31) and that the method resolves this via architectural separation is not experimentally validated.
 
-## Removed Points  
-These points are flagged to be removed because they violate the review rules (e.g., questioning existence/availability of cited material, factual inaccuracies, or nitpicks). Treat them with caution.
+- **Backbone regularization (Eq. 2) is underspecified, creating a reproducibility gap.** The backbone distillation loss is defined as:
+  R_φ^t = Σ_{t'=1}^{t-1} M(Linear_{d×c}(φ^{t'}(x)), Linear_{d×c}(φ^t(x)))
+  with c chosen as "the number of classes of each task" (§3.2.1, line 117). The paper does not specify whether Linear_{d×c} is: (a) the task-specific classification head from task t', (b) the current task-t head applied to both features, or (c) a separate shared projection layer. In Task-IL's multi-head setting, if heads are task-specific, cross-task distillation requires head alignment or masking that is not described. If a shared projection is used, this is not stated. The phrase "implicitly a direct distillation on backbones" (line 117) does not clarify the implementation. This ambiguity is significant enough that the method cannot be faithfully reproduced from the text alone and affects the validity of the backbone stability claim.
 
-1. *“Evidential: The evaluation is incomplete for the most important incremental learning setting—class-incremental learning (class-IL). … (unavailable).”* – The paper explicitly states class‑IL results are included in Appendix B, so claiming “unavailable” is factually wrong. (Rule: REMOVE criticisms questioning cited material’s existence.)  
-2. *“Section 4.1: Network architecture choice is inconsistent… This makes cross‑dataset comparisons potentially invalid.”* – Using ResNet‑34 for CIFAR‑100 and ResNet‑18 for ImageNet is a common practice given input resolution differences; this does not invalidate internal adapter vs. non‑adapter comparisons.  
-3. *“Section 4.1: The validation set construction… needs justification that it doesn’t advantage their method.”* – Following a standard class‑balanced 10% split from prior work is reasonable and not inherently advantageous.  
+### Minor
 
-## Novel Insights  
-None beyond the paper’s own contributions.  
+- **Class-IL results are buried in the appendix, insufficiently supporting broad claims.** The abstract and conclusion claim to "eliminate the stability-plasticity dilemma" and "effectively address" it broadly. Yet all main-text results (Figures 3–5, Table 1) are exclusively Task-IL, which uses a task-ID oracle and avoids cross-task output interference—the hardest and most practically relevant form of the dilemma. Class-IL results are deferred to Appendix B (line 163). While the paper does acknowledge Class-IL exists and provides appendix results, the strong claims about solving the dilemma should be grounded by at least prominently presenting the harder protocol's evidence. As-is, readers assessing the main text alone see no evidence for the harder setting. The phrasing "eliminating the stability-plasticity dilemma" (Abstract, line 15; §5, line 245) is also hyperbolic—no IL method truly eliminates this trade-off.
 
-## Suggestions  
-- Include a rigorous ablation that isolates the adapter’s contribution: compare baseline + co‑training (same as current baseline) against baseline + co‑training + adapters while keeping all other conditions identical.  
-- Re‑tune hyperparameters on ImageNet for each adapter‑enhanced method to ensure fair comparison; report both CIFAR‑tuned and ImageNet‑tuned results.  
-- Move the class‑IL results into the main paper and discuss them explicitly.  
-- Add standard deviation bars or confidence intervals to all plots and report p‑values for key comparisons.  
-- Correct all overstatements (e.g., “eliminate/resolve the stability‑plasticity dilemma” → “improve the stability‑plasticity trade‑off”; “primary driver” → “a key factor”).  
+- **ImageNet results are compromised by experimental constraints and should be interpreted cautiously.** Section 4.2 (lines 197–198) acknowledges that CIFAR-100 hyperparameters were transferred without retuning and training was limited to 50 epochs. Table 1 shows mixed results: MAS-A and LwF-A improve over baselines, but EWC-A and LwM-A actually *underperform* their non-adapter counterparts on later tasks (e.g., EWC-A: 65.3% vs. EWC: 60.8%, but LwM-A: 56.9% vs. LwM: 58.0% by Task 10). The paper claims "non-trivial performance improvement" but this is partly driven by the baselines being under-trained. The 50-epoch constraint is acknowledged but undermines the ImageNet evidence as a scaling argument.
 
-## Score and Decision  
-MY FINAL SCORE: <pineapple>4.0</pineapple>  
-MY FINAL DECISION: <orange>Reject</orange>  
+### Trivial
 
-*Calibration note*: This score is anchored against the following human-reviewed papers:  
-- /home/wg25r/review_agent/human_reviews/5U1rlpX68A.md (avg 7.50, accept) – combines theoretical analysis with strong multi‑benchmark results; our paper lacks theory and has significant replication/ablation issues.  
-- /home/wg25r/review_agent/human_reviews/dOAkHmsjRX.md (avg 7.50, accept) – introduces a budget‑aware framework with adaptive freezing; our paper’s evaluation is less comprehensive and omits key SOTA.  
-- /home/wg25r/review_agent/human_reviews/H6pf70GZVU.md (avg 5.0, reject) – novel IL idea but poor reproducibility and insufficient ablation; our paper shares these flaws and additionally overstates claims and shows inconsistent ImageNet results.  
-- /home/wg25r/review_agent/human_reviews/WReszdNNdP.md (avg 5.25, reject) – limited novelty and missing diverse datasets/SOTA; our paper similarly lacks SOTA breadth.  
-- /home/wg25r/review_agent/human_reviews/Sxi6gBtJcI.md (avg 3.00, withdraw) – overclaim (“eliminate hallucinations”) with incremental method; our overclaim about “resolving the stability‑plasticity dilemma” parallels this fatal presentation issue.  
+- **No layer-wise representation analysis to support the "spatial feature separation" hypothesis.** The paper asserts that adapters capture task-specific information "in the layers closer to the output" while "squeezing task-invariant knowledge into layers nearer the input" (§3.1, line 31; §3.2, line 79). This is presented as a fact but no CKA, CCA, or probing analysis is provided to verify the spatial distribution of invariant vs. task-specific information across backbone layers.
 
-The paper demonstrates promising empirical gains on CIFAR‑100 but suffers from serious overstatements, an incomplete ablation that questions the attribution of improvements to adapters, inconsistent ImageNet performance, and missing SOTA comparisons. These weaknesses collectively undermine confidence in the stated contribution, leading to a reject decision.
+## Nice-to-Haves
+
+- Adding a parameter-matched baseline (e.g., expanded linear heads of equivalent parameter count) would strengthen the attribution claim, though the practical utility of adapters remains regardless.
+- Including Class-IL accuracy curves in the main text would better ground the "eliminating the stability-plasticity dilemma" narrative.
+- Providing confidence intervals or standard deviations across the 10 seeds alongside the mean accuracy curves would give readers a sense of result variance.
+
+## Removed Points
+
+These points are flagged to be removed, treat them with caution:
+
+- **~"Unstated appendix" for Class-IL results.~** The harsh critic claimed Class-IL results were relegated to an "unstated appendix." The paper in fact explicitly states on line 163: "while results for class-IL are included in Appendix B." The concern about Class-IL being outside the main text still holds, but the "unstated" characterization is a misread.
+
+- **~Figure 1 merely confirms ordering sensitivity and validating need for task-specific modeling is a logical leap.~** This is a presentation-level interpretation critique. Figure 1 does show that coarse-grained orderings degrade performance—this is a reasonable motivational observation for the paper's direction, not an unsupported claim.
+
+- **~CIFAR-100 validation 10/90 and ImageNet untuned tuning is a "computational inconsistency."~** This is a weak complaint. The paper honestly states resource constraints for ImageNet; the 10/90 split is standard for CIFAR-100 per cited baselines (Masana et al., 2022).
+
+- **~"Comparison with modern methods (DualNet, iTAML, TAMiL) is cursory."~** Table 2 provides direct numerical comparisons. While the comparisons are limited in scope, they are not "cursory"—they show concrete +1% gains over DualNet/iTAML and outperform TAMiL.
+
+- **~"Abstract claims that inter-task differences are the primary driver of catastrophic forgetting is ordering sensitivity, a known property."~** The paper's observation about ordering sensitivity is indeed known, but using it as motivation for the adapter approach is standard practice in IL papers, not an overclaim in itself.
+
+## Novel Insights
+
+The paper's insight—re-purposing parameter-efficient adapters from NLP/Vision for incremental learning via co-training rather than frozen-backbone fine-tuning—is a clean and practically useful contribution, though it does not rise to the level of fundamental novelty given that adapter-based IL (e.g., DualPrompt, TAMiL, Liang & Li 2024) is already an active line. The genuinely useful contribution is the *method-agnostic integration scheme*: the same lightweight adapter additions consistently improve classical regularization baselines (EWC, MAS, LwF) without needing custom algorithm-specific modifications, which is practically valuable for the IL community. However, the paper oversells this as mechanistic resolution of the stability-plasticity dilemma when the evidence primarily supports a practical capacity-and-isolation benefit.
+
+## Suggestions
+
+- **Run a capacity-controlled ablation.** Compare the adapter approach against a non-adapter baseline where equivalent parameters are added to the backbone (e.g., wider classification head or additional dense layers) to disentangle the "added capacity" effect from the proposed architectural separation.
+- **Clarify the Linear_{d×c} projection in Eq. 2.** Specify whether it is a shared layer, the current task's head, or the previous task's head, and describe how cross-task gradient flow is handled in the multi-head Task-IL setup. This is critical for reproducibility.
+- **Tone down claims.** Replace phrases like "eliminating the stability-plasticity dilemma" with "mitigating" or "improving." Claims should be proportional to evidence presented.
+- **Include Class-IL results (or a subset) in the main text.** Even showing one Class-IL accuracy curve alongside the Task-IL results would strengthen the generality claim or honestly limit it if performance drops.
+- **Add a layer-wise analysis** (e.g., CKA or centered kernel alignment of backbone features across tasks) to verify the claimed spatial separation of invariant and task-specific information.
+
+## Score and Decision
+
+Compared against calibration anchors:
+- **SD-LoRA (avg score 7.5, Accept-Oral):** Similar in proposing a straightforward architectural modification for IL, but SD-LoRA evaluated on Class-IL with theoretical analysis and broader benchmarks, placing it clearly above this paper.
+- **MISA (avg score 6.5, Accept-Poster):** Also a plug-in module that consistently improves multiple baselines—similar contribution style. MISA included Class-IL evaluation and had clearer methodology, scoring higher.
+- **MetaAdapter (avg score 5.40, Reject):** Similar profile—strong empirical results but missing baseline comparisons and overclaiming mechanistic novelty. This paper is slightly more cohesive in its method-agnostic integration but has the equivalent capacity-confounding gap. Comparable level.
+- **Amphibian (avg score 3.67, Reject):** Only evaluated on Task-IL with unclear methodology and no Class-IL evidence. The paper under review is clearly above this—it has cleaner experiments, honest reporting of limitations, and consistent gains.
+- **Borderline papers around 5.0** (e.g., APER 4.75, Duct 5.0): Similar positioning—useful contributions but limited by scope or methodological gaps.
+
+This paper is strongest at ~5.5. It offers genuine practical utility (consistent baseline improvements, clean integration paradigm) that distinguishes it from the clearly reject tier (≤4). But the uncontrolled capacity confounding, underspecified regularization, and overclaiming about the stability-plasticity dilemma place it below the accept tier (≥6.5). The empirical results are real and the contribution is useful, but the core mechanistic claim is not experimentally validated.
+
+MY FINAL SCORE: <pineapple>5.5</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>

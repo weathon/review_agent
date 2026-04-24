@@ -1,11 +1,11 @@
 export OPENAI_DEFAULT_MODEL="glm-5.1"
-export HARSH_MODEL="qwen3.6-plus" 
-export MERGER_MODEL="qwen3.6-plus"
-export NEUTRAL_MODEL="qwen3.6-plus"
+export HARSH_MODEL="deepseek/deepseek-v4-flash" 
+export MERGER_MODEL="deepseek/deepseek-v4-flash"
+export NEUTRAL_MODEL="deepseek/deepseek-v4-flash"
 export CALIBRATION_SET="2025"
-export OUTPUT_CSV="results/bench_scores_qwen36_2025.csv"
-export MERGE_LOG="results/pipeline_whole_qwen36_2025.log"
-export SUBAGENT_MODEL="qwen3.6-plus"
+export OUTPUT_CSV="results/bench_scores_ds_2025.csv"
+export MERGE_LOG="results/pipeline_whole_ds_2025.log"
+export SUBAGENT_MODEL="deepseek/deepseek-v4-flash"
 export CONCURRENCY=10
 # rm bench_scores_qwen.log
 ollama serve & 
