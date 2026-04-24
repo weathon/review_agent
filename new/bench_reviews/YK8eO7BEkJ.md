@@ -1,13 +1,15 @@
-## Summary
+Now let me search for calibration anchors.Now let me check a few more calibration papers to anchor my scoring properly.Now I have sufficient grounding to write the final review. Let me synthesize.
 
-This paper presents a large-scale empirical ablation of normalization layers in Mamba architectures, evaluating five normalization types (BN, LN, GN, IN, RMSN) across different positions (before/after the selective SSM module) and in 25 pairwise combinations. The study spans video sequence modeling (Breakfast) and image classification (ImageNet-100), with additional validation on LRA ListOps and ImageNet-1k. The authors find that post-SSM normalization generally outperforms pre-SSM placement, that heterogeneous combinations can exceed homogeneous defaults, and provide an L2-norm-based intuition for why certain combinations stabilize training.
+---
+
+## Summary
+This paper presents a systematic empirical study of normalization type, position, and combination strategies within the Mamba architecture across two task domains: long sequence modeling (Breakfast action segmentation dataset) and image classification (ImageNet-100, ImageNet-1k). The paper evaluates 5 normalization types, compares pre-vs-post-SSM placement, enumerates all 25 pairwise combinations, and offers practical recommendations supported by an L2-norm trajectory analysis.
 
 ## Strengths
-
-- **Exhaustive controlled ablation.** The paper delivers a systematic grid search (Tables 1–4) over five normalization types, two positions, and all pairwise combinations that the Mamba literature has lacked. This produces a concrete reference table showing, for example, that IN→SSM→LN reaches 72.5% on Breakfast while RMSN→SSM→BN reaches 87.3% on ImageNet-100, both well above their homogeneous defaults (58.9% and 84.1% respectively).
-- **Cross-dataset validation.** The top-performing configurations are tested on LRA ListOps and ImageNet-1k (Table 5), and the ListOps result shows a large 15.6 percentage-point gain over the original baseline.
-- **Mechanistic diagnostics.** Figure 4 demonstrates that post-SSM normalization prevents layer-wise explosion of weight L2 norms across depth, grounding the empirical recommendations in observable training dynamics rather than accuracy alone.
-- **Taxonomy of prior practices.** Figure 1 and Section 2 systematically organize over 20 existing Mamba models by normalization strategy, rigorously documenting the lack of consensus and strengthening the motivation for the study.
+- **Systematic full-factorial coverage (Table 4):** The paper enumerates all 25 normalization combinations across two tasks, a methodical sweep that captures the full design space and provides practitioners with a useful reference grid. This fills a real gap noted in the introduction—Mamba variants adopt diverse normalization strategies without empirical justification.
+- **Clear and numerically grounded finding that post-SSM normalization outperforms pre-SSM (Tables 2 & 3):** For sequence modeling, GN after SSM achieves 70.1% vs. 20.5% before SSM—a 49.6 percentage-point gap. For image classification, GN after SSM yields 86.8% vs. 66.1%—a 20.7-point gap. This is one of the paper's most reliable findings.
+- **Non-obvious finding on heterogeneous normalization combinations (Table 4):** IN→SSM→LN (72.5%) outperforms the best same-type combination GN→SSM→GN (68.8%) on sequence; RMSN→SSM→BN (87.3%) outperforms LN→SSM→LN (86.6%) on vision. The benefit of mixing types is concretely demonstrated.
+- **L2-norm trajectory analysis (Figure 4):** The comparison of None→None, BN→None, None→BN, and BN→BN configurations shows a clear pattern: pre-SSM normalization alone fails to prevent exponentially growing L2 norms across deeper layers, while post-SSM normalization stabilizes them. This provides a mechanistic foothold for interpreting the positional effects.
 
 ## Weaknesses
 
@@ -15,57 +17,75 @@ This paper presents a large-scale empirical ablation of normalization layers in 
 None.
 
 ### Major
+- **The verbal recommendations in Section 4.4 are inconsistent with the paper's own data.** The RECOMMENDATIONS section states: *"LN emerges as a versatile and consistently strong performer across tasks."* However, Table 1 shows GN→SSM→GN (68.8%) substantially outperforms LN→SSM→LN (58.9%) on sequence modeling. GN is the top individual normalization type for sequence, not LN. LN is better for vision (86.6% vs. GN's 86.3%), but that does not support calling LN "consistently strong across tasks." The narrative the paper builds around LN is not derived coherently from the evidence and could actively mislead practitioners. The paper's own selection for validation confirms this: IN→SSM→LN and RMSN→SSM→BN—not any LN-centric configuration—are chosen as the recommended settings.
 
-- **Weak vision validation undermines generalization claims.** The ImageNet-1k validation in Table 5 shows only a 0.3 percentage-point improvement (70.8% → 71.1%) over the VMamba baseline. The paper reports single-run estimates with no variance, and a margin this small is well within typical run-to-run variation for ImageNet training. Because the abstract and introduction claim findings are “validated on other datasets” and yield “practical recommendations,” this unreliable vision validation significantly weakens the central practical contribution for the image-classification community. (The ListOps sequence validation is much stronger, but the vision side cannot carry comparable weight.)
-- **Task-specific lookup tables vs. promised general principles.** The paper’s abstract and contribution bullets promise “practical recommendations” and “general guidelines” for selecting normalization in Mamba architectures. Yet the “best” combination changes completely across tasks (IN→LN for sequence, RMSN→BN for vision), and the final recommendation that “LN emerges as a versatile … performer” (Section 4.4) is difficult to reconcile with the tables: LN alone is 58.9% on Breakfast (beaten by GN at 68.8%) and 86.6% on ImageNet-100 (matched or beaten by several mixed combinations). The paper delivers an empirical grid whose winner is task-dependent, but stops short of a principled, task-agnostic rule for predicting which combination will work for a new problem.
+- **Table 5 contains an uncorrected internal contradiction.** The footnote states: *"For vision tasks, RMSN→SSM→RMSN represents the original Mamba's normalization configuration, while IN→SSM→IN represents our proposed normalization configuration."* But the actual table body shows the "Ours" row for vision as **RMSN→SSM→BN**, not IN→SSM→IN. This error undermines confidence in experimental reporting throughout.
+
+- **The near-chance baseline obscures the magnitude of design-choice-driven gains.** The None→SSM→None baseline achieves 7.0% on Breakfast (10-class task, chance ≈ 10%) and 10.7% on ImageNet-100 (100-class task). The vast majority of gains measured in Tables 1–4 represent recovery from a near-collapsed model, not fine-grained characterization of normalization trade-offs in a functional Mamba model. The paper never clarifies whether the outer-block normalization present in original Mamba deployments was also removed and how this relates to real Mamba variants. This makes it difficult to interpret whether the ranked differences between normalization strategies (e.g., the gap between GN and LN on sequence) are substantial or largely dominated by initial training stability.
 
 ### Minor
+- **The validation experiment (Table 5) provides insufficient evidence for generalization claims.** The improvement on ImageNet-1k is 70.8% → 71.1%, a 0.3% gain. No standard deviations or confidence intervals are reported for any result in the paper. For a single-run result at this margin, it is impossible to assert that the proposed scheme "achieved better performance" versus stochastic variation.
 
-- **No variance estimates across random seeds.** Every table reports single-point accuracies without standard deviations. This is especially problematic for the near-zero ImageNet-1k margin, but it also means the reader cannot assess whether the 7.0% “no normalization” Breakfast baseline—a 10-class accuracy below random chance—reflects a single failed run, a best-of-N selection, or a consistent outcome.
-- **Sloppy contradictory text in Section 4.5.** The paragraph describing Table 5 contains an internal contradiction. The first sentence incorrectly states: “For vision tasks, RMSN→SSM→RMSN represents the original Mamba's normalization configuration, while IN→SSM→IN represents our proposed normalization configuration.” The very next sentence corrects this (“LN→SSM→LN represents the original VMamba's normalization configuration … while RMSN→SSM→BN represents our proposed normalization configuration”), and the table itself is internally consistent. Nevertheless, the copy-paste error makes the validation section confusing and erodes confidence in the presentation.
+- **The harmonic structure explanation (Section 4.6) is demonstrated on BN→SSM→IN but the paper's actual recommended configurations are IN→SSM→LN and RMSN→SSM→BN.** The mechanistic story is illustrative but does not directly support the practical recommendations, and the paper itself acknowledges it is "not intended as an essential explanation." Showing analogous L2-norm behavior for the recommended configurations would substantiate the claim.
+
+- **Suspicious exact tie in Table 2:** BN→SSM→None and None→SSM→BN both achieve exactly 28.4% on sequence modeling. An exact numerical tie across two architecturally distinct configurations (pre-SSM vs. post-SSM BN) is unusual and could indicate a rounding artifact masking real differences.
+
+- **The Breakfast dataset is non-standard for Mamba sequence modeling benchmarks.** Typical Mamba evaluation uses language modeling perplexity, the full LRA benchmark, or time-series datasets. The Breakfast action segmentation dataset is used with no comparison to other models' performance on it, leaving the absolute numbers unanchored. This limits interpretability of the sequence modeling results.
 
 ### Trivial
+- Section 4.4 states "GN before SSM and LN after SSM continues to perform relative well," yet the validated configuration for sequence is IN→SSM→LN—the paper's own practical guideline is GN→SSM→LN, not what was selected for validation. This inconsistency in framing is minor but adds to the cumulative coherence problem.
 
-- The justification for removing the FFN module from VMamba “for fair comparison” (Section 4.5) is mentioned but not explained in enough detail to reproduce.
-- The L2-norm “harmonic structure” analysis (Figure 5) is limited to a single combination (BN→IN); the paper does not test whether the observed norm-balancing predicts performance across the remaining 24 combinations in Table 4.
-
-## Nice-to-Have
-
-- Learning-curve plots (loss, gradient norm, or update norm over steps) for the best, worst, and original normalization schemes would substantiate the repeated claim that post-SSM normalization improves “training stability.”
-- A predictive test of the L2-norm intuition—using the “harmonic principle” to rank a held-out subset of combinations before running the full grid—would strengthen the explanatory contribution.
+## Nice-to-Haves
+- Extend the L2 norm analysis (Figure 4 style) to the recommended IN→SSM→LN and RMSN→SSM→BN configurations, to verify the post-SSM stabilization mechanism applies to the actual recommended settings.
+- Evaluate the top normalization configurations on at least one standard Mamba benchmark (e.g., LRA full suite, language modeling perplexity) to allow readers to assess whether the gains are meaningful in the architecture's intended applications.
+- Report multi-seed standard deviations for key results, especially the Table 5 validation where the margin is only 0.3%.
+- Include a working Mamba model (e.g., original Mamba with RMSN→SSM→RMSN) as the reference point rather than the zero-normalization baseline, to isolate normalization design choices from training stability effects.
 
 ## Removed Points
+*These points are flagged to be removed, treat them with caution.*
 
-These points are flagged to be removed, treat them with caution.
+- **Hamilton (1994) reference as a "factual error":** The harsh critic called the use of Hamilton's "Time Series Analysis" (1994) inappropriate. However, SSMs evolved from classical linear dynamical systems and time series analysis, and Hamilton (1994) is a canonical reference for LTI systems and their stability properties. The reference is unusual in a deep learning paper but not factually wrong. Removed per the rule against factually wrong criticism.
 
-- **“L2-norm harmonic structure is an unfalsifiable after-the-fact description.”** The paper explicitly frames this as a tentative intuition: “We made an intuitive inference … but this is not intended as an essential explanation” (Section 4.6). The critic misread this framing as a claim of predictive theory.
-- **“Breakfast conflates spatial and temporal modeling / missing LRA benchmarks.”** The paper uses Breakfast for sequence modeling and LRA ListOps for validation. While additional long-range benchmarks would strengthen the work, demanding them is scope creep; the paper does not claim to isolate pure long-range sequence ability.
-- **“Section 3 is essentially a notation guide.”** For an empirical study, clearly defining the normalization types, positions, and notation is standard and necessary.
-- **Any formatting, grammar, or typo criticisms.** These are parser artifacts, not author errors.
+- **The "crippled baseline trivializes all conclusions" framing (Harsh Critic §1):** The critic's strongest framing—that the baseline is so broken that no conclusions survive—is overstated. While the near-chance baseline is a real concern (elevated to Major above), the within-normalization comparisons (e.g., GN vs. LN, pre- vs. post-SSM at the same normalization type) remain valid even if the absolute scale is driven partly by training stability recovery. The conclusion that post-SSM normalization is better than pre-SSM normalization, and that certain combinations outperform homogeneous ones, does not require a healthy baseline. Downgraded to Major/Minor rather than structural invalidation.
+
+- **Concerns about Mamba variant code availability or reproducibility of cited baselines:** Removed per hard rules.
+
+- **Missing appendix or proof concerns:** Removed per hard rules (parser strips appendix).
+
+---
 
 ## Novel Insights
-
-None beyond the paper's own contributions. The exhaustive grid and the observation that heterogeneous combinations consistently outperform homogeneous defaults are the paper's primary novel deliverables.
+The paper's most transferable empirical insight—that normalizing *after* the SSM module substantially outperforms normalizing before it, and that this corresponds to stabilizing L2-norm growth across layers—has potential relevance beyond Mamba to other architectures with sequential latent-state computations (e.g., linear attention variants, other SSM families). The specific finding that BN and IN have complementary L2-norm trajectories that converge in a "harmonic" middle range when combined is an interesting observation, though it remains illustrative rather than rigorously characterized.
 
 ## Suggestions
+1. **Fix the fatal coherence issue:** The paper's recommendations must match its data. If GN is the top individual normalization type on sequence tasks, the RECOMMENDATIONS section should say so, not elevate LN without evidential basis.
+2. **Correct the Table 5 footnote error** (IN→SSM→IN should read RMSN→SSM→BN for the "Ours" vision setting).
+3. **Add a second baseline:** Include the original Mamba's existing normalization scheme as a starting point for comparisons, so readers can see gains relative to a functional model, not just relative to no normalization.
+4. **Supplement the 0.3% ImageNet-1k result** with multi-seed means ± standard deviations, and add a larger validation gain on sequence (ListOps is a good start, but report it cleanly as the primary validation evidence, which it actually is).
 
-1. Report mean and standard deviation across multiple seeds for all main results, especially ImageNet-1k.
-2. Either collect stronger vision validation (e.g., larger margin or multiple seeds showing consistency) or honestly frame the ImageNet-1k result as inconclusive rather than validation.
-3. Fix the contradictory text in Section 4.5 so the table caption accurately describes the vision baseline and proposed configuration.
-4. Derive and state a more precise selection heuristic—e.g., pairing a statistics-dependent norm before SSM with a rescaling-only norm after SSM—rather than the vague “balance” observation.
+---
 
 ## Score and Decision
 
-**Score: 4.5**
+**Calibration anchors used:**
 
-**Calibration papers compared:**
-- **High anchor:** `d8w0pmvXbZ.md` (avg 8.0, Accept Oral) — small-scale transformer instability proxies. Far more careful methodology, variance reporting, and predictive extrapolation. The paper under review is well below this.
-- **High anchor:** `BChpQU64RG.md` (avg 6.2, Accept Poster) — Mix-LN. Proposes a novel method with solid experiments and clear, consistent results. The paper under review lacks a novel algorithm and has weaker validation.
-- **Medium anchor:** `yqAToOgxgf.md` (avg 5.0, Reject) — Pi-Sigma rejuvenation. Similar systematic ablation structure, but cleaner presentation and clearer baselines, though on a less timely topic. The paper under review is slightly below this due to its validation and presentation issues.
-- **Medium anchor:** `j5EbZEyK9I.md` (avg 4.5, Reject) — data composition observational study. Similar profile: extensive empirical effort, limited novelty, and weak generalization claims. Comparable in quality.
-- **Low anchor:** `g4VGwNqzpB.md` (avg 3.0, Reject) — HENP pruning. Limited novelty, weak evaluation, unclear writing. The paper under review is above this because its topic is timely, its experiments are extensive, and its writing is generally clear.
+| Path | Avg Human Score | Relationship to Paper |
+|---|---|---|
+| `eDhJFIKI6i.md` (UnifiedGT) | 3.50 | Systematic investigation of architecture design ingredients; single dataset focus; inconsistent conclusions from ablations; low novelty. Strong parallel. |
+| `IUwqJ8VT4F.md` (Revisiting Design Choices in RL) | 4.00 | Systematic empirical study of design choices with "which configuration works best" framing; limited dataset scope; narrative partially misaligned with evidence. Direct parallel. |
+| `f3gCs2a4ZD.md` (DyGMamba) | 4.00 | Mamba-based paper with limited novelty and insufficient ablations. Topically close but less relevant to this paper's framing. |
+| `FowFLhUTgO.md` (V2M) | 5.50 | Mamba vision paper with more technical depth, methodological issues but proposes genuine novel formulation. Higher contribution level than this paper. |
+| `wOSYMHfENq.md` (BN universal approximation) | 6.00 | Normalization paper but with theoretical proof, substantially higher rigor. |
+| `se4vjm7h4E.md` (nGPT) | 6.50 | Normalization-centric architecture paper with extensive experiments and clear gains. |
 
-The paper under review sits between the 3.0 low anchors and the 5.0 medium anchor. Its extensive empirical sweep and timely focus on Mamba training stability are real assets, but the weak ImageNet-1k validation, lack of variance estimates, internal text contradiction, and gap between promised principles and task-specific results place it below the acceptance threshold.
+**Assessment:** This paper's profile—systematic empirical study with limited dataset scope, a critical narrative-data inconsistency in the recommendations section, no statistical testing, and a small validation margin—aligns most closely with the 3.5–4.0 anchor cluster (UnifiedGT, Revisiting Design Choices). The paper offers more coverage than UnifiedGT (25 combinations, two task types) and the positional finding is clearer, placing it slightly above UnifiedGT but below papers like V2M that at least propose a novel architectural component. The recommendation inconsistency and footnote error weigh against the paper without being fully fatal. Score: **3.5**.
 
-MY FINAL SCORE: <pineapple>4.5</pineapple>
+**Originality:** Low-moderate. The contribution is empirical coverage of a design space rather than a novel method. The individual experiments are not novel in isolation.
+**Importance:** Moderate. Normalization in Mamba is a real problem; the findings on post-SSM placement have practical value.
+**Claim support:** Weak. The key recommendation (LN is best) contradicts the data. The validation is marginal.
+**Experimental soundness:** Weak. No error bars, near-chance baseline, unusual datasets, footnote inconsistency.
+**Clarity:** Adequate for presentation; undermined by internal contradictions.
+**Value to the community:** Limited in current form due to inconsistent guidance.
+
+MY FINAL SCORE: <pineapple>3.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

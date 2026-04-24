@@ -110987,3 +110987,1592 @@ MY FINAL DECISION: <orange>Accept</orange>
 
 --- Decision ---
 Accept
+
+============================================================
+Paper: ../iclr2025/papers/E4Fk3YuG56.txt
+Timestamp: 2026-04-23T23:47:37
+
+--- Token Usage ---
+  Harsh Critic: N/A (claude_sdk path)
+  Strength Finder: input=13164 (cached=0) output=1511 (reasoning=0) total=14675 requests=1 duration=n/ams
+  Merger: N/A (claude_sdk path)
+  TOTAL: input=13164 output=1511 total=14675
+
+--- Claude SDK Usage ---
+  [Harsh Critic]
+    Model: claude-sonnet-4-6
+    Session ID: 6d1d96d7-ba2d-4b22-a037-b35b9bf67c21
+    Cost (USD): 0.1761774
+    Turns: 4
+    Duration: total=153392ms api=149484ms
+    Tokens: input=8 output=7337 cache_read=20003 cache_creation=16026
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  [Merger]
+    Model: claude-sonnet-4-6
+    Session ID: 1f1dc0f6-013d-425a-b806-e2732e3630f4
+    Cost (USD): 0.29799615
+    Turns: 12
+    Duration: total=143596ms api=130251ms
+    Tokens: input=19 output=5983 cache_read=228293 cache_creation=37255
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  TOTAL Claude SDK cost (USD): 0.4742
+
+--- Merged Inputs ---
+
+### Harsh Critic
+I'll start by reading the paper before writing my review.Now I have a thorough understanding of the paper. Let me write my review.
+
+---
+
+# Review: "Cut Your Losses in Large-Vocabulary Language Models"
+
+## Critical Issues
+
+**1. Pretraining validation uses continued pretraining from instruct-tuned checkpoints, not from-scratch training. (Evidential — Section 5.3, Fig. 5)**
+
+The paper's most consequential approximation is gradient filtering, which skips backward-pass computation for softmax blocks where all elements fall below ε = 2⁻¹² in bfloat16. The authors acknowledge two failure modes of this approximation for pretraining: imprecise gradient accumulation in global memory, and failing to propagate gradients to tokens with little training support. They address both via CCE-Kahan-FullC, which removes filtering from ∇C and uses Kahan summation.
+
+However, the "pretraining" experiments in Section 5.3 start from Qwen 2.5 7B **Instruct**, Phi 3.5 Mini **Instruct**, Gemma 2 2B **Instruct**, and Mistral NeMo weights — all already instruction-tuned — and then continue training on OpenWebText. These starting checkpoints have well-calibrated softmax distributions over the vocabulary: common tokens are peaked and rare tokens already have suppressed logits. This setting is systematically more favorable for gradient filtering than true from-scratch pretraining, where rare-token logits start at random initialization values and the model's distribution over the vocabulary is more diffuse. The paper never tests CCE-Kahan-FullC from a random initialization, so its correctness in actual pretraining scenarios is unverified.
+
+This is not a structural flaw in the algorithm — the theoretical argument for CCE-Kahan-FullC's correctness is reasonable — but the empirical validation of the pretraining claim is based on a proxy task that may overstate the method's safety. The paper should not describe these as "pretraining" experiments without qualification.
+
+**2. Convergence is evaluated on loss curves only, with short training runs. (Evidential — Section 5.3)**
+
+Fine-tuning experiments run for 700 gradient steps; pretraining runs for ~1,500 steps on 5% of OpenWebText. These are tiny relative to standard LLM training schedules. Numerical approximation errors (from gradient filtering and bfloat16 accumulation) could accumulate over longer runs without being detectable in short convergence curves. The paper provides no downstream task evaluation (e.g., MMLU, ARC, HellaSwag) for any trained checkpoint. Matching perplexity over 1,500 steps is consistent with CCE being correct, but it is not strong evidence — natural run-to-run variance over this window would easily mask small but compounding biases. For a paper whose main claim is "no sacrifice in convergence," this evidential gap is significant.
+
+**3. The distinction between CCE and CCE-Kahan-FullC is understated in the framing. (Methodological gap — Abstract, Table 1)**
+
+The abstract's headline claim — "CCE reduces the memory footprint of the loss computation from 24 GB to 1 MB" — refers to the basic CCE variant. However, basic CCE is not recommended for pretraining due to numerical issues the paper itself identifies. The pretraining-viable variant, CCE-Kahan-FullC, uses 2,326 MB for gradient computation (Table 1, row 9) vs. 1,163 MB for basic CCE (row 1). This is still dramatically better than any baseline but is a factor of 2x more expensive than the headline number implies. The paper presents this as an ablation rather than foregrounding that the two variants exist for different use cases. The introduction and abstract should make this split explicit.
+
+---
+
+## Section-by-Section Notes
+
+**Section 4.2 — Forward pass, spin-lock synchronization.** The forward pass uses a spin-lock on an atomic operation in global memory to synchronize the log-add-exp updates from different CUDA blocks covering the same vocabulary range. The authors acknowledge this and note that compare-and-swap may perform better in raw CUDA. At scale — with very large vocabularies and many CUDA blocks — this spin-lock could become a latency bottleneck. The paper doesn't quantify the overhead of this synchronization, and Table 1 benchmarks only one model (Gemma 2 2B, 256K vocab). Whether the approach degrades at extreme vocab sizes (e.g., a hypothetical 1M-token vocabulary) is uncharacterized.
+
+**Section 4.3 — Gradient filtering threshold.** The threshold ε = 2⁻¹² is motivated by bfloat16's 7-bit fraction with 5 extra bits for "rounding rules." The justification in footnote 1 is informal. The paper also states "In practice, the sparsity of the softmax matrix S is much higher: empirically, in frontier models we evaluate, less than 0.02% of elements are non-zero." But this empirical statement is from already-trained instruct models at inference time (Alpaca data, Gemma 2 Instruct weights). The sparsity at various training stages and from different initializations is not characterized. Figure 3 is similarly measured on a pretrained model, not during early training when distributions are less peaked.
+
+**Section 5.1 — Liger Kernels comparison.** The paper reports Liger Kernels at 304 ms for Loss+Gradient vs. CCE at 145 ms, and flags that Liger combines forward and backward simultaneously. This makes a direct latency comparison misleading: Liger's 304 ms is its total cost, while CCE's 145 ms is also total cost but measured differently. The paper does note the architectural difference in a footnote, but the table layout (rows 1 and 2) invites an apples-to-apples comparison that doesn't hold. More importantly, Liger's design choice (no separation of forward/backward, transforms must be baked into the kernel) is framed as a limitation, but this is a tradeoff. The authors rightly call this out, but the 2x latency gap should be interpreted cautiously.
+
+**Section 5.3 — Fine-tuning results.** These are the most convincingly validated claims. Four models with large vocabularies, five seeds, matching loss curves throughout 700 steps. The confidence interval framing (Fig. 4) is done correctly: CCE's curve lies well within the run-to-run variance of torch.compile. This is good practice.
+
+**Section 6 — Pipeline parallelism speculation.** The discussion mentions CCE may help with pipeline parallelism by reducing the memory-to-computation ratio of the classifier head. This is speculative and there is no supporting experiment. It is a reasonable hypothesis but should be marked as future work, not a contribution.
+
+---
+
+## Strengths
+
+1. **The core technical insight is clean and principled.** Decomposing cross-entropy into an indexed matrix multiply (O(ND) memory) and a fused matmul+log-sum-exp operation (SRAM-resident, O(N+|V|) global memory) is a genuine algorithmic contribution, not merely a systems optimization. The derivation in Section 4 is self-contained and correct.
+
+2. **Gradient filtering is a novel and practically impactful insight.** The observation that bfloat16 softmax distributions are extremely sparse over large vocabularies (fewer than 50 tokens above threshold, Fig. 3), and that this sparsity can be exploited at the block level to skip 97%+ of the backward pass, yields a 3.5x speedup without loss of precision in fine-tuning settings. This insight is both surprising and well-motivated.
+
+3. **Ablations are unusually thorough for a systems paper.** Table 1 systematically varies gradient filtering, vocabulary sorting, Kahan summation, and selective gradient filtering for ∇C vs. ∇E. The decomposed forward/backward timing and memory breakdown (especially the "lower bound" row) gives readers a clear picture of where each variant sits relative to the hardware limit.
+
+4. **Memory savings are unambiguous and dramatic.** Reducing the loss layer from 24 GB to 1 MB (basic CCE) or to ~2.3 GB (CCE-Kahan-FullC) for Gemma 2 2B represents a qualitative shift in what hardware can run large-vocabulary training. The batch-size amplification shown in Fig. 1 (up to 10x for Gemma 2 2B) is reproducible and reflects real infrastructure impact.
+
+5. **Code is publicly released.** The GitHub link, explicit algorithm pseudocode, and Triton implementation details support reproducibility for what is ultimately a hardware-specific contribution.
+
+---
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+
+1. **CCE-Kahan-FullC from random initialization on a small model.** The pretraining claim requires this. A 1B or smaller model trained from scratch for 5–10B tokens on a standard corpus, with downstream task evaluation, would either confirm or reveal limits of the approximation in true pretraining. Without this, the "pretraining" claim rests on the weakest validation in the paper.
+
+2. **Downstream task evaluation for the pretraining/fine-tuning runs.** Even one benchmark (e.g., MMLU 5-shot for the fine-tuning runs, or a short-answer dataset for the pretraining runs) would convert the convergence claim from "loss curves look similar" to "model capability is equivalent." Accumulated numerical errors might not manifest in training loss but could skew specific capability clusters.
+
+3. **Scaling characterization of spin-lock overhead.** Measure forward-pass latency as |V| grows (64K → 128K → 256K → 512K) to characterize where the synchronization overhead becomes binding. This directly supports the claim that CCE "scales to arbitrarily large vocabularies."
+
+### Deeper Analysis Needed
+
+1. **Gradient filtering accuracy early in training.** Figure 3 and the sparsity claim are measured on a trained instruct model. Characterize the effective sparsity at step 0, 100, 1000, and 10000 of training, particularly from a random initialization. If sparsity is low early in training, this quantifies when gradient filtering becomes safe and whether CCE-Kahan-FullC's full ∇C is truly sufficient to compensate.
+
+2. **The Kahan summation effect on gradient quality.** The paper notes that without Kahan summation, pretraining validation perplexity suffers, but doesn't quantify by how much or analyze where in the sequence the precision loss is most damaging. Understanding the nature of the numerical error (systematic vs. random) would strengthen the case for when CCE (without Kahan) is safe.
+
+### Visualizations & Case Studies
+
+1. **A visualization of gradient sparsity evolution during training.** Plotting the fraction of filtered-out gradient blocks over gradient steps, for at least one pretraining run starting from an instruct checkpoint vs. (ideally) a random initialization, would reveal whether the sparsity assumption holds throughout training.
+
+### Obvious Next Steps
+
+1. **Integration with FP8 training.** Modern H100/B100 training increasingly uses FP8 mixed precision. The gradient filtering threshold ε depends on floating-point format, and the entire analysis would shift with FP8 (4-bit fraction vs. 7-bit for bf16). A brief characterization of how CCE behaves under FP8 would significantly extend the paper's practical relevance.
+
+---
+
+## Overall Assessment
+
+This is a strong systems contribution that solves a real and worsening bottleneck in LLM training. The core algorithm is principled, the memory savings are unambiguous, and the throughput results are competitive with the best available alternatives. The fine-tuning convergence validation is convincing within its scope. The paper's primary weakness is that its most important theoretical claim — that CCE-Kahan-FullC is safe for pretraining — is validated only on continued pretraining from instruction-tuned checkpoints over short runs, a setting that is systematically more favorable for gradient filtering than true from-scratch pretraining. This is an evidential gap, not a structural flaw: the algorithm's correctness argument is sound, and the gap could be closed with a single additional experiment. The paper should be accepted, but the pretraining claim should be presented with the current evidence's limitations clearly stated, and the CCE / CCE-Kahan-FullC distinction should be surfaced prominently rather than buried in ablation rows.
+### Strength Finder
+## Strengths
+
+### Core strengths
+
+1. **Massive memory reduction with no convergence cost**: CCE reduces the cross-entropy memory footprint from 24 GB to 1 MB (Gemma 2 2B) while achieving indistinguishable training loss curves from `torch.compile` across four models (Fig. 4) and matching validation perplexity in pretraining (Fig. 5). Table 1 quantifies total classifier head memory from 28 GB down to ~1 GB.
+
+2. **Key algebraic reformulation eliminates materialization of logits**: The decomposition in Eq. (4) separates cross-entropy into an indexed matrix multiplication (computing only the correct-token logit) and a linear-log-sum-exp (computing the normalization over logits on-the-fly). This changes memory from O(N×|V|) to O(N+|V|), which is the central enabler of all downstream savings.
+
+3. **Gradient filtering exploits provable numerical sparsity**: By noting that bfloat16 with 7-bit fraction truncates softmax values below ε=2^{−12}, the paper establishes that at most 1/ε=4096 entries per column are numerically relevant. Fig. 3 empirically confirms this (probability falls below cutoff by ~50th most likely token), and Table 1 (row 7 vs. row 1) shows gradient filtering provides a 3.4× backward-pass speedup.
+
+4. **Enables substantially larger batch sizes across many models**: Fig. 1 shows batch-size increases of 1.5× (Llama 2 13B) to 10× (GPT-2, Gemma 2 2B) across 11 frontier models on a 16×80GB GPU setup, demonstrating broad applicability rather than a narrow corner case.
+
+### Supporting strengths
+
+1. **Thorough ablation of design choices**: Table 1 isolates the contributions of vocabulary sorting (row 1 vs. 6: 15% latency reduction), gradient filtering (row 1 vs. 7: 3.4× backward speedup), and Kahan summation variants (rows 8–10), making it clear what each component contributes.
+
+2. **Identifies and resolves pretraining-specific failure modes**: Section 5.3 documents two distinct issues (loss of precision in global summation; zero gradient propagated to rare tokens via filtering on ∇C), then resolves both with CCE-Kahan-FullC, validated by matching `torch.compile` validation perplexity across four models (Fig. 5).
+
+3. **Competitive throughput despite recomputation**: Table 1 shows CCE loss+gradient at 145 ms vs. `torch.compile` at 143 ms — essentially a wash — despite CCE recomputing C^⊤E in the backward pass. This is because CCE avoids writing the full logit matrix to global memory.
+
+### Presentation / practical strengths
+
+1. **Clear algorithmic pseudocode paired with visual access patterns**: Algorithms 1–3 and Fig. 2 jointly specify the blockwise computation, indexed loads, and synchronization strategy at a level sufficient for reimplementation.
+
+2. **Open-source implementation**: Code is released at https://github.com/apple/ml-cross-entropy, enabling direct adoption by practitioners.
+
+## Summary
+
+The paper proposes Cut Cross-Entropy (CCE), which reformulates the cross-entropy loss computation for large-vocabulary LLMs so that the full O(N×|V|) logit matrix is never materialized in GPU global memory, achieving O(N+|V|) memory usage instead. The single most important piece of evidence delivering on this claim is Table 1, which shows the Gemma 2 (2B) loss+gradient memory dropping from 28,000 MB (Baseline) to 1,164 MB (CCE) at comparable or slightly faster wall-clock time, while Fig. 4 and Fig. 5 confirm identical convergence in both fine-tuning and pretraining.
+
+--- Merged Review ---
+Now let me search for calibration papers.Now I have enough information to write the final consolidated review.
+
+---
+
+## Summary
+
+Cut Cross-Entropy (CCE) addresses a real and growing bottleneck in LLM training: the cross-entropy loss layer, whose memory footprint scales as O(N×|V|), has become the dominant memory consumer in large-vocabulary models (up to 89% for Gemma 2 2B). The paper proposes an algebraic reformulation that decomposes the cross-entropy into an indexed matrix multiply and a fused linear-log-sum-exp operation, reducing global memory usage to O(N+|V|). A custom Triton kernel implements this with gradient filtering (exploiting bfloat16 softmax sparsity) and vocabulary sorting to achieve 3.5× backward-pass speedup at comparable total wall-clock time to torch.compile, while enabling 1.5–10× larger batch sizes across 11 frontier models.
+
+---
+
+## Strengths
+
+- **Algebraic reformulation eliminates logit matrix materialization (Section 4, Eq. 4)**: The decomposition of cross-entropy into an indexed matrix multiply (O(ND)) and a linear-log-sum-exp (O(N+|V|)) changes memory complexity from O(N×|V|) to O(N+|V|), a principled contribution that is self-contained and correct.
+
+- **Massive, unambiguous memory savings (Table 1, Fig. 1)**: CCE reduces loss+gradient memory from 28,000 MB to 1,164 MB for Gemma 2 2B — a reduction of ~24× compared to torch.compile and ~4× vs. Liger Kernels — while matching torch.compile in wall-clock time (145 ms vs. 143 ms). Fig. 1 documents batch-size increases of 1.5× (Llama 2 13B) to 10× (GPT-2, Gemma 2 2B) on a 16×80 GB GPU setup.
+
+- **Gradient filtering is a novel, practically impactful insight (Section 4.3, Table 1 rows 1 vs. 7)**: The observation that bfloat16 softmax concentrates mass in fewer than ~50 tokens out of 256K entries (Fig. 3), allowing block-level skipping of 97%+ of the backward pass, yields a 3.4× backward speedup (357 ms → 100 ms) with no detectable precision loss in fine-tuning.
+
+- **Thorough ablations (Table 1)**: Vocabulary sorting (rows 1 vs. 6: 15% speedup), gradient filtering (rows 1 vs. 7: 3.4× speedup), and Kahan summation variants (rows 8–10) are each quantified separately, giving readers a clear, honest picture of each component's contribution.
+
+- **Fine-tuning convergence is convincingly validated (Fig. 4)**: Four models (Gemma 2 2B, Phi 3.5 Mini, Qwen 2.5 7B, Mistral NeMo), five seeds, 700 gradient steps on Alpaca; CCE's loss curves are indistinguishable from torch.compile within the run-to-run variance band.
+
+- **Open-source Triton implementation with full pseudocode**: Algorithms 1–3 and Fig. 2 together provide sufficient detail for reimplementation; the released code at https://github.com/apple/ml-cross-entropy makes this directly adoptable.
+
+---
+
+## Weaknesses
+
+### Fatal
+None.
+
+### Major
+
+- **Pretraining validation uses continued pretraining from instruction-tuned checkpoints, not from-scratch training (Section 5.3, Fig. 5)**: The paper's pretraining claim rests on continuing from Qwen 2.5 7B Instruct, Phi 3.5 Mini Instruct, Gemma 2 2B Instruct, and Mistral NeMo — all already instruction-tuned models — on 5% of OpenWebText for ~1,500 steps. Instruction-tuned checkpoints have well-calibrated, peaked softmax distributions where rare tokens already have suppressed logits. This setting is systematically more favorable for gradient filtering than true from-scratch pretraining, where softmax distributions are flatter at initialization and the sparsity assumption is untested. The paper explicitly uses the word "pretraining" for these experiments without qualification, overstating the scope of the empirical validation. The paper should present this as "continued training" and qualify the pretraining claim accordingly. This is an evidential gap, not a structural flaw — the algorithm's theoretical argument for CCE-Kahan-FullC is sound — but the strongest claim in the paper is supported only by the easiest experimental setting.
+
+### Minor
+
+- **Short training runs with no downstream task evaluation (Section 5.3)**: Fine-tuning experiments run 700 gradient steps; pretraining runs ~1,500 steps. No downstream benchmarks (e.g., MMLU, ARC, HellaSwag) are reported for any trained checkpoint. For a paper whose central empirical claim is "no sacrifice in convergence," showing equivalent loss curves over short runs is necessary but not sufficient evidence — small numerical biases could accumulate over longer training or manifest in specific capability clusters without showing up in perplexity. A single benchmark evaluation for the fine-tuning runs would meaningfully strengthen the claim.
+
+- **Softmax sparsity characterization is measured on trained instruct models only (Section 4.3, Fig. 3)**: The claim that "less than 0.02% of elements are non-zero" and Fig. 3 are both measured with Gemma 2 2B Instruct weights. The sparsity at different stages of training (early steps, from random initialization) is uncharacterized. If sparsity is low early in training, gradient filtering might introduce non-negligible bias in those critical early steps, which is especially relevant given the pretraining concern above.
+
+### Trivial
+
+- **CCE vs. CCE-Kahan-FullC framing could be clearer**: The abstract's headline claim "reduces the memory footprint of the loss computation from 24 GB to 1 MB" accurately refers to the loss-only figure for basic CCE. The pretraining-viable variant CCE-Kahan-FullC uses 2,326 MB for loss+gradient (Table 1, row 9) — still dramatically better than any baseline, but 2× more than CCE. The introduction and abstract could note this split more prominently to set accurate expectations, rather than leaving it to the ablation table.
+
+---
+
+## Nice-to-Haves
+
+- A single convergence validation from a small model trained from random initialization (e.g., 1B parameter model trained 5–10B tokens on a standard corpus with downstream task evaluation) would conclusively validate the pretraining claim and remove the major weakness above.
+- Characterization of gradient filtering sparsity across training steps (particularly early training) to bound when and whether the approximation is safe.
+- Scaling characterization of spin-lock synchronization overhead as |V| grows beyond 256K (e.g., hypothetical 512K or 1M vocab) to support the claim that CCE "scales to arbitrarily large vocabularies."
+- Brief discussion of FP8 training compatibility, since the bfloat16-specific threshold ε = 2⁻¹² would need revision for emerging H100/B100 FP8 training pipelines.
+
+---
+
+## Removed Points
+
+*These points are flagged to be removed; treat them with caution.*
+
+- **"Pipeline parallelism speculation should be marked as future work"**: The paper already frames this as speculation in Section 6 ("we expect that CCE may prove beneficial"), so this is a strawman concern.
+
+- **"The Liger Kernels comparison is misleading because of the forward/backward architecture difference"**: The paper explicitly footnotes this distinction (footnote 2, Section 5.1) and explains it in Section 2. The difference is acknowledged; the comparison stands since both measure total cost.
+
+- **Generic strength about "important problem"**: Removed per rules — not specific enough.
+
+- **Strength: "CCE-Kahan-FullC resolves pretraining failure modes"**: Weakened by the major weakness that the validation uses instruct checkpoints, not true pretraining from scratch. The methodology is there but the validation scope is limited.
+
+---
+
+## Novel Insights
+
+The most genuinely novel observation across the reviews is the interplay between bfloat16's numerical properties and gradient computation: the formal connection between the 7-bit fraction of bfloat16, the ε = 2⁻¹² threshold, and block-level sparsity of the softmax is a clean insight that could generalize to other numerical formats and other large-vocabulary classification problems (image generation, byte-level models). The distinction between gradient filtering applied to ∇E vs. ∇C — and the specific mechanism by which filtering ∇C harms pretraining by cutting gradients to rare tokens — is an underappreciated implementation subtlety that the paper's ablations (CCE-Kahan-FullC vs. CCE-Kahan-FullE, Table 1 rows 9–10) are the first to quantify clearly.
+
+---
+
+## Suggestions
+
+1. Rename Section 5.3's "Pretraining" experiments to "Continued training from instruction-tuned checkpoints" and clearly state that true from-scratch pretraining validation is future work.
+2. Add at least one downstream benchmark (e.g., MMLU 5-shot) for the fine-tuning convergence experiments to support the "no sacrifice in convergence" claim beyond loss curves.
+3. Surface the CCE / CCE-Kahan-FullC distinction in the abstract itself — one sentence noting that the pretraining-safe variant uses ~2.3 GB rather than 1 MB would prevent misinterpretation.
+4. Include a Fig. 3–style softmax sparsity plot at different training steps (e.g., step 0, 100, 500, 1500) to characterize when gradient filtering becomes accurate, even for continued training.
+
+---
+
+## Score and Decision
+
+**Calibration anchors:**
+
+| Paper | Path | Avg Score | Comparison |
+|---|---|---|---|
+| FlashAttention-2 | `mZn2Xyh9Ec.md` | 7.25 | Most comparable: same contribution type (memory-efficient kernel for LLM bottleneck layer), similar algorithmic novelty, accepted. CCE's core contribution is comparably strong; pretraining validation slightly weaker. |
+| ThunderKittens | `0fJfVOSUra.md` | 7.50 | GPU kernel framework paper; higher score reflects broader generality. CCE is more targeted but equally principled. |
+| FlashMask | `wUtXB43Chi.md` | 7.00 | Memory-efficient attention mask kernel; similar scope, similar validation depth. |
+| SLoPe | `lqHv6dxBkj.md` | 5.67 | LLM memory/training efficiency paper; weaker baseline comparisons and theoretical motivation than CCE. |
+| ZO-Offloading | `euZD4YTXKu.md` | 3.75 | Low-scoring efficiency paper; controversial/incomplete empirical validation. CCE's validation is clearly stronger. |
+| IntelLLM | `4QWPCTLq20.md` | 3.00 | Low-scoring kernel/compression paper; incremental contribution, poor validation. Far below CCE in quality. |
+
+**Assessment:** CCE sits firmly in the same band as FlashAttention-2 and FlashMask (7.0–7.25). The core algorithmic contribution is principled and novel, the memory savings are unambiguous and dramatic, the fine-tuning convergence is well-validated, and the ablations are thorough. The major weakness — that pretraining validation uses instruction-tuned checkpoints over short runs — is a genuine evidential gap that the paper does not acknowledge as a limitation, but it does not invalidate the core contribution, which applies equally to fine-tuning (the dominant practical use case). The paper is clearly above the medium anchor (SLoPe, 5.67) and well above the low anchors. The contribution quality is comparable to FlashAttention-2, slightly tempered by the pretraining claim's weaker support.
+
+**Final score: 7.0 — Accept**
+
+MY FINAL SCORE: <pineapple>7.0</pineapple>
+MY FINAL DECISION: <orange>Accept</orange>
+
+--- Scorer Output ---
+7.0
+
+--- Decision ---
+Accept
+
+============================================================
+Paper: ../iclr2025/papers/9mjZ800m7Y.txt
+Timestamp: 2026-04-23T23:48:43
+
+--- Token Usage ---
+  Harsh Critic: N/A (claude_sdk path)
+  Strength Finder: input=16483 (cached=0) output=1557 (reasoning=0) total=18040 requests=1 duration=n/ams
+  Merger: N/A (claude_sdk path)
+  TOTAL: input=16483 output=1557 total=18040
+
+--- Claude SDK Usage ---
+  [Harsh Critic]
+    Model: claude-sonnet-4-6
+    Session ID: b4fb6b7f-87db-482c-9152-4ea83bae1e9d
+    Cost (USD): 0.20497305
+    Turns: 4
+    Duration: total=144153ms api=140069ms
+    Tokens: input=8 output=7493 cache_read=18951 cache_creation=23165
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  [Merger]
+    Model: claude-sonnet-4-6
+    Session ID: 520d475c-d45f-4504-a272-7afb9db34102
+    Cost (USD): 0.4133523
+    Turns: 18
+    Duration: total=209110ms api=191522ms
+    Tokens: input=22 output=8407 cache_read=378446 cache_creation=46306
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  TOTAL Claude SDK cost (USD): 0.6183
+
+--- Merged Inputs ---
+
+### Harsh Critic
+I'll start by reading the paper before writing my review.Now I have enough to write a thorough review.
+
+---
+
+# Review: Multi-Objective Differentiable Neural Architecture Search (MODNAS)
+
+## Critical Issues
+
+**1. Budget allocation conflates efficiency advantage with quality advantage [Structural]**
+
+The central empirical claim — that MODNAS "consistently outperforms all other baselines across every device" (Section 4.1) — cannot be cleanly separated from an efficiency advantage that is entirely by construction. For the NAS-Bench-201 experiment (19 devices), MODNAS trains for 22 GPU hours total; baselines each receive a per-device budget of 22/19 ≈ 1.16 GPU hours. Every baseline is effectively search-budget-starved by a factor of ~19 relative to the single-device use case. The paper justifies this by framing it as "same total compute" — which is a legitimate framing for the *amortized* use case — but then makes absolute quality claims that exceed this framing.
+
+The paper is testing two entangled hypotheses at once: (a) MODNAS is more *efficient* (amortized over devices), and (b) MODNAS produces *higher-quality* Pareto fronts at equal per-device compute. Figure 5 provides partial evidence for (b) by showing HV as a function of evaluations on a single test device, where MODNAS begins at HV ≈ 0.94. This is the most honest comparison in the paper, but it is presented for a single device after the 22-hour training is already complete. Whether baselines given the full 22-hour budget on a single device would close this gap is never tested.
+
+Figure 20a (baselines at double the budget) is insufficient — 2× is not the same as the ~19× equalization needed for NAS-Bench-201. The paper makes no attempt to show what happens at equal per-device budget, meaning the claim of *quality* superiority (as opposed to *efficiency* superiority) is not established.
+
+This issue is present across all experiments and undermines the main headline result. It cannot be fixed by rewording; it requires the missing controlled comparison.
+
+---
+
+**2. Inconsistent budget allocation methodology across experiments [Structural]**
+
+The budget allocation logic is different in every experiment, yet the paper presents a uniform "MODNAS outperforms baselines" narrative:
+
+- **NAS-Bench-201** (Section 4.1): "same total search time budget" split across 19 devices (Section 4.1 text). Baselines are starved per device.
+- **HAT / Machine Translation** (Section 4.2): "we allocate to each baseline 2.5× more runtime budget than MODNAS." Here baselines get more, yet MODNAS still claims to win on quality per evaluation.
+- **OFA / ImageNet** (Section 4.3): MODNAS runs 1 day on 8 GPUs; baselines run 192 hours (8 days). Baselines get 8× total compute. But baselines use black-box search with the OFA accuracy predictor rather than gradient descent, so the comparison is not compute-comparable in any principled sense.
+
+The paper never explains why different experiments use different budget comparisons, and there is no consistent justification. Given that the paper's core contribution is "same budget, better Pareto front," the variable methodology makes it impossible to determine whether MODNAS's advantage is real, method-dependent, or an artifact of favorable budget choices.
+
+---
+
+**3. Zero-shot generalization claim depends on unvalidated MetaPredictor accuracy on test devices [Evidential]**
+
+Contribution 2 in Section 1 is: "the first to provide a global view of the Pareto solutions with just a single search run, without the need to repeat search or fine-tune on new target devices." This claim rests critically on the MetaPredictor $p_\theta^m(\alpha, d_t^m)$ accurately predicting hardware metrics (latency, energy) for *unseen test devices*.
+
+The MetaPredictor is pretrained on training devices and then frozen during search. Its accuracy on the 6 NAS-Bench-201 test devices is never reported. The paper also does not show error bars or Kendall-τ correlation between predicted and ground-truth latencies for test devices. Since the MetaPredictor's predictions directly drive the upper-level gradient for hardware objectives, prediction errors on test devices propagate directly to Pareto front quality. If the predictor degrades on test devices, the zero-shot claim fails. The paper provides t-SNE clustering of device embeddings (Figure 12) as evidence of generalization, but embedding clustering does not validate prediction accuracy.
+
+---
+
+## Section-by-Section Notes
+
+**Section 3.3 (MGD across devices):** The paper applies MGD to combine T device-level gradients $g_\Phi^t$, where each $g_\Phi^t$ is already a linear scalarization (not a vector of M objective gradients). MGD is theoretically justified when tasks have *conflicting* objectives. But after scalarization, each $g_\Phi^t$ is a single direction. The multiple-device tasks may often be *aligned* (architectures that are fast on Samsung S20 tend to be fast on Samsung S21), which means MGD degenerates to something close to the mean gradient. The ablation in Figure 6 shows MGD outperforms mean gradient, but the margin is modest and no analysis is given of when/why they differ. The theoretical motivation for applying MGD at the device level (as opposed to the objective level) is never established.
+
+**Section 3.2 (MetaHypernetwork):** The architecture choice — K hypernetworks with an attention-based device embedding — is not ablated against simpler alternatives. Specifically, the number K of hypernetworks is not varied, and there is no ablation showing that the attention mechanism is necessary vs. a single hypernetwork with concatenated device features. This is a reproducibility concern since K is likely a sensitive hyperparameter.
+
+**Section 4.1 (NAS-Bench-201 results):** The paper uses 13 training devices and 6 test devices from the same 19-device set as Lee et al. (2021b). However, Figure 3 shows all 19 devices together in the radar plot without clearly distinguishing which are train vs. test. The caption says "Test devices are colored in red," but from the figure description the labels are repeated Samsung model names — it is unclear which of the 19 are test devices. If MODNAS performs better on train devices than test devices, this is important information about generalization that is obscured by averaging in the radar plot.
+
+**Section 4.3 (OFA ImageNet):** MODNAS here only updates the MetaHypernetwork while keeping the OFA supernetwork frozen. The OFA supernet was specifically designed and trained to enable zero-shot device transfer. The claim that MODNAS achieves better HV than baselines in this setting is not surprising — MODNAS is essentially using OFA as a backbone and learning a small routing network on top. The contribution of MODNAS's search vs. OFA's pre-existing capability is never disentangled.
+
+**Section 4.4 (Computational complexity):** Table 1 claims MODNAS has O(1) search cost, but this ignores: (a) 3 GPU hours of MetaPredictor pretraining, (b) computation of device feature vectors (evaluating reference architectures on each device), (c) 22 GPU hours of actual search. These are not O(1) — they scale with both the search space and the device count, just with a smaller constant. The O(1) claim compares the *scaling behavior* with T and C, not the absolute cost. This distinction is not made clear in the main text.
+
+**Section 5 (Limitations):** The paper's limitations paragraph focuses on gradient-based NAS failure modes in general rather than issues specific to MODNAS. The known failure mode of linear scalarization (inability to find Pareto points in non-convex regions) is acknowledged in Figure 11 as something MODNAS "demonstrates effectiveness beyond convex Pareto fronts," but no evidence is given that MODNAS actually finds non-convex Pareto points rather than just sampling near the convex hull.
+
+---
+
+## Strengths
+
+- The framing of multi-device multi-objective NAS as a single unified search problem is well-motivated, and the architectural decomposition into MetaHypernetwork + MetaPredictor + Supernetwork is modular and principled.
+- The breadth of evaluation is genuinely impressive: 4 search spaces (cell-based CNN, MobileNetV3, encoder-decoder Transformer, GPT), 3 tasks (classification, translation, language modeling), up to 19 devices and 3 objectives. Most NAS papers evaluate on 1–2 spaces.
+- The distinction between "Pareto set build cost" and "search cost" in Table 1 is a useful conceptual contribution, even if the O(1) claim is imprecise.
+- Figure 5 (HV vs. number of evaluated architectures on a test device) is the clearest and most honest comparison in the paper. Starting at HV ≈ 0.94 with 24 evaluations is genuinely strong evidence for the method's efficiency in the per-device evaluation sense.
+- The MGD ablation (Figure 6) cleanly isolates the contribution of the multi-gradient update scheme versus simpler averaging strategies.
+
+---
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+
+1. **Equal per-device budget comparison for NAS-Bench-201.** Run each baseline with 22 GPU hours *per device* (the same absolute budget MODNAS uses total) and report per-device HV. Without this, the claim that MODNAS achieves higher Pareto front quality — not merely efficiency — cannot be assessed. If baselines match MODNAS at equal per-device budget, the contribution is entirely about amortization, not search quality.
+
+2. **MetaPredictor prediction accuracy on test devices.** Report Kendall-τ or Spearman correlation between predicted and ground-truth latencies/energies for the 6 held-out NAS-Bench-201 test devices, and show how predictor error correlates with Pareto front quality degradation. This is required to validate the zero-shot claim.
+
+3. **Ablation on K (number of hypernetworks).** The MetaHypernetwork uses K independent hypernetworks as a device routing mechanism. K is a key design choice; ablate K ∈ {1, 5, 10, 20} to show sensitivity and justify the chosen value.
+
+### Deeper Analysis Needed
+
+1. **Disentangle OFA pre-training from MODNAS search.** For the ImageNet experiment, MODNAS is initialized from the OFA supernet. Run MODNAS from a randomly initialized supernet on a subset of devices, and also run OFA+HELP (as in Table 1) as an actual experimental baseline (not just a theoretical comparison), to quantify what MODNAS adds over OFA's built-in multi-device capability.
+
+2. **When does linear scalarization fail for non-convex Pareto fronts?** The paper claims MODNAS works for non-convex fronts (Section 4.3, HW-GPT-Bench), but linear scalarization is theoretically limited to convex regions. Provide explicit analysis of how many of the 24 sampled architectures fall on non-convex parts of the true Pareto front (computable on NAS-Bench-201 since ground truth is known).
+
+### Visualizations & Case Studies
+
+1. **Overlay of MODNAS Pareto front with the ground-truth Pareto front on NAS-Bench-201.** Since NAS-Bench-201 provides all accuracy and latency values exactly, compute the true Pareto front and overlay MODNAS's 24-point approximation and the baselines' fronts. This would directly reveal whether MODNAS finds more of the true front.
+
+2. **HV as a function of training devices T** (using NAS-Bench-201). Show MODNAS performance as the number of training devices varies from 1 to 13, and report test-device HV. This would quantify how much of MODNAS's advantage comes from multi-device meta-learning vs. the hypernetwork architecture alone.
+
+### Obvious Next Steps
+
+1. **Comparison to concurrent/prior Pareto hypernetwork methods (PHN, COSMOS, etc.) applied to NAS.** Methods like Navon et al. (2021) and Ruchte & Grabocka (2021) propose hypernetwork-based Pareto front learning. The paper cites these but does not compare against them adapted to the NAS setting. Given that MODNAS's hypernetwork component is directly inspired by these works, the comparison is necessary to isolate the NAS-specific contributions (MetaPredictor, device conditioning, MGD).
+
+---
+
+## Overall Assessment
+
+MODNAS addresses a genuine and important problem — profiling Pareto fronts across multiple hardware devices in a single NAS run — and the architectural solution is thoughtful. However, the paper's central empirical claims cannot be evaluated fairly from the experiments as presented. The budget comparisons are inconsistent across experiments and, where equal total budget is used (NAS-Bench-201), systematically starve per-device baselines by a factor of ~19. This means the headline result (MODNAS outperforms all baselines across all 19 devices) may be primarily an efficiency-of-amortization result rather than a quality result. The zero-shot generalization claim — arguably the most novel contribution — is never validated via MetaPredictor accuracy on test devices. The paper should not be accepted in its current form. The contribution may be real, but the evidence as presented does not distinguish between "MODNAS finds better Pareto fronts" and "MODNAS is a more efficient way to get adequate Pareto fronts when serving many devices simultaneously" — which are different claims with different implications.
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+
+1. **Single search run produces Pareto-optimal architectures across multiple devices and objectives, reducing cost from O(CT) to O(1):** The MetaHypernetwork H_Φ(r, d_t), conditioned on both preference vectors and device embeddings, enables generating Pareto front architectures for new devices without re-search. Table 1 explicitly compares the search and Pareto set build costs, showing MODNAS achieves O(1) for both, whereas methods like MetaD2A+HELP require O(N) search cost and O(CT) Pareto set build cost, and ProxylessNAS requires O(CT) search cost.
+
+2. **Consistent outperformance over baselines in hypervolume across all evaluated settings:** MODNAS achieves higher hypervolume than all baselines across all 19 devices on NAS-Bench-201 (Figure 3), on the HAT transformer space for machine translation (Figure 9), on the OFA/MobileNetV3 ImageNet space across 12 devices (Figure 10), and on HW-GPT-Bench for language modeling (Figure 11). This covers CNN and both encoder-decoder and decoder-only transformer architectures, three tasks, and up to 19 devices.
+
+3. **Much higher sample efficiency than blackbox MOO baselines:** Figure 5 demonstrates that MODNAS achieves hypervolume ~0.94 with only 24 full architecture evaluations, while blackbox baselines (RS, CMA-ES, NSGA-II, etc.) require significantly more evaluations without matching MODNAS's performance, directly supporting the claim of efficient Pareto front profiling.
+
+### Supporting strengths
+
+1. **MGD update scheme is provably superior to alternatives for MetaHypernetwork optimization:** Figure 6 shows that MGD achieves higher final hypervolume, better anytime performance, and faster convergence compared to mean gradient, sequential, and MC sampling update schemes. This ablation directly justifies the algorithmic choice in Algorithm 1 (line 7–9).
+
+2. **Scalability beyond 2 objectives without additional search cost or hyperparameter tuning:** Figure 8 demonstrates MODNAS optimizing 3 objectives (accuracy, latency, energy) simultaneously on FPGA and Eyeriss, achieving hypervolume close to the global optimum front of NAS-Bench-201, without any methodological changes.
+
+3. **Zero-shot transfer to unseen devices with minimal search devices:** The device-conditional MetaHypernetwork generalizes to unseen devices. Figure 3 shows strong hypervolume on 6 held-out test devices (marked in red). Appendix Figure 25 further shows that training with only 2 search devices still enables generalization to 17 test devices, demonstrating effective meta-learning of device similarities. The t-SNE clustering in Figure 12 confirms that the learned embeddings capture meaningful device groupings.
+
+4. **Incorporation of user prior constraints is straightforward:** Section 4.1 and Figure 7 show that MODNAS can incorporate normalized constraints c^m on objectives by simply removing gradients for satisfied constraints (lines 6 and 14 of Algorithm 1), and that this produces Pareto sets that trade off between diversity and performance in a controlled manner, whereas MetaD2A+HELP prioritizes performance over diversity even with 24 independent search runs.
+
+### Presentation / practical strengths
+
+1. **Reproducibility through public code release:** The authors provide their code at https://github.com/automl/modnas, facilitating direct reproduction and comparison.
+
+2. **Clear algorithmic presentation:** Algorithm 1 provides concise pseudocode for the full search procedure, and Figure 1 gives an intuitive architectural diagram showing data flow between the MetaHypernetwork, Architect, Supernetwork, and MetaPredictor components, making the method readily implementable.
+
+## Summary
+
+The paper proposes MODNAS, a multi-objective differentiable NAS method that uses a device- and preference-conditioned MetaHypernetwork optimized via multiple gradient descent (MGD) to profile the entire Pareto front across multiple hardware devices and objectives in a single search run. The single most important piece of evidence is Table 1 combined with the hypervolume results in Figures 3, 9, 10, and 11: MODNAS reduces both search cost and Pareto set build cost to O(1) (versus O(CT) or O(NT) for prior methods) while consistently achieving higher hypervolume than all baselines across four diverse search spaces, up to 19 devices, and up to 3 objectives.
+
+--- Merged Review ---
+Now let me search for calibration anchors to properly score this paper.Now I have enough context to write the final review. Let me synthesize everything.
+
+---
+
+## Summary
+
+MODNAS proposes a hardware-aware multi-objective differentiable NAS algorithm that profiles the Pareto front across multiple devices and objectives in a single search run. A MetaHypernetwork, conditioned on both preference vectors and hardware device embeddings, generates Pareto-optimal architectures without re-running search for each new device or constraint. The method combines linear scalarization with multiple gradient descent (MGD) across devices and is evaluated on four search spaces (NAS-Bench-201, MobileNetV3/OFA, HAT Transformer, GPT-2), three tasks, and up to 19 devices.
+
+---
+
+## Strengths
+
+- **Single-run multi-device Pareto front (Table 1 + Figures 3, 9, 10, 11):** MODNAS is the first differentiable NAS method to reduce both search cost and Pareto set build cost to O(1) in the number of devices T and constraints C, versus O(CT) for constrained baselines like MetaD2A+HELP. This is a concrete, quantified structural contribution.
+
+- **Broad and genuine empirical coverage:** Experiments span 4 search spaces (cell CNN, MobileNetV3, encoder-decoder Transformer, GPT-2), 3 tasks (image classification, machine translation, language modeling), and up to 19 devices with 3 objectives. This scope meaningfully exceeds most prior NAS work.
+
+- **Quality superiority in asymmetric-budget experiments:** In the HAT experiment (Section 4.2), baselines receive 2.5× more total runtime budget than MODNAS; MODNAS still achieves higher hypervolume. In the OFA experiment (Section 4.3), baselines run for 192 hours versus MODNAS's 1 day on 8 GPUs; MODNAS still achieves higher average HV across 12 devices. These are the cleaner comparisons that support quality — not merely efficiency — superiority.
+
+- **MGD ablation (Figure 6):** The ablation directly isolates MGD versus mean-gradient, sequential, and MC-sampling updates, showing MGD achieves higher final HV and faster convergence. This justifies a key algorithmic choice.
+
+- **Sample efficiency on NAS-Bench-201 (Figure 5):** MODNAS achieves HV ≈ 0.94 with only 24 architecture evaluations on a held-out test device, while all baselines require substantially more evaluations to approach this level — a compelling efficiency result.
+
+- **Scalability to 3 objectives (Figure 8):** MODNAS scales to optimizing accuracy, latency, and energy simultaneously without any methodological changes or hyperparameter retuning, demonstrating genuine extensibility.
+
+---
+
+## Weaknesses
+
+### Fatal
+None.
+
+### Major
+
+- **MetaPredictor accuracy on test devices is never validated.** Contribution 2 ("zero-shot transferability to new devices without re-search or fine-tuning") rests critically on the MetaPredictor accurately predicting latency/energy for the 6 held-out NAS-Bench-201 test devices. The MetaPredictor is pretrained on 13 training devices and then frozen. Its prediction accuracy on unseen test devices (Kendall-τ, Spearman-ρ, or RMSE) is never reported. Since the MetaPredictor's predictions directly drive upper-level gradient computation for hardware objectives, systematic bias on test devices would silently corrupt the zero-shot Pareto front quality. The t-SNE embedding clustering in Figure 12 is suggestive but does not substitute for measuring prediction accuracy. This is the most important gap for the paper's strongest claim.
+
+- **NAS-Bench-201 headline budget comparison is ambiguous about quality vs. amortization superiority.** For the 19-device NAS-Bench-201 experiment, MODNAS uses 22 GPU hours total; each baseline receives 22/19 ≈ 1.16 GPU hours per device (one search run each). This is the legitimate "same total compute" framing for the amortization scenario, but it makes it impossible to isolate whether MODNAS finds *higher-quality* Pareto fronts or is simply a *more efficient amortization* strategy. Figure 20a runs baselines at double the total budget (still ≈ 2.3 hours/device); MODNAS remains superior, which is evidence but not a full equalization. The HAT and OFA experiments (where baselines get *more* total budget) provide better evidence of quality superiority, but the primary 19-device result remains ambiguous on this axis. The paper should clearly separate the amortization and quality claims; as written, both are asserted together based on the most budget-asymmetric comparison.
+
+### Minor
+
+- **K hypernetworks not ablated.** The MetaHypernetwork uses K independent hypernetworks combined via an attention-weighted sum (Section 3.2, Figure 2). K is a key design choice, but its sensitivity is never studied. No ablation across K ∈ {1, 5, 10, 20} is presented. Since K controls the capacity of the device-routing mechanism, this matters for reproducibility and for understanding where the gain comes from.
+
+- **Linear scalarization's limitation for non-convex Pareto fronts is not empirically characterized.** The paper claims effectiveness "beyond convex Pareto fronts" (Section 4.3, HW-GPT-Bench), but does not report what fraction of the 24 sampled architectures fall on non-convex portions of the true Pareto front. On NAS-Bench-201, where ground-truth is computable, an overlay of MODNAS's 24 points against the true Pareto front would directly reveal coverage of non-convex regions. This would strengthen or correct the non-convexity claim.
+
+### Trivial
+None.
+
+---
+
+## Nice-to-Haves
+
+- **Pareto front overlay on NAS-Bench-201 ground truth:** Since NAS-Bench-201 provides exact ground-truth for all architectures, overlaying MODNAS's 24-point approximation and baseline fronts against the true Pareto front would directly quantify coverage quality in a way HV alone does not.
+
+- **HV as a function of number of training devices:** Showing HV on the 6 test devices as training devices vary from 1 to 13 would quantify how much of MODNAS's advantage comes from multi-device meta-learning versus the hypernetwork architecture alone, and would guide practitioners on how many devices to include at search time.
+
+- **Explicit MetaPredictor prediction accuracy table for test devices:** Even a brief table of Kendall-τ on held-out devices would directly address the zero-shot validation gap identified above.
+
+---
+
+## Removed Points
+
+*These points are flagged to be removed, treat them with caution.*
+
+- **O(1) claim is "imprecise" or "ignores MetaPredictor pretraining."** The harsh critic argues that pretraining costs mean the paper's O(1) claim is wrong. This is a misreading: O(1) in Table 1 refers to scaling behavior with respect to T (number of devices) and C (number of constraints), not absolute runtime. The paper is clear that "ignoring the cost to train final architectures in the Pareto set" (Section 4.4, Table 1 caption). The O(1) claim is for the asymptotic complexity, not the absolute cost. Remove.
+
+- **Figure 3 ambiguity about which devices are test devices.** The figure caption explicitly states "Test devices are colored in red around the plot." The harsh critic's complaint about ambiguity is incorrect. Remove.
+
+- **HAT experiment budget unfairness.** The critic noted inconsistency because different experiments use different budget ratios. For HAT, baselines receive 2.5× more budget than MODNAS and MODNAS still wins — this is asymmetric in favor of the baseline, which is explicitly allowed by our rules. Remove as a weakness.
+
+- **OFA contribution disentanglement.** The paper explicitly states the OFA supernetwork is kept frozen and only the MetaHypernetwork is updated. The contribution is learning multi-device preference-conditioned routing on top of a pretrained supernet. This is legitimate and clearly described. Remove as a weakness.
+
+- **Comparison to PHN/COSMOS/concurrent MOO hypernetwork methods.** Removed per the "no missing related works" rule; we cannot confirm what exists externally.
+
+- **Figure 3 train vs. test device performance obscured.** The caption explicitly distinguishes test (red) from train devices. Not a genuine ambiguity. Remove.
+
+- **MGD at device level lacks theoretical justification vs. objective level.** The ablation (Figure 6) empirically justifies the choice. Demanding a theorem for an empirical contribution is outside the paper's stated scope and not standard in NAS papers. Move to nice-to-have at most; the hard critic's framing as a structural weakness is excessive.
+
+---
+
+## Novel Insights
+
+The most genuinely novel insight in the paper is the framing of multi-device NAS as a multi-task learning problem solvable by a single hypernetwork conditioned on both hardware embeddings and preference vectors, with MGD aggregating across device gradients. This is cleaner than prior constrained-objective methods because it separates the Pareto front approximation problem from the constraint specification problem: a user can specify preferences at inference time without re-running any search. The empirical finding that only 2 training devices suffice for reasonable zero-shot generalization to 17 test devices (Figure 25 in appendix) — if validated by predictor accuracy metrics — would be a strong practical insight for deployment scenarios.
+
+---
+
+## Suggestions
+
+1. **Report MetaPredictor prediction accuracy (Kendall-τ or Spearman-ρ) on held-out test devices** for each hardware metric separately, and add a scatter plot of predicted vs. ground-truth latency on test devices. This is essential to validate the zero-shot claim.
+
+2. **Add equal per-device budget comparison for NAS-Bench-201**: run the best-performing baseline(s) with the full 22 GPU hours per device (on 1–3 representative devices) to cleanly separate amortization efficiency from Pareto front quality superiority.
+
+3. **Ablate K (number of hypernetworks)** across at least K ∈ {1, 5, 10, 20} to characterize sensitivity and guide practitioners.
+
+4. **Overlay MODNAS and baseline Pareto fronts against the NAS-Bench-201 ground-truth front** to directly measure coverage of the true Pareto set.
+
+---
+
+## Score and Decision
+
+**Calibration anchors consulted:**
+
+| Path | Avg score | Comparison |
+|---|---|---|
+| `4y4t7yOvJO.md` (POMONAG) | 4.40 | Most topically similar: multi-obj NAS with predictors, rejected for limited novelty, narrow experiments (2 search spaces). MODNAS clearly exceeds this — 4 spaces, 19 devices, genuine amortization contribution. |
+| `tveiUXU2aa.md` (SWAP-NAS) | 7.50 | NAS paper accepted as spotlight; cleaner single-focus contribution with strong Kendall-τ correlations across benchmarks. MODNAS is broader but has more validation gaps. |
+| `LUpC8KTvdV.md` (MaskTAS) | 7.00 | Accepted NAS paper with broad transformer evaluation; comparable breadth but simpler methodology. |
+| `O4N9kWwV6R.md` (Few for Many, MOO) | 7.00 | Accepted MOO paper with theoretical guarantees. MODNAS is more empirical but tackles a harder applied problem. |
+| `HgndgAbBcR.md` (CNNGEN) | 3.67 | Rejected NAS paper with weak baselines and no real contribution. MODNAS is far above this. |
+| `UyPmWupphV.md` (Hyperion) | 3.00 | Rejected NAS paper with strong reject; no real novelty, weak experiments. MODNAS far exceeds this. |
+
+**Positioning:** MODNAS clearly outperforms the rejected NAS papers (3.0–4.4) in originality, scope, and experimental depth. Its weaknesses — unvalidated MetaPredictor accuracy on test devices and ambiguous NAS-Bench-201 budget comparison — prevent it from reaching the top tier (7.5+). The HAT and OFA results (where baselines receive more compute) partially address the budget concern, and the contribution is real and practically important. The paper sits between the borderline (5.0) and accepted (7.0) papers; I place it at **6.0**, reflecting a solid above-borderline contribution with one major methodological validation gap.
+
+**Originality:** Good. First single-run differentiable NAS covering multi-device + multi-objective simultaneously.  
+**Research question importance:** High. Hardware-efficient deployment across heterogeneous devices is a genuine practical need.  
+**Claim support:** Moderate-strong. HAT and OFA results convincingly support quality superiority; NAS-Bench-201 supports amortization efficiency; zero-shot claim is under-validated.  
+**Experimental soundness:** Good breadth, some methodological asymmetries.  
+**Clarity:** Clear algorithmic presentation (Algorithm 1, Figure 1).  
+**Value to community:** High if MetaPredictor validation is addressed.
+
+MY FINAL SCORE: <pineapple>6.0</pineapple>
+MY FINAL DECISION: <orange>Accept</orange>
+
+--- Scorer Output ---
+6.0
+
+--- Decision ---
+Accept
+
+============================================================
+Paper: ../iclr2025/papers/Zggz6seq6F.txt
+Timestamp: 2026-04-23T23:49:53
+
+--- Token Usage ---
+  Harsh Critic: N/A (claude_sdk path)
+  Strength Finder: input=13249 (cached=0) output=1565 (reasoning=0) total=14814 requests=1 duration=n/ams
+  Merger: N/A (claude_sdk path)
+  TOTAL: input=13249 output=1565 total=14814
+
+--- Claude SDK Usage ---
+  [Harsh Critic]
+    Model: claude-sonnet-4-6
+    Session ID: ce015dc0-8efb-4c89-89ba-445cd1f86c78
+    Cost (USD): 0.1871736
+    Turns: 5
+    Duration: total=136807ms api=134065ms
+    Tokens: input=9 output=6947 cache_read=29072 cache_creation=19792
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  [Merger]
+    Model: claude-sonnet-4-6
+    Session ID: b9d5d2d4-6d9e-4c12-b7fb-09ab9cf97aae
+    Cost (USD): 0.5199218999999999
+    Turns: 20
+    Duration: total=280316ms api=207955ms
+    Tokens: input=32 output=9864 cache_read=596678 cache_creation=51430
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  TOTAL Claude SDK cost (USD): 0.7071
+
+--- Merged Inputs ---
+
+### Harsh Critic
+I'll start by reading the paper end-to-end before writing my review.Now I have a thorough reading of the paper. Let me compose the review.
+
+---
+
+# Review: "Can LVLMs Describe Videos Like Humans? A Five-in-One Video Annotations Benchmark for Better Human-Machine Comparison"
+
+---
+
+## Critical Issues
+
+### 1. The "human baseline" groundtruth is GPT-generated, not human-generated — *Structural*
+
+The paper's stated purpose is to enable "reasonable human-machine comparisons" and to establish "a robust baseline that accurately reflects human video comprehension capabilities" (Abstract, Section 1). Yet the primary reference used throughout the quantitative evaluation — the "groundtruth" $g_i$ — is produced by GPT-3.5-turbo synthesizing the five human captions (Section 2.3). Every metric in Table 2 (BLEU, METEOR, GLEU, AutoDQ-based, FIOVA-DQ-based) is computed against this LLM-synthesized text, not against human annotations directly.
+
+This creates a fundamental contradiction: the evaluation methodology measuring "LVLMS vs. Groundtruth" is not measuring LVLM alignment with human understanding — it is measuring alignment with GPT-3.5-turbo's synthesis of human understanding. Since the six evaluated LVLMs are also transformer-based language models, this groundtruth is stylistically and structurally closer to their own output space than to raw human captions. Any apparent alignment advantage or disadvantage could reflect LLM-to-LLM stylistic similarity rather than genuine human-machine comprehension gaps.
+
+The paper includes a separate "LVLMS vs. Humans" comparison via CV ranking (Section 4.3), but even there, human annotation quality scores are derived from GPT-3.5-turbo (Section 2.2), not from independent quality assessments grounded in the video. The entire evaluation pipeline is mediated by GPT-3.5-turbo, which the paper neither validates nor critically examines. The central claim — that FIOVA enables better human-machine comparison — is not supported by the actual evaluation design.
+
+### 2. GPT-3.5-turbo scores human annotation "Correctness" without access to the video — *Structural*
+
+Section 2.2 describes using GPT-3.5-turbo to score each of the 15,010 human annotations across five dimensions, including **Correctness** ("whether the information is accurate and free from misleading content") and **Consistency** ("whether the description is logically coherent and aligned with the video content"). GPT-3.5-turbo is a text-only model; it receives only text descriptions, never the video.
+
+It cannot assess whether a human annotator's claim about a specific event is correct relative to the actual video. It can only check internal textual coherence. The scores it produces for "Correctness" and "Consistency with video content" are thus measuring linguistic plausibility, not factual accuracy. These scores directly drive the grouping of 3,002 videos into 8 difficulty subgroups (A–H) via coefficient of variation (CV) — which is then used throughout Section 4 to draw conclusions about "disagreement" and the relative difficulty of videos. The subgroup structure, and the conclusions about model behavior across those subgroups, rest on a quality assessment that cannot actually assess quality relative to the video. This invalidates the difficulty-stratified analysis in Sections 4.2 and 4.3.
+
+### 3. Models process 8 frames from videos averaging 33.6 seconds, contradicting the spatiotemporal evaluation thesis — *Structural*
+
+Section 3.1 states: "All models processed 8 frames using four RTX 3090 GPUs." The average video is 33.6 seconds. At typical video frame rates (24–30 fps), this means models receive roughly 1 frame every 4 seconds — less than 1% of total frames. The paper's entire motivation rests on the claim that FIOVA tests models on "complex spatiotemporal relationships," "frequent camera switches," and "diverse main subjects" (Section 2.1, Abstract). The evaluation protocol directly contradicts this, since 8 frames are wholly inadequate for capturing temporal dynamics, scene transitions, or sequential event structure.
+
+The core finding — that LVLMs suffer from "information omission" and low recall (Table 2, Recall < 0.30 for all models except Tarsier) — cannot be interpreted as evidence of model deficiency in temporal understanding. The models may simply not have seen the frames where those events occurred. The claim that "LVLMS tended to rely on uniform strategies for challenging content" (Abstract) could equally be explained by all models receiving the same sparse 8-frame sample, regardless of video complexity. This confound is not acknowledged anywhere in the paper.
+
+### 4. FIOVA-DQ metric is proposed with no empirical validation — *Evidential*
+
+Section 4.1 proposes FIOVA-DQ as a metric that "more effectively captures human intuitive judgments of description quality" and offers "a more human-aligned assessment framework." These are empirical claims about a metric's properties, but they are never tested. The paper provides no correlation study between FIOVA-DQ scores and human preference judgments, no comparison of FIOVA-DQ rankings with human ranking of model outputs, and no analysis of whether the event weights actually reflect cognitive importance (as opposed to annotation frequency, which is what they actually measure). Section 4.2 simply reports FIOVA-DQ scores and discusses patterns, treating the metric's human-alignment as established when it is only asserted.
+
+Furthermore, the event weights are derived from GPT-3.5-turbo's extraction of events from human captions (Section 3.2, "event extraction on both the groundtruth $g_i$") — making the "human cognitive weights" doubly indirect: they represent how frequently GPT-3.5-turbo extracts matching events from GPT-3.5-turbo-synthesized groundtruth versus individual human annotations.
+
+---
+
+## Section-by-Section Notes
+
+**Section 2.1 (Video Collection):** The source and selection process for the 3,002 videos is never described. Are these scraped from YouTube? A specific dataset? How were the 38 themes chosen and sampled? For a benchmark paper, reproducibility requires a complete account of how the video corpus was assembled. This is particularly important given the paper's claims of diversity.
+
+**Section 2.2 (Caption Quality Assessment):** The paper uses GPT-3.5-turbo scores to group videos by annotator disagreement (CV-based subgroups A–H), including an "Annotation Length" dimension (6th dimension beyond the five GPT-scored ones). Including annotation length as a quality dimension conflates verbosity with quality and disagreement. A longer annotation is not intrinsically higher quality, and variation in length does not straightforwardly indicate deeper conceptual disagreement.
+
+**Section 2.3 (Groundtruth Generation):** The paper claims that GPT-3.5-turbo synthesis "reduces subjective bias" and "ensures that no crucial detail is omitted." Both claims are asserted but not demonstrated. LLM synthesis can introduce hallucinations, smooth over genuine disagreements, and reflect GPT-3.5-turbo's biases about what constitutes a "comprehensive" description. No human validation step checks the synthesized groundtruth against the actual video.
+
+**Section 3.1 (Model Selection):** All six models have 7–8B parameters; the temperature settings vary substantially across models (0.0 for Tarsier and LLaVA-NEXT-Video, 0.1 for Video-LLaVA, 0.2 for VideoLLaMA2, 1.0 for VideoChat2 and ShareGPT4Video). High-temperature decoding (1.0) produces more variable and sometimes less accurate outputs, systematically disadvantaging models run at that setting. The paper does not discuss whether these are model-recommended defaults or author choices, and does not analyze the effect of temperature variation on the comparative results.
+
+**Table 1 (Benchmark Comparison):** The abstract and introduction claim FIOVA captions are "4–15 times longer than most existing benchmarks." Table 1 shows DREAM-1K at 59.3 words, while FIOVA averages 63.28 words — a difference of 7%. The "4–15x" claim only holds relative to the older, shorter-annotation datasets. This is overstated relative to recent work.
+
+**Section 4.1 (Evaluation Methods):** The paper acknowledges that "traditional metrics often fail to capture the semantic nuances" and that "the lack of interpretability in score assignment remains a challenge" for LLM-based scoring — but then uses GPT-3.5-turbo for event extraction and groundtruth synthesis, applying an LLM-as-judge approach to the dataset construction stage without addressing the same interpretability concerns.
+
+**Section 4.3 (Batch Ranking):** The conclusion that "models exhibit greater variability in performance for simpler videos" (Group A) while "outputs become more consistent for more complex videos" (Group H) is presented as meaningful insight. But given the 8-frame constraint, Group H (complex, multi-scene-switch videos) likely produces near-uniform low-recall outputs across all models simply because 8 frames are even less representative for highly dynamic content. The "uniform strategy" interpretation is not distinguished from a floor effect.
+
+**Section 5 (Conclusions):** The conclusion that "ShareGPT4Video, although comparable to GPT-4V in its claimed understanding, suffers from hallucinations" is an editorial characterization of another paper's claims that is not substantiated by the FIOVA evaluation.
+
+---
+
+## Strengths
+
+- **Multi-annotator design addresses a real gap.** Existing video captioning benchmarks predominantly rely on single annotators. FIOVA's decision to collect 5 annotations per video, totaling 15,010 human descriptions, is a genuine contribution to the field. The CV-based difficulty grouping (A–H) — separating videos by inter-annotator agreement — is a conceptually interesting way to operationalize video complexity from a human cognition perspective.
+
+- **Honest empirical observation about CV divergence.** The finding in Section 4.3 that human annotators become *more* variable as video complexity increases while models become *more* uniform is an interesting empirical pattern, and the framing as a qualitative difference in strategies (not just a performance gap) is thoughtful.
+
+- **Thematic and visual diversity.** 38 themes, varying aspect ratios, fisheye lenses, and camera-switch scenarios represent a genuine effort to stress-test models beyond simple, clean video clips.
+
+- **FIOVA-DQ's conceptual design.** The idea of weighting events by their frequency across annotators to approximate human salience is principled and worth pursuing, even if the current implementation has validation problems.
+
+---
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+
+1. **Direct evaluation against individual human annotations, not GPT-synthesized groundtruth.** The paper should compute all metrics (Table 2) against each of the 5 individual human annotations and report the distribution. This would reveal whether model-to-human gaps are real or artifacts of the GPT synthesis step, and would make the human-machine comparison claim credible. Without this, the core claim is unsupported.
+
+2. **Re-evaluation with more frames (e.g., 16, 32, or adaptive sampling).** Given that the 8-frame constraint is a major confound for recall scores, the authors should demonstrate that the patterns observed hold under denser frame sampling. If low recall persists with 32+ frames, the model deficiency claim is much stronger. If recall improves substantially, the 8-frame design choice invalidates the current conclusions.
+
+3. **Human evaluation of FIOVA-DQ.** To validate the proposed metric, the authors should collect human preference judgments on a subset of model outputs and compute correlation between FIOVA-DQ scores and those judgments. Without this, FIOVA-DQ is an unvalidated proposal.
+
+### Deeper Analysis Needed
+
+1. **Temperature ablation for model comparisons.** Given the wide variation in decoding temperatures across models (0.0 to 1.0), the paper should analyze whether the observed performance differences persist when all models are evaluated at the same temperature setting. Without this, Table 2 rankings conflate temperature effects with model capability.
+
+2. **Validation of GPT-3.5-turbo annotation quality scoring against video ground truth.** A random sample of annotations should be scored by human raters who have watched the videos, and those scores should be compared to the GPT-3.5-turbo scores. If they correlate poorly, the difficulty subgrouping (A–H) is invalid.
+
+### Visualizations & Case Studies
+
+1. **Frame-level analysis for Group H videos.** For the complex, high-CV videos in Group H, show which 8 frames were sampled and which events in the groundtruth those frames do or don't capture. This would reveal whether low recall reflects genuine model failure or simply frame sampling misalignment.
+
+### Obvious Next Steps
+
+1. **Human validation of synthesized groundtruth.** Each GPT-3.5-turbo-synthesized groundtruth caption should be verified by a human annotator who watches the video to check for hallucinations and omissions. A benchmark paper's quality labels are its most critical component, and automated synthesis without human verification is insufficient.
+
+---
+
+## Overall Assessment
+
+The paper addresses a genuine and important gap — the absence of multi-annotator, long-video benchmarks for evaluating LVLMs — and collects a substantial dataset (3,002 videos, 15,010 human annotations). However, the execution contains three structural flaws that collectively undermine the paper's central claims. First, the primary evaluation reference (the groundtruth) is not a human annotation but a GPT-3.5-turbo synthesis, meaning "LVLMS vs. Groundtruth" measures LLM-to-LLM similarity, not human-machine gap. Second, the quality assessment that underpins all difficulty subgrouping asks GPT-3.5-turbo to score "correctness" and "video consistency" without video access, making the scored dimensions ungrounded. Third, all model evaluations are conducted on 8 frames from 33.6-second videos, which directly contradicts the paper's thesis about spatiotemporal evaluation and confounds the recall-based findings with a sampling artifact. These are not issues that can be addressed by adding sections or analyses — they require re-designing the groundtruth construction and the model evaluation protocol. The proposed FIOVA-DQ metric is conceptually interesting but presented without any validation that it measures what it claims. The paper should not be accepted in its current form. The dataset itself has value, but the benchmark design, evaluation pipeline, and metric validation would all need to be substantially reworked before the contribution stands.
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+
+1. **Five-annotator-per-video design enabling human variability analysis**: FIOVA is the only video caption benchmark that provides five distinct human annotations per video (Table 1, caption: "It is worth noting that FIOVA is the only dataset that provides multiple annotations for each video"). This design enables studying inter-annotator disagreement through the coefficient of variation (CV) and reveals that LVLMs adopt uniform strategies on hard videos where humans diverge significantly—a finding impossible with single-annotator benchmarks.
+
+2. **Substantially longer videos and richer annotations overcoming prior benchmark limitations**: FIOVA averages 33.6 seconds per video and 63.28 words per caption, which is 4–15× longer than most existing manual-caption benchmarks (Table 1; e.g., ActivityNet at 13.5 words, VATEX at 15.2 words). This directly addresses the stated limitation of short videos and brief annotations in prior work, enabling evaluation of complex spatiotemporal understanding.
+
+3. **FIOVA-DQ metric incorporating human cognitive weights into event-based evaluation**: By extending AutoDQ with importance weights derived from the five annotators' emphasis on different events (Section 4.1, Fig. 4), FIOVA-DQ exposes performance gaps that AutoDQ alone obscures. For example, in Table 2, Tarsier's Precision drops from 0.628 (AutoDQ) to 0.584 (FIOVA-DQ), revealing event description accuracy deficiencies under human-weighted evaluation that were previously invisible.
+
+4. **Disagreement-grouped analysis revealing divergent human–model consistency patterns**: By partitioning videos into 8 groups (A–H) based on annotator CV (Section 2.2, Fig. 3f), the paper shows in Fig. 7b that human–model consistency differences reverse across difficulty: humans are more consistent on easy videos (Groups A–B, negative values) while models become more uniform on hard videos (Group H, positive values), suggesting LVLMs default to shared limited strategies rather than genuine understanding. This is a novel and insightful finding.
+
+### Supporting strengths
+
+1. **Multi-dimensional caption quality assessment framework**: The 5-dimension GPT-3.5-turbo evaluation (Consistency, Context, Correctness, Detail Orientation, Temporality) with scores 1–10 per annotator (Fig. 3a–e) provides both quality control for annotations and a principled foundation for computing per-video disagreement, enabling the group-based analyses that form some of the paper's most interesting findings.
+
+2. **Groundtruth synthesis from multiple annotations**: Using GPT-3.5-turbo to merge five human annotations into a single consolidated groundtruth (Section 2.3) reduces single-annotator bias and captures salient information across perspectives, creating a more representative evaluation reference than any individual annotation.
+
+### Presentation / practical strengths
+
+1. **Comprehensive evaluation dashboard**: The radar plots across 8 sub-groups (Fig. 6) and per-model response length distributions (Fig. 5) provide practical, interpretable summaries that make it easy for other researchers to identify model-specific strengths and weaknesses on different video difficulty levels.
+
+## Summary
+
+The paper introduces FIOVA, a video description benchmark with 3,002 long videos (avg. 33.6s) each annotated by five distinct annotators, yielding captions 4–15× longer than prior benchmarks and enabling the first robust human baseline that accounts for annotator variability in video description. The single most important piece of evidence delivering on this contribution is the disagreement-grouped analysis (Fig. 7b), which leverages the five-annotator design to reveal that LVLMs and humans exhibit opposite consistency patterns across difficulty: humans agree more on easy videos but diverge on hard ones, while models become more uniform on hard content—a finding that fundamentally reframes how we should evaluate and interpret LVLM video understanding capabilities.
+
+--- Merged Review ---
+Now let me search for calibration papers to determine the appropriate score.Now I have sufficient information to write the final review. Let me synthesize my findings.Now I have sufficient calibration to write the final review.
+
+---
+
+## Summary
+
+FIOVA proposes a video captioning benchmark with 3,002 long videos (avg. 33.6 seconds), each annotated by five distinct human annotators (15,010 total captions), grouped by inter-annotator coefficient of variation (CV) into eight difficulty levels (A–H). The paper further proposes FIOVA-DQ, an event-based evaluation metric that weights events by annotator salience. The main empirical finding is a behavioral inversion: human annotators grow *more* variable as video difficulty increases (Groups A→H) while LVLMs grow *more* uniform, suggesting models fall back on shared limited strategies under complexity.
+
+---
+
+## Strengths
+
+- **Five-annotator-per-video design enables genuinely novel analysis** (Table 1, Section 2.2): FIOVA is the only video captioning dataset to provide five distinct human annotations per video at this scale. This design uniquely supports inter-annotator CV computation, which drives all of the paper's most interesting findings. No existing benchmark makes this possible.
+
+- **Behavioral inversion finding (Fig. 7b) is an original and insightful result**: The discovery that human CV *increases* across Groups A→H while model CV *decreases* is a non-obvious empirical finding that reframes the human-AI gap as a qualitative strategic difference, not just a quantitative performance gap. This observation is impossible with single-annotator benchmarks and represents a genuine contribution to the community's understanding of LVLM limitations.
+
+- **Large-scale human annotation effort**: 15,010 human-written captions across 3,002 long videos, with standardized guidelines, covering 38 themes, varying aspect ratios, fisheye lenses, and camera-switch scenarios. The diversity and scale of annotation are real assets for the field.
+
+---
+
+## Weaknesses
+
+### Fatal
+None — the paper is not completely invalidated, and the dataset/behavioral finding retain value even given the methodological problems below.
+
+### Major
+
+- **Primary evaluation reference is GPT-3.5-turbo-synthesized text, not human annotations.** Section 2.3 explicitly states: "We used the GPT-3.5-turbo model to synthesize the five human-provided descriptions into a single, comprehensive video description that serves as the final groundtruth." Every metric in Table 2 — BLEU, METEOR, GLEU, AutoDQ, FIOVA-DQ — is then computed *against this synthesized text*, not against any direct human annotation. Since all six evaluated LVLMs are also transformer-based language models, the "LVLM vs. Groundtruth" experiment is partly measuring LLM-to-LLM stylistic proximity rather than genuine human-machine alignment. The paper's headline claim — establishing "a robust baseline that accurately reflects human video comprehension capabilities" — cannot be fully supported when the reference itself is an LLM output. The paper does have a supplementary "LVLM vs. Humans" analysis via CV ranking (Section 4.3), but this is secondary; the primary quantitative results in Table 2 suffer from this confound throughout. Directly computing metrics against individual human annotations (or their ensemble without LLM synthesis) would strengthen this substantially.
+
+- **8-frame extraction from 33.6-second videos is a fundamental confound for recall-based conclusions.** Section 3.1 confirms: "All models processed 8 frames using four RTX 3090 GPUs." At standard frame rates (24–30 fps), this means models see roughly 1 frame every 4 seconds — less than 1% of total content. The paper's core empirical finding of low recall (< 0.30 for all models except Tarsier, Table 2) and "information omission" is directly attributable to this sparse sampling choice. Models cannot describe events they never observed. The claim that FIOVA tests "complex spatiotemporal relationships" and "frequent camera switches" is directly contradicted by an evaluation protocol that cannot capture those transitions. The paper does not acknowledge this confound anywhere. Unless experiments with denser frame sampling (16, 32+) yield similar recall deficits, the findings about model temporal deficiency cannot be distinguished from artifacts of the 8-frame design.
+
+- **GPT-3.5-turbo scores video "Correctness" and "Consistency with video content" without seeing the video.** Section 2.2 uses GPT-3.5-turbo to assess five quality dimensions including "Correctness: whether the information is accurate and free from misleading content" and "Consistency: whether the description is logically coherent and aligned with the video content." GPT-3.5-turbo is text-only; it receives the annotation text only, never the video. It can assess internal textual plausibility but cannot determine whether a human annotator's claim about a video event is factually correct. The CV-based difficulty subgrouping (Groups A–H) that drives all of Section 4 rests on these quality scores. If the correctness/consistency scores are actually measuring linguistic coherence rather than video accuracy, the difficulty stratification may not reliably reflect genuine annotator disagreement about video content.
+
+- **FIOVA-DQ is proposed as "more human-aligned" with no supporting evidence.** Section 4.1 claims FIOVA-DQ "more effectively captures human intuitive judgments of description quality" and "offering a more human-aligned assessment framework." These are empirical claims requiring empirical validation. The paper provides no correlation study between FIOVA-DQ scores and human preference judgments, and no analysis of whether the event importance weights reflect cognitive salience or simply annotation frequency. The metric's "human-alignment" claim is asserted, not demonstrated.
+
+### Minor
+
+- **Wide temperature variation across models (0.0–1.0) is a confound in comparative evaluation.** Section 3.1 documents that VideoChat2 and ShareGPT4Video run at temperature 1.0 while Tarsier and LLaVA-NEXT-Video run at 0.0. High-temperature sampling introduces output variability that can inflate recall (more content generated) or reduce lexical precision (more diverse phrasing), independently of model capability. The observed performance differences in Table 2 partially conflate temperature settings with model quality. This is worth discussing or ablating.
+
+- **The "4–15× longer" claim in the abstract is overstated.** Table 1 shows DREAM-1K at 59.3 words per caption vs. FIOVA at 63.28 words — just ~7% longer. The "4–15×" range only holds relative to older datasets (e.g., ActivityNet at 13.5 words, VATEX at 15.2 words). The abstract should be qualified to accurately represent FIOVA's positioning relative to recent dense-annotation benchmarks.
+
+### Trivial
+
+- Section 5 characterizes ShareGPT4Video as suffering from "hallucinations" compared to "its claimed understanding" in other papers. This editorial framing of another paper's claims goes beyond what FIOVA's evaluation can establish; the observation should be limited to what the FIOVA results directly show (redundancy and low lexical similarity scores).
+
+---
+
+## Nice-to-Haves
+
+- **Re-evaluation with denser frame sampling (16, 32 frames):** Even a brief ablation showing that low recall persists at higher frame counts would significantly strengthen the conclusion that observed deficits reflect genuine model limitations rather than sampling artifacts.
+- **Direct metric computation against individual human annotations:** Computing Table 2 metrics against each of the 5 human captions and reporting the distribution would validate whether GPT-synthesized groundtruth changes the model rankings meaningfully.
+- **Human validation of FIOVA-DQ:** Collecting human preference judgments on a 200-video subset and correlating them with FIOVA-DQ scores would transform a proposed metric into a validated one.
+
+---
+
+## Removed Points
+
+*These points are flagged to be removed; treat them with caution.*
+
+- **"Video source not described in Section 2.1"** (Harsh Critic): Section 2.1 explicitly refers to "Appendix B.1" for theme details, and the appendix was stripped by the PDF parser per the review rules. Cannot penalize absent appendix content.
+- **Annotation length as 6th dimension conflates verbosity with quality** (Harsh Critic): The paper is transparent about using annotation length as one of six dimensions for computing inter-annotator variation. The choice is debatable but the paper clearly motivates it as part of a CV calculation over multiple dimensions, not as a standalone quality score.
+- **"Conclusions about models using uniform strategies could be a floor effect"** (Harsh Critic): This is partially conflated with the 8-frame confound critique, which is already captured as a Major weakness. The partial-floor-effect interpretation does not fully negate the behavioral finding in Fig. 7b since the divergent *direction* of human vs. model CV trends remains interesting even under this alternative explanation.
+- **Generic "multi-dimensional quality assessment" as a strength** (Strength Finder): This was dropped because it conflicts with the Major weakness about GPT-scoring video dimensions without video access.
+- **"GPT synthesis reduces bias and ensures no crucial detail is omitted"** as a strength (Strength Finder): Removed because the claim is asserted, not demonstrated, and the Major weakness about LLM-to-LLM comparison undermines this framing.
+
+---
+
+## Novel Insights
+
+The paper's behavioral inversion finding (Fig. 7b) is the most genuinely novel contribution: as video complexity increases, human annotators diverge while LVLMs converge. This suggests that LVLMs do not become "uncertain" on hard content the way humans do — instead they adopt shared, conservative strategies. This reframes the gap between humans and machines not as a simple performance deficit but as a difference in *epistemic diversity*, with implications for how we interpret model confidence and evaluation methodology. The multi-annotator framework is necessary to observe this, which points to a structural limitation of all existing single-annotator benchmarks. This insight would survive even if the specific metric values in Table 2 were recomputed with a different groundtruth.
+
+---
+
+## Suggestions
+
+1. Replace the GPT-synthesized groundtruth (or supplement it) with direct evaluation against individual human annotations, clearly distinguishing "LVLM vs. GPT-synthesis" from "LVLM vs. human" experiments.
+2. Add a frame-count ablation (8 vs. 16 vs. 32 frames) to show that low-recall patterns are robust to sampling density, thereby validating the temporal competency claims.
+3. Validate FIOVA-DQ with a human preference study — even a 200-video subset would suffice to demonstrate that the weighted event metric better predicts human judgments than unweighted AutoDQ.
+4. Normalize temperature settings when reporting comparative model results in Table 2 (or add a separate table with a uniform setting).
+5. Qualify the "4–15×" annotation length claim in the abstract to clarify it applies to most prior datasets but not to recent dense-annotation benchmarks like DREAM-1K.
+
+---
+
+## Score and Decision
+
+**Calibration anchors:**
+
+| Paper | Path | Avg Score | Decision | Comparison to FIOVA |
+|---|---|---|---|---|
+| TemporalBench | Wto5U7q6I2.md | 4.20 | Withdrawn (Reject) | Most similar topically (video benchmark with temporal focus); rejected for data quality issues and limited novelty. FIOVA has more original multi-annotator insight but more severe methodological flaws in its evaluation pipeline. |
+| AVCaps | FFUmPQM8c5.md | 4.00 | Withdrawn (Reject) | Captioning dataset paper with multiple annotators; rejected for weak experimental validation and limited novelty. Similar profile to FIOVA. |
+| VideoEval | wMRFTQwp1d.md | 4.00 | Withdrawn (Reject) | Video evaluation benchmark paper with limited technical contribution; rejected. FIOVA has stronger original findings. |
+| ObjectNet Captions | U17KoLrXE8.md | 5.25 | Reject | Human-machine captioning comparison with new metric; more methodologically grounded (human evaluation validated HUMANr), but also rejected. FIOVA's FIOVA-DQ is less validated. |
+| GUI-World | QarKTT5brZ.md | 6.25 | Accept | Video benchmark accepted at ICLR; stronger experimental validation, better-grounded claims, fine-tuned model as additional contribution. FIOVA lacks this depth. |
+
+FIOVA sits between TemporalBench (4.20) and ObjectNet Captions (5.25). The multi-annotator behavioral finding (Fig. 7b) is more insightful than TemporalBench's contribution, but the three compounding major issues — GPT-synthesized groundtruth as primary evaluation reference, 8-frame confound, and unvalidated FIOVA-DQ — collectively undermine the paper's central empirical claims more severely than the issues in ObjectNet Captions. The paper is not so weak as to score below 4 (the dataset and behavioral observation have genuine value), but the methodology is insufficient for the strong claims being made. Accounting for the anchor cluster centered around 4.0–4.2 for comparable video benchmark papers, with modest upward adjustment for the genuine novelty of the behavioral finding, the appropriate score is:
+
+**Score: 4.0 — Reject**
+
+The paper needs at minimum: (1) evaluation against raw human annotations to credibly claim human-machine comparison, and (2) an acknowledgment and partial mitigation of the 8-frame confound, before its core claims are adequately supported.
+
+MY FINAL SCORE: <pineapple>4.0</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>
+
+--- Scorer Output ---
+4.0
+
+--- Decision ---
+Reject
+
+============================================================
+Paper: ../iclr2025/papers/6fDjUoEQvm.txt
+Timestamp: 2026-04-23T23:56:15
+
+--- Token Usage ---
+  Harsh Critic: N/A (claude_sdk path)
+  Strength Finder: input=14692 (cached=0) output=1636 (reasoning=0) total=16328 requests=1 duration=n/ams
+  Merger: N/A (claude_sdk path)
+  TOTAL: input=14692 output=1636 total=16328
+
+--- Claude SDK Usage ---
+  [Harsh Critic]
+    Model: claude-sonnet-4-6
+    Session ID: 85d6215e-0fac-4b5d-aed3-ac201da40a12
+    Cost (USD): 0.1908822
+    Turns: 4
+    Duration: total=141701ms api=139489ms
+    Tokens: input=8 output=7201 cache_read=17869 cache_creation=20662
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  [Merger]
+    Model: claude-sonnet-4-6
+    Session ID: c1ef26f3-82cd-4493-8b19-d2f9458b9fe5
+    Cost (USD): 0.45254205000000003
+    Turns: 18
+    Duration: total=281188ms api=197232ms
+    Tokens: input=27 output=8950 cache_read=481366 cache_creation=46347
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  TOTAL Claude SDK cost (USD): 0.6434
+
+--- Merged Inputs ---
+
+### Harsh Critic
+I'll start by fetching the tools I need to read the paper, then read it thoroughly before writing my review.Now I have a thorough understanding of the paper. Let me write the review.
+
+---
+
+# Review: HyperDAS: Towards Automating Mechanistic Interpretability with Hypernetworks
+
+---
+
+## Critical Issues
+
+### 1. The subspace identification component lacks an ablation, and the geometric evidence (Figure 6) suggests it may not contribute meaningfully — **Structural**
+
+Section 3.3 presents the Householder-transformation-based dynamic subspace identification as a core contribution. However, Figure 6 reveals that Householder vectors for *different* attributes in the same entity domain have cosine similarities ranging from 0.69 (Country vs. Longitude) to 0.97 (Longitude vs. Latitude). Within-attribute similarity is only marginally higher. If HyperDAS is finding essentially the same subspace for all city attributes, the "dynamic subspace identification" component is not doing meaningful differentiation — it is collapsing to a single generic "entity attribute" subspace. This is not a failure of analysis; it is the analysis the paper itself presents in Section 4.2.
+
+The critical consequence is that there is **no ablation** comparing HyperDAS against a variant that uses a fixed, non-adaptive subspace (i.e., setting $\mathbf{v}$ to a constant or zeroing out the Householder perturbation). If a fixed $\mathbf{R}^l$ yields comparable RAVEL scores, the entire Householder mechanism contributes nothing, and the performance gain over MDAS is solely from learned token-position selection. The paper cannot support the claim that it "constructs features of those residual stream vectors" (Abstract) without this control. This is not a minor omission; it concerns whether half of the proposed method's architectural novelty is functional.
+
+A single Householder transformation (one reflection: $\mathbf{H} = \mathbf{I} - 2\mathbf{v}\mathbf{v}^\top/\mathbf{v}^\top\mathbf{v}$) is also highly restricted in how far it can rotate $\mathbf{R}^l$ — this is a one-degree-of-freedom perturbation to the subspace, consistent with the observed near-uniform output.
+
+### 2. The faithfulness claim is stated as a design goal but has no empirical support — **Evidential**
+
+Section 4.2 and the Abstract both frame faithfulness (not injecting information) as a core concern that HyperDAS addresses. The paper lists four design choices intended to prevent "hacking." But no test actually measures whether the discovered representations pre-exist in the target model before HyperDAS training. High RAVEL scores, including the Iso metric, measure *behavioral* outcome (does the intervention affect the right attribute?) — they do not distinguish between "HyperDAS found a real causal feature" and "HyperDAS learned to steer the model toward the right answer using an out-of-distribution intervention that happens to be constrained enough to pass the Iso check."
+
+Existing approaches to this question (e.g., verifying that the discovered subspace aligns with independently-found causal directions, checking that the rotation matrix does not increase log-probability on the target label via identity intervention, or comparing discovered token positions against causal tracing results from separate methods) are absent. The paper discusses the concern at length but then provides no evidence either way. This means the paper's claimed contribution to *interpretability* — as opposed to just RAVEL score optimization — is unverified.
+
+### 3. No generalization to unseen concepts — the central "automation" claim is not tested — **Evidential**
+
+The paper frames HyperDAS as a step toward *automating* mechanistic interpretability: given a natural language description of a concept, find where it lives. But every HyperDAS model evaluated in the paper is **trained on the exact attributes it is tested on** (within-domain training on RAVEL's attributes, then test on a held-out split of those same attributes). The "All Domains" variant tests cross-entity generalization but still within the same fixed set of 23 attributes.
+
+The automation claim requires that a trained HyperDAS, given a *new* concept description it has not seen in training (e.g., "the height of a person," or "whether a city is coastal"), can locate that concept in the residual stream without retraining. This is never tested. The paper thus demonstrates a high-performing fine-tuned model for the RAVEL attribute set, not a general-purpose concept localizer. The distinction matters: if HyperDAS must be trained per attribute, its advantage over DAS is mostly computational (amortized inference), not functional generalization.
+
+---
+
+## Section-by-Section Notes
+
+**Abstract / Introduction:**
+The abstract says HyperDAS "automatically locates" token positions. This framing is correct in the sense that the network learns to select tokens, but the automatic selection requires training supervision on the target concept. The word "automatically" implies zero-shot generalization that is never demonstrated.
+
+**Section 3.1 (Hypernetwork Architecture):**
+The hypernetwork uses the *target model's own embeddings* to encode the concept description ("Token Embedding" uses `Emb(x)` from $\mathcal{M}$). This design choice is not discussed or justified. It means the concept encoding is in the same embedding space as the hidden states — which could be a useful inductive bias or could conflate the concept encoder with the model's internal vocabulary representation. The effect of using a separate encoder (e.g., the pre-trained transformer hypernetwork the authors tried) versus the target model's embeddings is not ablated.
+
+**Section 3.3 (Householder Transformation):**
+The paper states $\mathbf{R} = \mathbf{R}^l \mathbf{H}$. This yields a matrix whose columns span a subspace that is a *single Householder reflection* of the original $\mathbf{R}^l$. The expressivity is fundamentally limited: only reflections across hyperplanes passing through the origin can be expressed. The paper does not acknowledge this limitation or discuss why a single Householder transformation is sufficient (as opposed to a product of Householder transformations, which is how the full orthogonal group is typically parameterized).
+
+**Section 4 (Experiments):**
+The main results table reports "results from the best layer between 10 and 15." It is not stated whether this layer was selected on a validation set or on the test data used for the table. If on test data, this inflates reported performance. MDAS presumably also has a layer selection procedure; the comparison must be fair.
+
+HyperDAS-Symmetric All Domains shows near-zero Causal scores (2.0–21.6) with near-perfect Iso scores (94.7–99.3). This pattern — never changing the output — indicates the model learned a trivial "never intervene" strategy. The paper does not explain why symmetry enforcement causes this failure mode when training across domains, nor discuss its implications for the symmetry argument in Section 4.2. This is a nontrivial failure that reveals fragility in the training dynamics.
+
+**Section 4.2 (Compute Discussion):**
+The memory comparison is made between HyperDAS trained on all 23 RAVEL attributes simultaneously and MDAS trained on all 23 attributes separately. This is a reasonable comparison, but MDAS need not be trained per-attribute — a multi-attribute MDAS could use shared representations. The comparison as stated favors HyperDAS by choosing the most expensive MDAS variant.
+
+**Section 4.1 (Layer-Specific Analysis):**
+The observation that deep layers (Layer 29) show HyperDAS selecting non-intuitive tokens like JSON syntax tokens is interesting and somewhat alarming from an interpretability standpoint. If HyperDAS at deep layers is patching syntax tokens to transfer entity attributes, this is more consistent with "model steering via distributed representations" than "concept localization." This deserves deeper analysis rather than being treated as a curious finding.
+
+---
+
+## Strengths
+
+- The core architectural innovation — a transformer hypernetwork that attends to the target model's hidden states to produce concept-conditioned token alignments and subspace rotations — is technically coherent and novel for this application.
+- The distinction between train-time soft alignment (softmax-weighted) and test-time discrete alignment (double argmax), with the sparsity loss bridging them (Section 3.5, Figure 7), is a well-motivated and clearly explained training trick that solves a real problem.
+- Figure 4's layer-by-layer analysis of what tokens are selected is one of the paper's most informative contributions: the shift from BOS/random (shallow) → entity token (middle) → syntax tokens (deep) is a genuine empirical discovery that could be interesting independently.
+- The memory efficiency argument (Section 4.2) that HyperDAS scales sublinearly in number of attributes while MDAS scales linearly is a legitimate practical advantage that is concretely quantified.
+- The RAVEL benchmark (Huang et al., 2024) is a well-scoped evaluation and the paper's use of both Causal and Iso scores prevents reporting only one dimension of performance.
+
+---
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+
+1. **Ablation: Fixed subspace vs. Householder-adapted subspace.** Train HyperDAS with the Householder component disabled (fix $\mathbf{R} = \mathbf{R}^l$) and compare RAVEL scores. Without this, Claim 2 in the paper's contribution list ("constructs features of those residual stream vectors") cannot be assessed. Given the near-identical Householder vectors across attributes (Figure 6), this ablation may reveal that the component contributes near zero.
+
+2. **Generalization to unseen concept descriptions.** Reserve a subset of RAVEL attributes from training and evaluate zero-shot at test time. Alternatively, introduce a concept not in RAVEL (e.g., "the CEO of a company") and test whether a trained HyperDAS model localizes it without fine-tuning. Without this, the automation claim is a restatement of RAVEL performance on training-distribution attributes.
+
+3. **Comparison with DAS using exhaustive token search.** MDAS uses fixed tokens. DAS itself can be run on all token positions and layers (exhaustively), which is the brute-force approach HyperDAS claims to automate. Reporting DAS-exhaustive vs. HyperDAS would directly quantify the cost-performance tradeoff of automating the search.
+
+### Deeper Analysis Needed
+
+1. **Why does Symmetric All Domains fail catastrophically?** Causal scores near zero with Iso near 1.0 is a degenerate solution (no intervention). The paper does not explain whether this is a training stability issue, an optimization landscape issue, or a fundamental tension between cross-domain training and symmetry enforcement. Understanding this failure mode matters for knowing whether the asymmetric solution is principled or a workaround for a broken symmetric training procedure.
+
+2. **What is HyperDAS actually doing at deep layers?** Section 4.1 reports that at Layer 29, ~32% of base token selections are non-entity tokens including JSON syntax tokens. If these are genuine causal sites for attribute storage (interpretable), that is a discovery. If they are artifacts of the model learning to "steer" via spurious tokens, it is a faithfulness failure. The paper treats this finding as equally plausible either way without investigation.
+
+### Visualizations & Case Studies
+
+1. **Failure case analysis.** The paper shows cases where HyperDAS works. Showing cases where HyperDAS selects wrong tokens but still achieves correct RAVEL output would illuminate whether the benchmark is sensitive enough to detect pathological solutions (e.g., achieving Cause=1 via an uninterpretable patch rather than genuine concept localization).
+
+### Obvious Next Steps
+
+1. **Multiple target models.** All experiments use Llama3-8B. Whether the discovered token positions and subspaces align across model families (e.g., Llama vs. Mistral vs. GPT-2) would provide strong evidence that HyperDAS is finding model-agnostic representational structure rather than architecture-specific artifacts.
+
+---
+
+## Overall Assessment
+
+The paper introduces a technically competent hypernetwork architecture for learned token-position selection in mechanistic interpretability and demonstrates a measurable RAVEL improvement over MDAS. The contribution is real in a narrow sense: for the attributes and entity types in RAVEL, HyperDAS with per-domain training achieves higher Disentangle scores than the previous best method.
+
+However, the paper's two most significant claims — that HyperDAS "constructs features" of the residual stream (i.e., meaningful subspace identification) and that it "faithfully" interprets the model rather than injecting information — are both unsubstantiated by the evidence presented. The subspace identification component has no ablation, and the Figure 6 analysis provides positive evidence against it being meaningfully functional. The faithfulness claim is aspirational, backed by design choices but no empirical test. Additionally, the paper's framing as "automating" interpretability overstates what is demonstrated: the hypernetwork is trained on the same concepts it is tested on, so what is automated is inference-time prediction of a known solution, not generalization to novel concepts.
+
+The paper is in a state where the headline claim (state-of-the-art RAVEL performance) appears to hold, but the explanation *why* (token selection vs. subspace identification, genuine causal discovery vs. optimization artifact) is unresolved. These are not stylistic gaps; they are the questions that determine whether the contribution is to interpretability or to RAVEL benchmark optimization. The paper should not be accepted in its current form. With the specific ablation (fixed vs. Householder subspace), a zero-shot concept generalization test, and a clearer empirical treatment of faithfulness, the contribution could be substantially strengthened.
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+
+1. **Automating token-position search eliminates a key bottleneck of prior methods**: DAS and MDAS require brute-force or heuristic selection of token positions for intervention (e.g., assuming the last entity token). HyperDAS replaces this with a learned attention mechanism over base–counterfactual token pairs (Section 3.2, Eq. 6–9), enabling end-to-end optimization. The paper demonstrates 53% of cases select multiple tokens rather than the single-token assumption of MDAS (Section 4.2), and Figure 4 reveals that HyperDAS discovers qualitatively different intervention sites across layers (e.g., JSON syntax tokens at deep layers), which prior heuristic approaches would miss entirely.
+
+2. **State-of-the-art performance on RAVEL benchmark**: Table 3a shows HyperDAS (Asymmetric) achieving an average Disentangle score of 84.7 vs. MDAS's 76.0, with improvements on 4 out of 5 individual domains (City: 70.8→76.9, Physical Object: 92.7→94.8, Verb: 93.0→93.0, though Nobel Laureate drops from 56.0 to 55.4). The "All Domains" variant (80.7) still substantially outperforms MDAS (76.0) while handling all attributes in a single model.
+
+3. **Householder transformation for dynamic, concept-dependent subspace identification**: Section 3.3 (Eq. 10) introduces a mechanism to conditionally rotate a fixed orthogonal matrix R^l via Householder reflections parameterized by the concept encoding v. This ensures orthogonality is maintained (since H is orthogonal and R^l has orthogonal columns, R^l H has orthogonal columns) while allowing the subspace to vary per concept—a principled improvement over DAS where R is fixed per attribute and manually selected. Figure 6 provides empirical validation: Householder vectors cluster by attribute semantics, with semantically related attributes (Longitude/Latitude: 0.97 cosine similarity; Country/Continent: 0.87) showing higher similarity than unrelated pairs (Longitude/Language: 0.71).
+
+### Supporting strengths
+
+1. **Careful faithfulness mitigations prevent trivial solutions**: The paper addresses a genuine concern that powerful interpretability methods might inject rather than recover structure. Section 4 discusses masking of the base prompt's attribute information to prevent the hypernetwork from conditioning on whether the target and base attributes match—without this, the model could learn to simply skip interventions on matching attributes. The sparsity loss (Eq. 13) and its pathological failure modes (Figure 7: no sparsity leads to many-to-one alignment that hacks the objective; excessive sparsity leads to uninterpretable linear combinations) demonstrate careful attention to design choices that enforce genuine causal discovery.
+
+2. **Layer-specific behavioral analysis provides novel interpretive insights**: Figure 4 shows HyperDAS discovers distinct intervention patterns across layers—entity tokens dominate in middle layers (98.7%) while deeper layers shift to syntactic positions (JSON syntax tokens). This finding is non-trivial and not discoverable by methods that hard-code token positions, suggesting that different layers represent entity attributes at different syntactic positions, which prior work has not documented.
+
+3. **Memory efficiency scales favorably for multi-attribute settings**: Unlike MDAS which requires a separate model per attribute (4.1GB per attribute, totaling 110.3GB for all 23 RAVEL attributes), HyperDAS serves all attributes with a single 52GB model (Section 4.2), achieving 1.6× memory reduction. This is a practical advantage for scaling interpretability to broader concept spaces.
+
+### Presentation / practical strengths
+
+1. **The framework diagram (Figure 1) provides an exceptionally clear visual overview** of the four-stage HyperDAS pipeline—concept encoding, token-position selection, subspace identification, and interchange intervention—making the method accessible despite its architectural complexity.
+
+## Summary
+
+The paper introduces HyperDAS, a hypernetwork-based approach that automates two key steps in mechanistic interpretability—locating token-positions in the residual stream that realize a concept and identifying the linear feature subspace that mediates it—eliminating the brute-force search required by prior work like DAS/MDAS. The most important evidence that it delivers on this contribution is Table 3a, where HyperDAS achieves a new state-of-the-art average Disentangle score of 84.7 on the RAVEL benchmark (vs. 76.0 for MDAS), supported by the finding that the dynamic token selection discovers intervention sites (e.g., JSON syntax tokens at deep layers in Figure 4) that fixed-position heuristics would entirely miss.
+
+--- Merged Review ---
+Now let me perform calibration searches to anchor the score properly.Now I have enough context to write the complete final review.
+
+---
+
+## Summary
+
+HyperDAS introduces a transformer-based hypernetwork architecture that automates two key bottlenecks in mechanistic interpretability: (1) selecting which token positions in the residual stream mediate a concept, and (2) identifying a linear subspace for that concept. It is trained end-to-end with counterfactual supervision and a sparsity loss that bridges soft training-time alignment with hard test-time discrete selection. HyperDAS achieves a new state-of-the-art Disentangle score on the RAVEL benchmark (84.7 vs. 76.0 for MDAS), with a single multi-domain model also substantially outperforming the prior method (80.7 vs. 76.0).
+
+---
+
+## Strengths
+
+- **State-of-the-art RAVEL performance (Table 3a):** HyperDAS (Asymmetric) improves average Disentangle from 76.0 → 84.7 over MDAS, with notable gains on City (+8.1), Physical Object (+4.3), and Verb (+9.5). The single All-Domains model (80.7) also substantially beats the prior method while serving all 23 attributes in one model. These are meaningful margins on a recognized benchmark.
+
+- **End-to-end automated token-position discovery (Section 3.2, Figure 4):** Unlike MDAS, which hard-codes "last entity token," HyperDAS learns via the intervention-score matrix G to locate any token pairing. The empirical finding that 53% of cases require multiple tokens—and that deep layers (Layer 29) localize attributes to non-entity positions—is a genuine discovery that heuristic methods would miss.
+
+- **Well-motivated training design (Section 3.5, Figure 7):** The sparsity loss and its calibration is carefully motivated and empirically demonstrated. The paper shows clearly that both extremes (no sparsity → many-to-one "hack"; too much → uninterpretable linear combination) fail at discrete evaluation, while the calibrated loss produces clean 1-1 alignments. This is a principled engineering contribution.
+
+- **Memory efficiency argument (Section 4.2):** The comparison is concrete and well-quantified: HyperDAS (68 GB total for all 23 RAVEL attributes) vs. MDAS (110.3 GB for 23 separate models). This makes a legitimate practical case for the single-model paradigm.
+
+- **Layer-specific analysis (Figure 4):** The shift from BOS/random tokens at shallow layers → entity tokens at middle layers → non-entity tokens at deep layers is a non-trivial empirical finding that complements prior work on entity localization in LLMs and opens new questions for future study.
+
+---
+
+## Weaknesses
+
+### Fatal
+None.
+
+### Major
+
+- **No ablation of the Householder subspace component against a fixed-subspace baseline.** The paper claims as a core contribution that HyperDAS "constructs features of those residual stream vectors" through dynamic Householder-based subspace identification. However, there is no experiment comparing HyperDAS against a variant where R^l is fixed (i.e., H = I or v set to a constant). The Figure 6 cosine-similarity matrix shows that cross-attribute Householder vectors have cosine similarities of 0.69–0.97—and while within-attribute similarities are higher (Figure 5 shows clear PCA clustering), the narrow margin raises the question of whether the Householder mechanism is doing meaningful concept-specific differentiation or collapsing to a near-shared subspace per entity type. Without this ablation, it is impossible to assess whether the RAVEL gains come from token selection alone or genuinely from adaptive subspace rotation. This concerns the validity of Contribution 2 in the paper's framing.
+
+- **The Symmetric All Domains failure mode is unexplained and potentially undermines the symmetry argument.** Table 3a shows that Symmetric All Domains achieves near-zero Causal scores (2.0–21.6) with near-perfect Iso scores (94.7–99.3)—the hallmark of a degenerate "never intervene" strategy. The paper does not explain why enforcing symmetry during cross-domain training causes this collapse, nor what it implies for the symmetry principle advocated in Section 4.2. This is not a minor training artifact; it is a structural failure that exposes fragility in the optimization landscape, and the choice to use Asymmetric as the primary variant deserves a principled explanation rather than being left as an unexplained observation.
+
+### Minor
+
+- **Layer selection methodology is ambiguous.** The caption for Table 3a states "results from the best layer between 10 and 15." It is not stated whether this layer was chosen on a validation split or on the same test partition used for reporting. If selected on test data, this inflates reported scores. Since MDAS follows the same procedure, the comparison may still be fair, but the paper should clarify.
+
+- **Faithfulness concern is raised but left empirically unresolved.** The paper discusses at length the risk of "injecting rather than uncovering" causal structure and lists several design mitigations (masking, sparsity, symmetry, Iso metric). However, no experiment directly tests whether the discovered subspace and token positions recover pre-existing causal structure vs. introduce out-of-distribution steering. The paper's own Limitations section acknowledges this, but as the discussion is foregrounded in Section 4.2 as a key contribution, readers will reasonably note the gap between the rhetorical emphasis and the actual empirical support.
+
+- **Single target model limits scope.** All experiments use Llama3-8B. Whether the discovered token positions and subspaces generalize across architectures (e.g., Mistral, Gemma) is unknown, and the paper does not frame this as a deliberate scope limitation.
+
+### Trivial
+
+- The "automation" framing in the abstract is slightly imprecise. The method learns to predict token positions for training-set concepts at inference time (amortized search), but requires training supervision on each concept. The automation is over inference-time brute-force search, not over unseen concept generalization. A more precise framing would strengthen the contribution.
+
+---
+
+## Nice-to-Haves
+
+- An ablation comparing Householder-adapted subspace vs. fixed subspace (R = R^l, H = I) would directly test whether the dynamic subspace identification contributes independently of the token-position selection module.
+- A deeper analysis of the Symmetric All Domains failure: is this a training stability issue, a fundamental tension between cross-domain and symmetry constraints, or an optimization landscape degeneracy?
+- An experiment reserving a subset of RAVEL attributes from training to evaluate whether HyperDAS generalizes to held-out attribute types, which would sharpen the "automation" claim.
+- Comparison against DAS applied exhaustively over all token positions and layers (the "brute-force" upper bound that HyperDAS claims to amortize) would directly quantify the cost-performance tradeoff.
+
+---
+
+## Removed Points
+
+*These points are flagged to be removed; treat them with caution.*
+
+- **"Automation claim not tested on unseen concepts"** (from harsh critic): The paper's "automation" framing refers explicitly to automating the brute-force search over token positions and layers given a training distribution of concepts—not zero-shot generalization to novel concepts. The abstract says HyperDAS "automatically locates the token-positions" conditioned on concept descriptions seen during training. Criticizing the paper for not demonstrating zero-shot generalization to entirely new concepts imposes a scope well beyond what the paper claims. Retained as a Nice-to-Have rather than a weakness.
+
+- **"High Householder cosine similarities prove the component is useless"** (from harsh critic's framing): The cosine similarity heatmap in Figure 6 does show high cross-attribute similarities (0.69–0.97), but the PCA in Figure 5 shows clear per-attribute clustering, and the paper correctly notes within-attribute similarities are higher than cross-attribute. The reviewer's inference that the Householder component "may not contribute meaningfully" is reasonable motivation for an ablation study, but the Figure 6 analysis alone does not prove uselessness. The call for an ablation is retained as a Major weakness; the stronger claim that Figure 6 provides "positive evidence against" the component is removed.
+
+- **"Memory comparison is unfair"** (from harsh critic): The comparison with MDAS trained separately per attribute is the fair and obvious baseline—this is the common deployment scenario. Multi-attribute MDAS with shared representations would be a different method, not the reported baseline. Removed.
+
+- **"JSON syntax tokens at deep layers are alarming"** (from harsh critic, mildly mischaracterizing Figure 4): Figure 4 shows ~32% "Others" at deep layer base, not specifically "JSON Syntax" (which is 0% in the data table). The paper text refers to JSON syntax tokens as an example of unintuitive positions found at deep layers, but this appears to be a textual illustration rather than what the bar chart quantifies. The core observation (32% non-entity tokens at deep layer base) is real and interesting; the harsh characterization of it as "alarming" and a faithfulness failure is unsubstantiated. Retained only as part of the minor "deeper analysis needed" note.
+
+---
+
+## Novel Insights
+
+The paper's most genuinely novel empirical observation—that different layers in Llama3-8B localize entity attributes at structurally different token positions (entity tokens at middle layers, non-entity positions at deep layers), which prior fixed-token methods would miss—is an independent finding that could have significance beyond the HyperDAS architecture itself. The dynamic token-position discovery essentially provides a "layer-by-layer map" of where concepts reside in a large LM's residual stream, and the finding that deep-layer representations mediate attributes via non-entity tokens is a non-trivial empirical contribution to the mechanistic interpretability literature on entity knowledge storage.
+
+---
+
+## Suggestions
+
+- Add an ablation: train HyperDAS with H=I (identity Householder, no dynamic subspace rotation) and compare RAVEL scores. This is a small experiment that would validate or challenge the subspace identification component's contribution.
+- Explain the Symmetric All Domains degenerate solution more thoroughly. Is it the symmetry constraint creating an optimization conflict at scale, or a training instability? Understanding this is important for interpreting the "symmetry as faithfulness indicator" argument.
+- Clarify whether the "best layer between 10 and 15" is selected on a validation set or test set.
+- Consider adding even a single held-out RAVEL attribute as a generalization test to sharpen the automation framing.
+
+---
+
+## Score and Decision
+
+**Calibration anchors used:**
+
+| Paper | Avg Score | Comparison |
+|---|---|---|
+| "Everything, Everywhere, All at Once: Is Mechanistic Interpretability Identifiable?" (5IWJBStfU7) | 7.00 | More theoretically grounded MI analysis; accepted poster. HyperDAS has stronger empirical SOTA result but missing ablation. |
+| "The Geometry of Categorical and Hierarchical Concepts in LLMs" (bVTM2QKYuA) | 6.75 | Strong empirical + some theory on representations in LLMs; accepted oral. HyperDAS comparable in empirical strength but narrower in scope. |
+| "How do Language Models Bind Entities in Context?" (zb3b6oKO77) | 5.50 | Causal experiments on entity binding in LLMs, accepted poster. HyperDAS is more methodologically novel (end-to-end optimization) but also has more open questions. |
+| "How does controllability emerge in LMs during pretraining?" (egHptuv7hx) | 5.50 | Representation intervention paper with steering vectors; rejected. HyperDAS is more rigorous in evaluation and has cleaner results. |
+| "Toward Faithfulness-guided Ensemble Interpretation" (L7jtdGhWzT) | 4.67 | Interpretability method that raises but doesn't resolve faithfulness concerns; rejected. HyperDAS has more substantial empirical contributions. |
+| "Identifying Interpretable Features in CNNs" (FVItLat5ii) | 4.00 | Low-scoring interpretability paper with insufficient contribution. HyperDAS is substantially stronger. |
+
+**Positioning:** HyperDAS has real contributions—SOTA on a recognized benchmark, a novel and technically sound architecture, and genuinely informative layer-by-layer analysis. It sits above the "How do LMs Bind Entities?" (5.50) cluster because of higher methodological novelty and stronger empirical gains. It sits below the "Mechanistic Interpretability Identifiable?" (7.00) cluster because of the missing Householder ablation (one of two core claims is unverified) and the unexplained Symmetric All Domains failure. I place this at **5.5** — a paper with real contributions that merits serious consideration but has two substantial gaps that reviewers would rightfully flag. The paper is not reject-level (its core empirical claim holds) but the unverified subspace claim and unexplained failure mode prevent a clean acceptance recommendation at the current state.
+
+**Score: 5.5 — Weak Accept (borderline, leaning toward revision needed)**
+
+MY FINAL SCORE: <pineapple>5.5</pineapple>
+MY FINAL DECISION: <orange>Accept</orange>
+
+--- Scorer Output ---
+5.5
+
+--- Decision ---
+Accept
+
+============================================================
+Paper: ../iclr2025/papers/YK8eO7BEkJ.txt
+Timestamp: 2026-04-23T23:57:16
+
+--- Token Usage ---
+  Harsh Critic: N/A (claude_sdk path)
+  Strength Finder: input=10765 (cached=0) output=1276 (reasoning=0) total=12041 requests=1 duration=n/ams
+  Merger: N/A (claude_sdk path)
+  TOTAL: input=10765 output=1276 total=12041
+
+--- Claude SDK Usage ---
+  [Harsh Critic]
+    Model: claude-sonnet-4-6
+    Session ID: 2db36ff7-887c-464d-9148-45ed5a9bdfda
+    Cost (USD): 0.1395066
+    Turns: 4
+    Duration: total=133983ms api=97446ms
+    Tokens: input=8 output=4898 cache_read=16592 cache_creation=16276
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  [Merger]
+    Model: claude-sonnet-4-6
+    Session ID: fe798596-7019-43cb-98c6-8b314aeebe10
+    Cost (USD): 0.42598169999999996
+    Turns: 17
+    Duration: total=207797ms api=195326ms
+    Tokens: input=20 output=9564 cache_read=244014 cache_creation=55802
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  TOTAL Claude SDK cost (USD): 0.5655
+
+--- Merged Inputs ---
+
+### Harsh Critic
+I'll start by reading the paper before conducting my review.Now I have read the full paper. Let me write my review.
+
+---
+
+# Review: "An Empirical Study on Normalization in Mamba"
+
+---
+
+## Critical Issues
+
+**1. The baseline is a crippled model that trivializes all conclusions. [Structural — invalidates the central framing]**
+
+The paper's foundational comparison is between a "None→SSM→None" configuration achieving 7.0% sequence accuracy (Breakfast, 10 action classes → near chance) and 10.7% image accuracy (ImageNet-100, 100 classes → barely above chance), versus adding normalization. A model that achieves chance performance without normalization is not a meaningful reference: any normalization will look good. The paper conflates the question "does normalization help at all?" (answered trivially by training failure) with "which normalization type/position/combination is best?" (which is the claimed contribution). The authors never clarify whether the outer-block normalization present in the original Mamba (which sits *outside* the SSM sub-module) was also removed, or how exactly their stripped configuration relates to any real Mamba variant deployed in practice. If the ablation cripples the model by removing normalization it structurally depends on, the results do not characterize normalization trade-offs — they characterize what happens when a model is broken.
+
+**2. The stated recommendations are inconsistent with the paper's own data. [Structural — the empirical conclusions do not follow from the evidence]**
+
+Section 4.4's recommendations state "LN emerges as a versatile and consistently strong performer across tasks." However, by the paper's own numbers:
+- In sequence modeling (Table 1), GN (68.8%) > RMSN (56.9%) > LN (58.9%), so LN is not the best.
+- The best performing combination for sequence is IN→SSM→LN (72.5%), not any LN-centric configuration.
+- The best performing combination for vision is RMSN→SSM→BN (87.3%), which does not involve LN at all.
+- The paper additionally claims "GN→SSM→LN continues to perform relatively well in various combinations" as a practical guideline, but the actual validation (Table 5) uses IN→SSM→LN for sequence and RMSN→SSM→BN for vision — neither of which is GN→SSM→LN.
+
+The gap between the paper's verbal recommendations and the configurations actually selected for validation indicates that the narrative is not coherent with the data.
+
+**3. The validation experiment (Table 5) is evidentially insufficient to support generalization claims. [Evidential]**
+
+The paper's sole validation on a new dataset (ImageNet-1k) shows a 0.3% improvement (70.8% → 71.1%). No variance, standard deviation, or statistical test is reported anywhere in the paper. A 0.3% improvement without error bars — across what is likely a single run — cannot substantiate the claim that the proposed normalization scheme "achieved better performance." In sequence modeling (ListOps), the improvement is larger (56.9% → 72.5%), but this is measured on a different subset/dataset, reported without variance, and relies on the same near-chance baseline structure discussed above.
+
+---
+
+## Section-by-Section Notes
+
+**Introduction / Motivation:** The paper cites Hamilton (1994) to justify the "inherent unpredictability of SSM." Hamilton (1994) is a macroeconomics textbook on time series analysis — it has no bearing on deep learning training instability and is an inappropriate reference. This is a factual error in motivation.
+
+**Section 4.3, Tables 2 & 3:** BN→SSM→None and None→SSM→BN both achieve exactly 28.4% on sequence modeling. An exact numerical tie for two different architectural configurations is suspicious and suggests either an experimental error or a rounding artifact that masks real differences.
+
+**Section 4.5, Table 5 Caption:** The footnote states "For vision tasks, RMSN→SSM→RMSN represents the original Mamba's normalization configuration, while IN→SSM→IN represents our proposed normalization configuration." This directly contradicts the table body, which lists the Ours row for vision as RMSN→SSM→BN. This is an uncorrected text error, but it undermines confidence in careful experimental reporting throughout.
+
+**Section 4.6 — Harmonic Structure:** The "harmonic structure" explanation is presented for BN→SSM→IN, but the recommended and validated configurations are IN→SSM→LN (sequence) and RMSN→SSM→BN (vision). The mechanistic explanation does not apply to the recommended configurations. This means the paper's own proposed intuition is disconnected from its own practical recommendations. The explanation is also described by the authors themselves as "not intended as an essential explanation" — making it difficult to know what scientific claim is actually being advanced.
+
+**Dataset Choice:** The Breakfast dataset is a video action segmentation benchmark, not a standard sequence modeling task in the Mamba literature. Mamba is typically evaluated on language modeling, LRA benchmarks, or time series tasks. Using Breakfast as the primary sequence modeling testbed — with no comparison to other models on that dataset — means the sequence results are not positioned in any comparative context.
+
+**Missing variance:** No experiment in the paper reports error bars, standard deviations, or significance tests. For single-digit percentage accuracy differences (e.g., 86.3% vs 86.7% in Table 3), single runs are not sufficient evidence.
+
+---
+
+## Strengths
+
+- The related work section (Section 2) provides a genuinely useful taxonomy of existing Mamba variants by their normalization strategy (none / before / after / combined), cataloguing a large number of papers. This survey of the design space is a concrete organizational contribution.
+- The complete 5×5 grid of normalization combinations (Table 4) is a methodical enumeration that at least covers the full cross-product of the five considered methods.
+
+---
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+
+1. **Controlled ablation using the original Mamba architecture as baseline.** The paper should compare normalization positions/combinations starting from the *unmodified* Mamba (with its existing normalization scheme as the baseline), not from a degraded model that achieves chance accuracy. Without this, it is impossible to know whether the gains reflect improvements over a working model or mere recovery from a broken one.
+
+2. **Statistical replication.** All key results (Tables 2–4) should be reported with multiple seeds and standard deviations. The 0.3% gain on ImageNet-1k is meaningless without variance.
+
+3. **Evaluation on standard Mamba benchmarks.** The paper should include results on at least one standard sequence benchmark where Mamba is already well-characterized (e.g., language modeling perplexity, full LRA suite beyond ListOps), to allow readers to assess whether the gains are meaningful in the models' intended applications.
+
+### Deeper Analysis Needed
+
+1. **The harmonic structure hypothesis must be tested on the recommended configurations.** If IN→SSM→LN is recommended for sequence, the L2 norm analysis should be shown for IN→SSM→LN, not just BN→SSM→IN, to verify the explanation generalizes.
+
+2. **Task-conditioned vs. universal recommendations.** The paper observes that the best combination differs across tasks (sequence vs. vision), but then makes universal recommendations anyway. A principled analysis of when/why different combinations are better suited to different tasks would substantially improve the contribution.
+
+### Visualizations & Case Studies
+
+1. **L2 norm analysis across the recommended configurations.** Figure 4 shows only BN-related configurations; showing the same analysis for IN→SSM→LN and RMSN→SSM→BN would let readers verify the proposed mechanism applies to the actual recommended settings.
+
+### Obvious Next Steps
+
+1. **Extension to Mamba2**, which the authors themselves acknowledge has worse training stability, and where normalization design choices would arguably be more impactful. This is flagged in the conclusion but should have been in the paper.
+
+---
+
+## Overall Assessment
+
+The paper attempts a systematic empirical study of normalization in Mamba architectures. The motivation is legitimate — normalization design in Mamba variants is ad hoc and poorly studied — but the execution has structural problems that prevent the conclusions from being trusted. The most serious issue is that the experimental baseline is a near-chance-performing crippled model, meaning the demonstrated gains do not characterize normalization trade-offs in any realistic setting. Compounding this, the paper's verbal recommendations ("LN is versatile," "GN→SSM→LN is a good choice") do not match the configurations the paper itself selects for validation, indicating the narrative is not derived coherently from the evidence. The sole transfer experiment shows a 0.3% improvement without statistical testing. The proposed "harmonic structure" intuition does not cover the recommended configurations. Given that the paper's primary claim — that specific normalization choices systematically improve Mamba — is undermined by the baseline design flaw and the incoherent recommendation chain, the paper should not be accepted in its current form. The research direction is worth pursuing, but the experimental design needs to be rebuilt from a working baseline model.
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+1. **Systematic full-factorial empirical exploration**: The paper evaluates normalization type, position, and combination across two task domains, covering 25 normalization combinations in Table 4, 5 normalization types in Table 1, and before/after SSM comparisons in Tables 2 and 3. This fills a gap noted in Section 1—that prior Mamba variants used diverse normalization strategies "without providing the sufficient evidence for supporting why one should use like that."
+
+2. **Clear finding that post-SSM normalization is generally superior to pre-SSM normalization**: Table 2 shows GN after SSM achieving 70.1% vs. 20.5% before SSM on sequence modeling (a 49.6 point gap), and Table 3 shows GN after SSM achieving 86.8% vs. 66.1% before SSM on image classification (a 20.7 point gap). This provides strong, numerically grounded evidence for a practical architectural guideline.
+
+3. **Demonstration that combining different normalization types outperforms using the same type on both sides**: In Table 4, IN→SSM→LN achieves 72.5% on sequence modeling, surpassing the best same-type combination GN→SSM→GN (68.8% from Table 1). On image classification, RMSN→SSM→BN achieves 87.3%, surpassing LN→SSM→LN (86.6%). This is a non-obvious finding with concrete performance improvements.
+
+4. **Validation of recommended configurations on additional benchmarks**: Table 5 shows the recommended IN→SSM→LN improving from 56.9% to 72.5% on LRA ListOps (vs. the original Mamba's RMSN→SSM→RMSN), and RMSN→SSM→BN improving from 70.8% to 71.1% on ImageNet-1k (vs. VMamba's LN→SSM→LN without FFN), confirming generalizability beyond the primary experimental datasets.
+
+### Supporting strengths
+1. **Mechanistic insight via L2 norm analysis**: Figure 4 demonstrates that post-SSM normalization (None→BN, BN→BN) maintains consistent L2 norm scales across Mamba block layers, while no normalization or pre-SSM-only normalization leads to exponentially growing L2 norms in deeper layers. Figure 5 further shows that the complementary BN→IN combination balances the weight norm trajectory between the extremes of BN→BN and IN→IN, providing a concrete visual explanation for why heterogeneous normalization pairs can outperform homogeneous ones.
+
+### Presentation / practical strengths
+1. **Actionable design recommendations**: Section 4.4 explicitly states practical guidelines—normalization after SSM is generally preferred, and combining different normalization types (e.g., GN before SSM with LN after SSM) works well across tasks—giving practitioners clear starting points for Mamba architecture design.
+
+## Summary
+
+The paper provides a systematic empirical study of normalization type, position, and combination in the Mamba architecture across sequence modeling and image classification tasks. The most important piece of evidence supporting its main claims is the comparison in Tables 2 and 3 showing that post-SSM normalization substantially outperforms pre-SSM normalization (e.g., 70.1% vs. 20.5% with GN on sequence modeling), combined with Table 4 showing that heterogeneous normalization pairs (e.g., IN→SSM→LN at 72.5%) can outperform all homogeneous pairs on sequence modeling, supported by the mechanistic analysis in Figures 4 and 5 linking these gains to stabilized L2 norm distributions across layers.
+
+--- Merged Review ---
+Now let me search for calibration anchors.Now let me check a few more calibration papers to anchor my scoring properly.Now I have sufficient grounding to write the final review. Let me synthesize.
+
+---
+
+## Summary
+This paper presents a systematic empirical study of normalization type, position, and combination strategies within the Mamba architecture across two task domains: long sequence modeling (Breakfast action segmentation dataset) and image classification (ImageNet-100, ImageNet-1k). The paper evaluates 5 normalization types, compares pre-vs-post-SSM placement, enumerates all 25 pairwise combinations, and offers practical recommendations supported by an L2-norm trajectory analysis.
+
+## Strengths
+- **Systematic full-factorial coverage (Table 4):** The paper enumerates all 25 normalization combinations across two tasks, a methodical sweep that captures the full design space and provides practitioners with a useful reference grid. This fills a real gap noted in the introduction—Mamba variants adopt diverse normalization strategies without empirical justification.
+- **Clear and numerically grounded finding that post-SSM normalization outperforms pre-SSM (Tables 2 & 3):** For sequence modeling, GN after SSM achieves 70.1% vs. 20.5% before SSM—a 49.6 percentage-point gap. For image classification, GN after SSM yields 86.8% vs. 66.1%—a 20.7-point gap. This is one of the paper's most reliable findings.
+- **Non-obvious finding on heterogeneous normalization combinations (Table 4):** IN→SSM→LN (72.5%) outperforms the best same-type combination GN→SSM→GN (68.8%) on sequence; RMSN→SSM→BN (87.3%) outperforms LN→SSM→LN (86.6%) on vision. The benefit of mixing types is concretely demonstrated.
+- **L2-norm trajectory analysis (Figure 4):** The comparison of None→None, BN→None, None→BN, and BN→BN configurations shows a clear pattern: pre-SSM normalization alone fails to prevent exponentially growing L2 norms across deeper layers, while post-SSM normalization stabilizes them. This provides a mechanistic foothold for interpreting the positional effects.
+
+## Weaknesses
+
+### Fatal
+None.
+
+### Major
+- **The verbal recommendations in Section 4.4 are inconsistent with the paper's own data.** The RECOMMENDATIONS section states: *"LN emerges as a versatile and consistently strong performer across tasks."* However, Table 1 shows GN→SSM→GN (68.8%) substantially outperforms LN→SSM→LN (58.9%) on sequence modeling. GN is the top individual normalization type for sequence, not LN. LN is better for vision (86.6% vs. GN's 86.3%), but that does not support calling LN "consistently strong across tasks." The narrative the paper builds around LN is not derived coherently from the evidence and could actively mislead practitioners. The paper's own selection for validation confirms this: IN→SSM→LN and RMSN→SSM→BN—not any LN-centric configuration—are chosen as the recommended settings.
+
+- **Table 5 contains an uncorrected internal contradiction.** The footnote states: *"For vision tasks, RMSN→SSM→RMSN represents the original Mamba's normalization configuration, while IN→SSM→IN represents our proposed normalization configuration."* But the actual table body shows the "Ours" row for vision as **RMSN→SSM→BN**, not IN→SSM→IN. This error undermines confidence in experimental reporting throughout.
+
+- **The near-chance baseline obscures the magnitude of design-choice-driven gains.** The None→SSM→None baseline achieves 7.0% on Breakfast (10-class task, chance ≈ 10%) and 10.7% on ImageNet-100 (100-class task). The vast majority of gains measured in Tables 1–4 represent recovery from a near-collapsed model, not fine-grained characterization of normalization trade-offs in a functional Mamba model. The paper never clarifies whether the outer-block normalization present in original Mamba deployments was also removed and how this relates to real Mamba variants. This makes it difficult to interpret whether the ranked differences between normalization strategies (e.g., the gap between GN and LN on sequence) are substantial or largely dominated by initial training stability.
+
+### Minor
+- **The validation experiment (Table 5) provides insufficient evidence for generalization claims.** The improvement on ImageNet-1k is 70.8% → 71.1%, a 0.3% gain. No standard deviations or confidence intervals are reported for any result in the paper. For a single-run result at this margin, it is impossible to assert that the proposed scheme "achieved better performance" versus stochastic variation.
+
+- **The harmonic structure explanation (Section 4.6) is demonstrated on BN→SSM→IN but the paper's actual recommended configurations are IN→SSM→LN and RMSN→SSM→BN.** The mechanistic story is illustrative but does not directly support the practical recommendations, and the paper itself acknowledges it is "not intended as an essential explanation." Showing analogous L2-norm behavior for the recommended configurations would substantiate the claim.
+
+- **Suspicious exact tie in Table 2:** BN→SSM→None and None→SSM→BN both achieve exactly 28.4% on sequence modeling. An exact numerical tie across two architecturally distinct configurations (pre-SSM vs. post-SSM BN) is unusual and could indicate a rounding artifact masking real differences.
+
+- **The Breakfast dataset is non-standard for Mamba sequence modeling benchmarks.** Typical Mamba evaluation uses language modeling perplexity, the full LRA benchmark, or time-series datasets. The Breakfast action segmentation dataset is used with no comparison to other models' performance on it, leaving the absolute numbers unanchored. This limits interpretability of the sequence modeling results.
+
+### Trivial
+- Section 4.4 states "GN before SSM and LN after SSM continues to perform relative well," yet the validated configuration for sequence is IN→SSM→LN—the paper's own practical guideline is GN→SSM→LN, not what was selected for validation. This inconsistency in framing is minor but adds to the cumulative coherence problem.
+
+## Nice-to-Haves
+- Extend the L2 norm analysis (Figure 4 style) to the recommended IN→SSM→LN and RMSN→SSM→BN configurations, to verify the post-SSM stabilization mechanism applies to the actual recommended settings.
+- Evaluate the top normalization configurations on at least one standard Mamba benchmark (e.g., LRA full suite, language modeling perplexity) to allow readers to assess whether the gains are meaningful in the architecture's intended applications.
+- Report multi-seed standard deviations for key results, especially the Table 5 validation where the margin is only 0.3%.
+- Include a working Mamba model (e.g., original Mamba with RMSN→SSM→RMSN) as the reference point rather than the zero-normalization baseline, to isolate normalization design choices from training stability effects.
+
+## Removed Points
+*These points are flagged to be removed, treat them with caution.*
+
+- **Hamilton (1994) reference as a "factual error":** The harsh critic called the use of Hamilton's "Time Series Analysis" (1994) inappropriate. However, SSMs evolved from classical linear dynamical systems and time series analysis, and Hamilton (1994) is a canonical reference for LTI systems and their stability properties. The reference is unusual in a deep learning paper but not factually wrong. Removed per the rule against factually wrong criticism.
+
+- **The "crippled baseline trivializes all conclusions" framing (Harsh Critic §1):** The critic's strongest framing—that the baseline is so broken that no conclusions survive—is overstated. While the near-chance baseline is a real concern (elevated to Major above), the within-normalization comparisons (e.g., GN vs. LN, pre- vs. post-SSM at the same normalization type) remain valid even if the absolute scale is driven partly by training stability recovery. The conclusion that post-SSM normalization is better than pre-SSM normalization, and that certain combinations outperform homogeneous ones, does not require a healthy baseline. Downgraded to Major/Minor rather than structural invalidation.
+
+- **Concerns about Mamba variant code availability or reproducibility of cited baselines:** Removed per hard rules.
+
+- **Missing appendix or proof concerns:** Removed per hard rules (parser strips appendix).
+
+---
+
+## Novel Insights
+The paper's most transferable empirical insight—that normalizing *after* the SSM module substantially outperforms normalizing before it, and that this corresponds to stabilizing L2-norm growth across layers—has potential relevance beyond Mamba to other architectures with sequential latent-state computations (e.g., linear attention variants, other SSM families). The specific finding that BN and IN have complementary L2-norm trajectories that converge in a "harmonic" middle range when combined is an interesting observation, though it remains illustrative rather than rigorously characterized.
+
+## Suggestions
+1. **Fix the fatal coherence issue:** The paper's recommendations must match its data. If GN is the top individual normalization type on sequence tasks, the RECOMMENDATIONS section should say so, not elevate LN without evidential basis.
+2. **Correct the Table 5 footnote error** (IN→SSM→IN should read RMSN→SSM→BN for the "Ours" vision setting).
+3. **Add a second baseline:** Include the original Mamba's existing normalization scheme as a starting point for comparisons, so readers can see gains relative to a functional model, not just relative to no normalization.
+4. **Supplement the 0.3% ImageNet-1k result** with multi-seed means ± standard deviations, and add a larger validation gain on sequence (ListOps is a good start, but report it cleanly as the primary validation evidence, which it actually is).
+
+---
+
+## Score and Decision
+
+**Calibration anchors used:**
+
+| Path | Avg Human Score | Relationship to Paper |
+|---|---|---|
+| `eDhJFIKI6i.md` (UnifiedGT) | 3.50 | Systematic investigation of architecture design ingredients; single dataset focus; inconsistent conclusions from ablations; low novelty. Strong parallel. |
+| `IUwqJ8VT4F.md` (Revisiting Design Choices in RL) | 4.00 | Systematic empirical study of design choices with "which configuration works best" framing; limited dataset scope; narrative partially misaligned with evidence. Direct parallel. |
+| `f3gCs2a4ZD.md` (DyGMamba) | 4.00 | Mamba-based paper with limited novelty and insufficient ablations. Topically close but less relevant to this paper's framing. |
+| `FowFLhUTgO.md` (V2M) | 5.50 | Mamba vision paper with more technical depth, methodological issues but proposes genuine novel formulation. Higher contribution level than this paper. |
+| `wOSYMHfENq.md` (BN universal approximation) | 6.00 | Normalization paper but with theoretical proof, substantially higher rigor. |
+| `se4vjm7h4E.md` (nGPT) | 6.50 | Normalization-centric architecture paper with extensive experiments and clear gains. |
+
+**Assessment:** This paper's profile—systematic empirical study with limited dataset scope, a critical narrative-data inconsistency in the recommendations section, no statistical testing, and a small validation margin—aligns most closely with the 3.5–4.0 anchor cluster (UnifiedGT, Revisiting Design Choices). The paper offers more coverage than UnifiedGT (25 combinations, two task types) and the positional finding is clearer, placing it slightly above UnifiedGT but below papers like V2M that at least propose a novel architectural component. The recommendation inconsistency and footnote error weigh against the paper without being fully fatal. Score: **3.5**.
+
+**Originality:** Low-moderate. The contribution is empirical coverage of a design space rather than a novel method. The individual experiments are not novel in isolation.
+**Importance:** Moderate. Normalization in Mamba is a real problem; the findings on post-SSM placement have practical value.
+**Claim support:** Weak. The key recommendation (LN is best) contradicts the data. The validation is marginal.
+**Experimental soundness:** Weak. No error bars, near-chance baseline, unusual datasets, footnote inconsistency.
+**Clarity:** Adequate for presentation; undermined by internal contradictions.
+**Value to the community:** Limited in current form due to inconsistent guidance.
+
+MY FINAL SCORE: <pineapple>3.5</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>
+
+--- Scorer Output ---
+3.5
+
+--- Decision ---
+Reject
+
+============================================================
+Paper: ../iclr2025/papers/OYT7yZfBFw.txt
+Timestamp: 2026-04-23T23:57:53
+
+--- Token Usage ---
+  Harsh Critic: N/A (claude_sdk path)
+  Strength Finder: input=12996 (cached=0) output=1682 (reasoning=0) total=14678 requests=1 duration=n/ams
+  Merger: N/A (claude_sdk path)
+  TOTAL: input=12996 output=1682 total=14678
+
+--- Claude SDK Usage ---
+  [Harsh Critic]
+    Model: claude-sonnet-4-6
+    Session ID: 253fb85a-5245-425a-a099-d9020c0bba3d
+    Cost (USD): 0.21065925
+    Turns: 4
+    Duration: total=169358ms api=167600ms
+    Tokens: input=8 output=9056 cache_read=18030 cache_creation=18503
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  [Merger]
+    Model: claude-sonnet-4-6
+    Session ID: 73fd67e7-b619-4473-9c46-635b0edc23b4
+    Cost (USD): 0.42055110000000007
+    Turns: 16
+    Duration: total=238764ms api=226720ms
+    Tokens: input=23 output=11093 cache_read=307857 cache_creation=43128
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  TOTAL Claude SDK cost (USD): 0.6312
+
+--- Merged Inputs ---
+
+### Harsh Critic
+I'll start by fetching the tools I need to read the paper, then read it thoroughly before writing my review.---
+
+# Review: TrajGPT — Irregular Time-Series Representation Learning for Health Trajectory Analysis
+
+---
+
+## Critical Issues
+
+### 1. Structural: Pre-training advantage confounds all architectural comparisons
+
+The paper's central benchmark (Tables 1 and 2) compares TrajGPT — pre-trained on 489,000 patients via next-token prediction — against baseline models that are either (a) adapted with a masking pre-training regime (Transformer baselines) or (b) "trained from scratch" on task-specific data (mTAND, GRU-D, RAINDROP, ODE-RNN, etc.; stated explicitly in Section 4.4). This is not a controlled comparison of architectural innovations: it is a comparison of pre-training regimes. The conclusion that TrajGPT's SRA mechanism and time-specific inference drive performance cannot be drawn from this setup.
+
+The vulnerability of this framing is exposed directly in the results: mTAND, trained entirely from scratch, outperforms pre-trained TrajGPT on CHF classification (85.4% vs. 83.9%) and is statistically indistinguishable from TrajGPT on forecasting at K=5 and K=15 (Table 1). Rather than investigating why a shallow, task-specific model without pre-training beats the proposed method on one of three headline tasks, the paper dismisses it in one sentence: "its reliance on a bespoke shallow model targeting a single outcome limits its scalability" (Section 5.4). This evasion does not address the underlying evidential problem. A fair architecture comparison requires either pre-training all Transformer baselines with equivalent data in a principled fashion, or clearly reframing the contribution as a *pre-training framework* rather than an architectural advance.
+
+### 2. Evidential: The ablation for the core architectural novelty is not statistically significant
+
+The paper's primary architectural novelty is the data-dependent decay γ_n in SRA (Eq. 2), which allows the model to "adaptively forget irrelevant past information based on contexts" (Abstract, Section 3.1). The ablation in Table 3 shows that removing data-dependent decay reduces top-10 recall by 1.4% (71.7% → 70.3%). However, the reported standard error for TrajGPT is ±2.6% (Table 1). The difference between TrajGPT and the fixed-decay variant falls well within this range. No statistical test is reported. The paper cannot claim, on this evidence, that data-dependent decay meaningfully improves performance over a fixed decay. This is particularly damaging because data-dependent gating is the mechanism the paper uses to differentiate from TimelyGPT/BiTimelyGPT (identified in Section 2 as the closest prior work).
+
+Further undermining this claim: the temperature parameter τ = 20 (Section 3.1) is introduced to prevent "rapid decay from small γ_n values" but is never ablated. Raising the exponent of the sigmoid to 1/20 compresses the dynamic range of γ_n (Sigmoid(x)^(1/20) ≈ 1 for most inputs), which functionally reduces the model toward a fixed, near-uniform decay. This directly contradicts the claim that TrajGPT adaptively selects decay rates per token.
+
+### 3. Methodological Gap: Time-specific inference contains an unexplained circular dependency
+
+Section 3.2 defines time-specific inference as: O_{n'} = Q_{n'} S_{n'}, where Q_{n'} = X_{n'} W_Q e^{iθ t_{n'}}. Here X_{n'} is the input embedding of the observation x_{n'} at the target timestep. But x_{n'} is precisely what is being predicted. The computation of S_{n'} also involves K_{n'}^T V_n, which similarly depends on X_{n'}. The paper does not explain how this is resolved at inference time — whether a special token is used, whether Q_{n'} uses only the positional component (i.e., only e^{iθ t_{n'}}), or whether x_{n'} is approximated by a mask or [BLANK] token. This is not a minor notation issue: the described mechanism is used to explain the performance improvement of time-specific inference over auto-regressive inference, which is Table 3's most important comparison (a 6.2% performance gap). If this inference procedure is not what is actually implemented, then the key performance result is unexplained.
+
+### 4. Methodological Gap: Zero-shot classification protocol is undefined
+
+The paper reports zero-shot classification results as headline results (67.2% AUPRC for insulin prediction, 72.8% for CHF; Table 1, S=0 column). However, the paper never defines how class predictions are produced from pre-trained representations without labeled examples or task-specific parameters. Section 4.2 states only that "we performed zero-shot classification" without specifying the protocol. Figure 3.b suggests the mechanism is nearest-neighbor or centroid-based classification in embedding space, but this is never stated. Without a reproducible protocol, these results cannot be verified.
+
+---
+
+## Section-by-Section Notes
+
+**Section 2 (Related Works):** PrimeNet's description is bolded with no explanation. More substantively, the dismissal of ContiFormer as computationally intractable is weakened by Table 1, where ContiFormer achieves competitive or better performance than TrajGPT across multiple classification tasks despite the claimed quadratic complexity. The paper should reconcile this.
+
+**Section 3.2 (TrajGPT as Discretized ODEs):** The theoretical connection between the SRA recurrence and first-order ODEs via ZOH discretization (Eq. 5) is directly adopted from SSM literature (Gu et al., 2022). This derivation is presented as a novel contribution but is a standard result applied to the SRA parameterization. The genuinely novel element — that the ODE parameters A, B, C are input-dependent — is also the defining feature of Mamba's selective state space model. The paper should more clearly distinguish this from Mamba's mechanism rather than listing Mamba as a simple baseline. The claim that TrajGPT "effectively captures the underlying continuous dynamics" because it is a discretized ODE is also overstated: a discretized ODE approximates continuous dynamics with accuracy proportional to step size; for irregular healthcare data with large gaps, the approximation error can be substantial.
+
+**Section 4.4 (Baselines):** The pre-training protocol applied to baselines — "randomly masking 40% of timesteps with zeros" (Zerveas et al., 2021) — is a masking-reconstruction paradigm applied to models not designed for it. For models like Informer or Autoformer (designed for regular forecasting), this is a mismatched pre-training objective. The choice may systematically disadvantage these baselines relative to TrajGPT.
+
+**Section 5.1 (Qualitative Analysis):** The paper references "Fig. ??" for visualization of head-specific decay vectors. This figure is missing (not a PDF parsing artifact; the reference is literally "Fig. ??"). This undermines the claimed interpretability of multi-head decay.
+
+**Section 5.2:** Table 1 contains an entry labeled "BitMimicGPT," which is clearly a garbled version of "BiTimelyGPT." More substantively: BiTimelyGPT is described in Section 4.4 as an encoder-only model that requires fine-tuning for forecasting tasks. Its appearance in the forecasting columns of Table 1 (K=5,10,15) with non-trivial scores is unexplained.
+
+**Section 5.5 (Ablation):** Table 3 contains a "?" entry for "TrajGPT (without Pre-training)" with auto-regressive inference. This is not explained. An incomplete ablation table in a published submission is a significant oversight.
+
+---
+
+## Strengths
+
+1. **Time-specific inference is a genuine and novel inference-time contribution.** The idea of directly predicting at an arbitrary future timestep by combining the last recurrent state with a target timestep query, bypassing auto-regressive rollout, is practically motivated and consistently beneficial across experiments. The improvement over auto-regressive inference in Table 3 (6.2 points) and across increasing forecast windows (Fig. 6) is the paper's most robustly supported result.
+
+2. **Scale and ecological validity of the PopHR evaluation.** Pre-training on 489,000 patients with 112 records each from real-world administrative claims data, and evaluating on clinically meaningful tasks (CHF classification, insulin initiation prediction), is a substantially more realistic evaluation environment than most irregular time-series benchmarks.
+
+3. **The SRA connection to discretized ODEs provides a principled justification for step-size-conditioned inference.** Even if the theoretical framing over-claims novelty relative to prior SSM work, the unified framework tying recurrent state evolution to ODE step sizes coherently motivates the interpolation/extrapolation methodology.
+
+4. **Trajectory visualization (Fig. 4) is clinically grounded.** Linking predicted risk trajectories to specific comorbidities (obesity, arrhythmia, chronic IHD as diabetes precursors; circulatory clusters preceding CHF) provides interpretability that goes beyond accuracy metrics.
+
+---
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+
+1. **Pre-training-controlled architecture comparison.** Pre-train TimelyGPT, BiTimelyGPT, and at minimum mTAND on the same 489K-patient PopHR corpus with a matching next-token prediction objective, then compare downstream task performance. Without this, no architectural conclusion can be drawn. This is required for the paper's main claims to hold.
+
+2. **Quantitative interpolation benchmark.** TrajGPT's interpolation capability is central to the paper's identity ("evolving the learned continuous dynamics" for trajectory analysis) but is evaluated only via two cherry-picked case studies. A held-out evaluation on patients with observed intermediate timestamps that are withheld would validate whether the interpolated trajectories actually track ground truth.
+
+3. **Ablation of τ (temperature parameter).** The temperature τ = 20 compresses the selectivity of γ_n and thus controls how much the "data-dependent" decay differs from a constant. Ablating τ ∈ {1, 5, 10, 20, ∞} is necessary to understand whether selectivity contributes at all.
+
+### Deeper Analysis Needed
+
+1. **Why does mTAND beat TrajGPT on CHF despite no pre-training?** This is the single most important unexplained result in the paper. mTAND's multi-time attention is specifically designed for irregular intervals; if it outperforms TrajGPT with a pre-training handicap, it may indicate that TrajGPT's irregular-time handling is not as effective as claimed for classification tasks relative to dedicated architectures.
+
+2. **Do decay values γ vary meaningfully by disease type in practice?** The paper claims "for chronic diseases, TrajGPT assigns higher γ_n values." This is the central clinical motivation for data-dependent decay. A quantitative analysis showing whether chronic vs. acute conditions actually receive systematically different decay values would either validate or invalidate this design motivation.
+
+### Visualizations & Case Studies
+
+1. **Restore and include the missing head-specific decay vector visualization (currently "Fig. ??").** This is claimed as evidence that different heads capture different temporal dynamics. Its absence makes the multi-head design's interpretability claims unsubstantiated.
+
+### Obvious Next Steps
+
+1. **Define the zero-shot classification protocol formally** (how the representation is mapped to a binary label without any labeled examples) before reporting it as a headline result. This should be in Section 3 or 4, not left implicit.
+
+---
+
+## Overall Assessment
+
+TrajGPT addresses a real and important problem — representation learning for irregularly-sampled longitudinal health records — and combines several sensible ideas (linear recurrent attention, ODE-motivated time-specific inference, RoPE for irregular timestamps) in a coherent system. However, the paper's experimental design has a fundamental structural flaw: every comparison between TrajGPT and baseline models confounds pre-training regime with architectural innovation. This is not a gap that can be patched by adding experiments in revision — the conclusion that TrajGPT's SRA mechanism is responsible for performance gains is not supportable from the current tables, and a competing explanation (that the gains come from the 489K-patient pre-training corpus, not the architecture) is directly supported by the fact that a scratch-trained baseline (mTAND) outperforms the pre-trained TrajGPT on one of three primary tasks. The ablation supporting the central novelty (data-dependent decay) shows a 1.4% improvement against a ±2.6% standard error — not a statistically defensible finding. The zero-shot protocol, used as a headline result in the abstract and throughout the paper, is never defined. The paper should not be accepted in its current form. The contribution could be made credible with a pre-training-controlled architecture comparison, a statistically rigorous ablation with proper significance testing, and a formal specification of the zero-shot inference protocol.
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+1. **Data-dependent decay mechanism that is context-aware**: Unlike prior work (TimelyGPT, BiTimelyGPT) which uses data-independent decay, TrajGPT's SRA introduces γ_n = Sigmoid(X_n w_γ^T)^{1/τ} (Eq. 2), enabling adaptive forgetting based on input content—e.g., higher γ for chronic diseases (slower decay) vs. lower γ for acute conditions. The ablation in Table 3 confirms removing this component drops top-10 recall from 71.7% to 70.3%, and the multi-head variants (Eq. 4) project into distinct 2-D vectors (Section 5.1), showing they capture different dynamics.
+
+2. **Formal ODE interpretation enabling time-specific inference with strong empirical gains**: The paper establishes a principled connection between SRA and discretized ODEs via ZOH discretization (Eq. 5, Section 3.2), providing theoretical justification for modeling continuous dynamics. This grounding enables time-specific inference that predicts at arbitrary target timesteps using Δ_{t_{n'},n}. Table 1 shows time-specific inference outperforms auto-regressive inference by 6.2% at K=10 (71.7% vs 65.5%), and Table 3 shows consistent drops of 4.6–6.2% when replacing time-specific with auto-regressive inference across ablations.
+
+3. **Strong zero-shot generalization across multiple clinical tasks**: Without task-specific fine-tuning, TrajGPT achieves the best zero-shot results on PopHR for insulin prediction (67.2% AUPRC) and CHF classification (72.8% AUPRC) in Table 1, and best zero-shot sepsis detection on eICU (45.1% AUPRC) in Table 2. The embedding visualization (Figure 3b) provides mechanistic evidence: sequence representations of insulin-positive patients cluster near the endocrine/metabolic category, enabling this zero-shot separation.
+
+### Supporting strengths
+1. **Computational efficiency**: TrajGPT achieves O(N) training complexity and O(1) inference complexity for time-specific inference (Section 3.3), a significant practical advantage over standard Transformers (O(N²) training) and over ContiFormer, which requires costly ODE integration during both training and inference.
+
+2. **Dual-mode (parallel and recurrent) formulation**: The proven equivalence between the recurrent form (Eq. 2) and parallel form (Eq. 3, with Appendix B proof) allows efficient parallel training while supporting recurrent inference—essential for the streaming nature of clinical data and for time-specific inference at arbitrary timesteps.
+
+3. **Interpretable trajectory analysis with clinical grounding**: Figure 4 provides patient-level case studies where predicted risk trajectories reveal clinically coherent patterns. For the diabetic patient (Fig. 4b), risk growth spikes between ages 59–62 correspond to comorbidities (chronic IHD, hypothyroidism, obesity, arrhythmia) that are established diabetes risk factors. TrajGPT also successfully forecasts unseen diseases (diabetes, CHF) based solely on related phenotypes.
+
+## Summary
+
+The paper proposes TrajGPT, a Transformer variant for irregularly-sampled time series representation learning that introduces a Selective Recurrent Attention (SRA) mechanism with data-dependent decay and interprets the architecture as discretized ODEs. The most important piece of evidence supporting its contribution is the consistent advantage of time-specific inference over auto-regressive inference (6.2% gain on PopHR forecasting at K=10, Table 1; 3.7% and 4.4% gains on eICU forecasting at K=10 and K=20, Table 2), which validates the ODE-based formulation's ability to capture continuous dynamics and forecast at arbitrary timesteps—directly addressing the key challenge of irregularly-sampled healthcare data.
+
+--- Merged Review ---
+Now let me search for calibration anchors.Now I have enough information to write the comprehensive final review. Let me synthesize everything.
+
+---
+
+## Summary
+
+TrajGPT is a pre-trained Transformer for irregularly-sampled time-series representation learning, targeted at longitudinal health records. Its primary contributions are: (1) a Selective Recurrent Attention (SRA) mechanism with data-dependent decay; (2) an interpretation of SRA as a discretized ODE, enabling *time-specific inference* that predicts directly at arbitrary future timesteps; and (3) demonstration of zero-shot generalization across forecasting, drug-usage prediction, and phenotype classification on two large clinical datasets (PopHR: 489K patients; eICU: 139K patients).
+
+---
+
+## Strengths
+
+- **Time-specific inference is a genuinely novel and robustly supported contribution.** Rather than auto-regressive rollout, TrajGPT uses the recurrent state at the last observation plus the target timestep offset (Δ_{t_{n'},n}) to directly predict at an arbitrary future time. This yields a consistent +6.2% recall gain over auto-regressive inference at K=10 on PopHR (Table 3: 71.7% vs 65.5%) and +3.7%/+4.4% on eICU at K=10/K=20 (Table 2). The gain also widens with forecast horizon (Figure 6), providing mechanistically coherent evidence that the ODE interpretation is operationally useful.
+
+- **Scale and ecological validity of the PopHR evaluation.** Pre-training on 489,000 patients with 112 records each from a real-world provincial insurance claims database—then evaluating on CHF classification and insulin-initiation prediction—represents one of the most realistic clinical evaluation settings in the irregular time-series literature. The PopHR and eICU experiments together cover classification, forecasting, and drug prediction, demonstrating breadth.
+
+- **Computational efficiency advantage is concrete.** SRA achieves O(N) training and O(1) inference complexity (Section 3.3), compared to O(N²) / O(N) for standard Transformers and the more expensive ODE integration required by ContiFormer. This is practically meaningful for clinical data with long patient histories.
+
+- **Trajectory visualization is clinically grounded (Figure 4).** The predicted risk trajectories for a diabetic patient link spikes in diabetes risk between ages 59–62 to obesity, chronic IHD, hypothyroidism, and arrhythmia—all established diabetes comorbidities. The CHF patient's risk spikes correspond to circulatory disease clusters. This interpretability goes beyond accuracy metrics.
+
+---
+
+## Weaknesses
+
+### Fatal
+None.
+
+### Major
+
+- **Pre-training confound undermines architectural attribution claims.** TrajGPT is compared against (a) Transformer baselines pre-trained via masked reconstruction (40% timesteps zeroed, Zerveas et al., 2021) and (b) specialized models (mTAND, GRU-D, ODE-RNN, RAINDROP, etc.) trained entirely from scratch (Section 4.4 explicitly: "they were trained from scratch"). TrajGPT uses next-token prediction pre-training on 489K patients—a materially different and arguably superior pre-training paradigm. The core architectural claim—that SRA's data-dependent decay and time-specific inference, not the pre-training regime, drive improvements—cannot be cleanly disentangled from the current design. The evidential pressure here is sharpened by the fact that scratch-trained mTAND *outperforms* pre-trained TrajGPT on CHF (85.4% vs 83.9%, Table 1), a result the paper dismisses in one sentence ("its reliance on a bespoke shallow model...limits its scalability"). If a shallow, single-task, no-pretraining baseline beats the pre-trained model on one of three headline tasks, the paper owes a substantive analysis, not a scalability deflection. A pre-training-controlled architecture comparison (e.g., pre-train TimelyGPT with the same next-token objective on the same 489K-patient corpus) would substantially clarify what is driving performance.
+
+- **The ablation for the primary architectural novelty (data-dependent decay) is not statistically supported.** Table 3 shows removing decay gating reduces top-10 recall by 1.4% (71.7% → 70.3%). However, Table 1 reports TrajGPT's bootstrap standard error as ±2.6%. The 1.4% improvement falls entirely within one standard error; no significance test is reported. The paper cannot credibly claim, on this evidence, that data-dependent decay meaningfully outperforms fixed decay. This matters specifically because data-dependent gating is the primary differentiation from TimelyGPT/BiTimelyGPT, which are cited as the closest prior work. Additionally, the temperature parameter τ = 20 (Section 3.1) is introduced precisely to prevent rapid decay from small γ_n values but is never ablated—its effect on whether γ_n actually varies meaningfully in practice is uncharacterized.
+
+- **A figure explicitly cited in the paper is missing ("Fig. ??").** Section 5.1 states: *"We visualized the projected head-specific decay vectors w_i^h in Eq. 4 using the UMAP techniques (Fig. ??)."* The reference is unresolved—this is not a PDF-parser artifact but a missing figure in the submission. The multi-head decay vectors are offered as evidence that different heads "capture different patterns," which is one of the interpretability claims in the abstract. Without this figure, the multi-head design's interpretability argument is entirely unsubstantiated.
+
+### Minor
+
+- **Zero-shot classification protocol is never formally defined.** Sections 4.2 and 4.3 report zero-shot classification results as headline numbers (67.2% AUPRC for insulin, 72.8% for CHF, 45.1% for sepsis) but do not state how a binary label is derived from the pre-trained representation without task-specific parameters. Figure 3.b qualitatively illustrates clustering, suggesting nearest-centroid or threshold-based classification—but this is never specified. Without a reproducible protocol, these zero-shot results cannot be independently reproduced.
+
+- **The ablation table contains an unexplained "?" entry.** Table 3 (line 243) shows `TrajGPT (without Pre-training) | 67.1 | ?` for the auto-regressive inference column. No explanation is provided for why this result is missing. An incomplete ablation table in the final submission is an oversight.
+
+- **The time-specific inference formula contains an unexplained dependency.** In Section 3.2, the state update for time-specific inference is written as `S_{n'} = D_{Δ} S_n + K_{n'}^T V_n`, where `K_{n'} = X_{n'} W_K e^{-iθt_{n'}}`. Since `X_{n'}` is the embedding of the observation being *predicted*, this formulation requires clarification of how `X_{n'}` is instantiated at inference time (e.g., a [BLANK] token, zeroed embedding, or last-observation embedding). The paper does not explain this. This is a methodological clarity gap for the paper's most validated contribution.
+
+### Trivial
+
+- None verified as non-parser-artifact issues beyond what is already listed above.
+
+---
+
+## Nice-to-Haves
+
+- **Pre-training-controlled ablation**: Pre-train TimelyGPT/BiTimelyGPT on the same PopHR corpus with next-token prediction and compare directly. This would sharply clarify whether SRA or the pre-training objective is the driver.
+- **Quantitative interpolation evaluation**: Interpolation capability is central to the paper's framing but validated only via two case studies. A held-out evaluation with withheld intermediate timestamps would strengthen this claim.
+- **Ablation of τ ∈ {1, 5, 10, 20}**: Understanding how temperature controls effective decay selectivity would help validate the data-dependent decay claim.
+- **Quantitative analysis of γ_n by disease type**: The paper claims TrajGPT assigns higher γ_n to chronic diseases. Providing aggregate statistics (e.g., mean γ_n for chronic vs. acute phenotype codes) would directly validate the central motivation for data-dependent decay.
+
+---
+
+## Removed Points
+
+*These points are flagged to be removed; treat them with caution.*
+
+- **"BitMimicGPT" label in Table 1** (Harsh Critic): This is almost certainly a PDF-parser garble of "BiTimelyGPT." Removed per the rule on formatting/parser artifacts.
+
+- **BiTimelyGPT appearing in forecasting columns despite being encoder-only** (Harsh Critic): Section 4.4 states that encoder-only models "require fine-tuning for forecasting tasks"—fine-tuning is exactly how they are evaluated (Table 1 has a "fine-tuning" column). The critic's concern that BiTimelyGPT's forecasting scores are "unexplained" is a misread of the evaluation protocol.
+
+- **PrimeNet bolded in related works** (Harsh Critic): Pure formatting criticism. Removed.
+
+- **ZOH discretization from SSM literature** (Harsh Critic): The paper explicitly cites Gu et al. (2022) for ZOH and presents the ODE connection as a principled interpretation rather than a derivational novelty. The novel element—input-dependent A, B, C parameters in the ODE—is correctly flagged as related to Mamba, and the paper lists Mamba as a baseline. The critique that TrajGPT "does not distinguish itself from Mamba" is a misread; the paper does not claim to invent neural ODE-like parameter dependence, only to apply it in the SRA context for healthcare irregular sampling. Removed.
+
+- **ContiFormer performs competitively despite quadratic complexity claim** (Harsh Critic): ContiFormer's scores are consistently below TrajGPT's on forecasting (52.8/67.2/76.9 vs. 57.4/71.7/84.1 at K=5/10/15). The paper's quadratic complexity claim remains valid; performance gap is real even if not enormous. Removed.
+
+- **Data-dependent decay strength claimed by Strength Finder**: The Strength Finder cites Table 3's 1.4% improvement as confirming data-dependent decay. As verified above, this falls within the reported standard error. Dropped—the weakness wins.
+
+- **"Dual-mode formulation" strength** (Strength Finder): This is a generic property of SSMs/RetNet-style architectures, not novel to TrajGPT. Dropped as non-specific.
+
+---
+
+## Novel Insights
+
+The most genuinely useful insight in this paper—supported by both theory and experiment—is the framing of time-specific inference as a direct consequence of the ODE interpretation: because the recurrent state evolves with a step-size parameter that can be set independently of the training sequence, the model can "skip" to an arbitrary future timestep without sequential rollout, eliminating accumulated error. The consistent 4–6% recall gains across ablation conditions and increasing gains with forecast horizon (Figure 6) show this is a practically meaningful design choice that goes beyond the usual autoregressive vs. direct prediction distinction. The connection between data-dependent decay parameters and the neural ODE interpretation (input-dependent A, B, C matrices) is also a coherent theoretical contribution, though its empirical payoff relative to fixed decay remains unconfirmed.
+
+---
+
+## Suggestions
+
+1. **Clarify the time-specific inference formula**: Add one sentence specifying what `X_{n'}` is instantiated as at inference time (a [BLANK] token, zeroed vector, or last-observation replay), and confirm or correct whether K_{n'} actually participates in the state update at inference.
+2. **Report significance tests in the ablation**: Bootstrap confidence intervals or paired t-tests for the data-dependent decay ablation (and all ablations) would resolve whether the 1.4% gap for decay gating is reliable.
+3. **Include or explain the missing multi-head decay figure**: Either add the figure or explicitly defer it to the appendix with a correct citation.
+4. **Define the zero-shot protocol formally**: Add one paragraph in Section 3 or Section 4 specifying how the sequence embedding is converted to a binary class prediction in the zero-shot setting.
+5. **Address the "?" in Table 3**: Either fill in the missing result or explain why it is absent.
+6. **Investigate the mTAND CHF result**: The fact that a scratch-trained shallow model outperforms pre-trained TrajGPT on CHF classification deserves a dedicated analysis rather than a dismissal.
+
+---
+
+## Score and Decision
+
+**Calibration anchors used:**
+
+| Path | Avg Score | Relationship to TrajGPT |
+|---|---|---|
+| `/human_reviews/2sCcTMWPc2.md` (TimelyGPT) | 5.5 (Reject) | Direct predecessor — same pre-training confound, fewer tasks, no ODE framing |
+| `/human_reviews/NialiwI2V6.md` (MOTOR) | 7.5 (Spotlight) | EHR foundation model on 55M records, 19 tasks, 3 databases — much stronger experimental control |
+| `/human_reviews/zg3ec1TdAP.md` (EHR long-context) | 7.0 (Poster) | EHR FM with rigorous comparative evaluation, longer contexts |
+| `/human_reviews/lHo8Do0nfZ.md` (PTE4TS) | 3.5 (Reject) | Weak time-series pre-training paper, missing ablations, limited experiments |
+| `/human_reviews/8zJRon6k5v.md` (ACSSM) | 8.0 (Oral) | Rigorous continuous-time model for irregular time series with tight theoretical grounding |
+| `/human_reviews/4VIgNuQ1pY.md` (Neural SDEs) | 6.67 (Spotlight) | Well-grounded continuous-time model for irregular time series, thorough experiments |
+
+**Reasoning:** TrajGPT is clearly above PTE4TS (3.5): it has two large clinical datasets, multiple tasks, a novel inference procedure with strong empirical support, and a coherent theoretical framework. It sits near TimelyGPT (5.5) in terms of structural similarity and the shared pre-training confound problem—but adds genuine contributions (time-specific inference, ODE framework, larger evaluation). The missing figure, undefined zero-shot protocol, and non-significant ablation of the core novelty prevent a clear accept. The paper falls short of MOTOR (7.5) and Neural SDEs (6.67), which have cleaner experimental designs and more rigorous ablations. The appropriate score is **5.0**—a marginal reject that could be strengthened with controlled architectural comparisons and resolved presentation gaps.
+
+**Originality**: Moderate — time-specific inference is a novel and useful idea; data-dependent decay is incremental over TimelyGPT.  
+**Importance**: High — healthcare irregular time-series is an important real-world problem with large-scale data.  
+**Claim support**: Partially — time-specific inference is well-supported; data-dependent decay is not.  
+**Experimental soundness**: Moderate — large-scale evaluation but methodological confound in comparisons.  
+**Clarity**: Fair — missing figure, undefined zero-shot protocol, incomplete ablation table are concrete gaps.  
+**Value to community**: Moderate — the time-specific inference idea and PopHR benchmark are genuinely useful contributions.
+
+MY FINAL SCORE: <pineapple>5</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>
+
+--- Scorer Output ---
+5.0
+
+--- Decision ---
+Reject

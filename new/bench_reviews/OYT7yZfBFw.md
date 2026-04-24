@@ -1,12 +1,24 @@
+Now let me search for calibration anchors.Now I have enough information to write the comprehensive final review. Let me synthesize everything.
+
+---
+
 ## Summary
 
-This paper proposes TrajGPT, a Transformer for irregularly-sampled clinical time series that introduces a Selective Recurrent Attention (SRA) mechanism with data-dependent decay. The authors frame SRA as a discretization of a neural ODE to motivate a “time-specific inference” mode for forecasting at arbitrary timesteps, and evaluate the model on EHR trajectory forecasting, drug usage prediction, and phenotype classification across two health datasets.
+TrajGPT is a pre-trained Transformer for irregularly-sampled time-series representation learning, targeted at longitudinal health records. Its primary contributions are: (1) a Selective Recurrent Attention (SRA) mechanism with data-dependent decay; (2) an interpretation of SRA as a discretized ODE, enabling *time-specific inference* that predicts directly at arbitrary future timesteps; and (3) demonstration of zero-shot generalization across forecasting, drug-usage prediction, and phenotype classification on two large clinical datasets (PopHR: 489K patients; eICU: 139K patients).
+
+---
 
 ## Strengths
 
-- **Data-dependent decay is a sensible extension with empirical support.** The SRA mechanism introduces a context-aware decay term γ_n = Sigmoid(X_n w_γ^T)^{1/τ} (Eq. 2), allowing the model to adaptively weight past information. The ablation in Table 3 shows that removing decay gating reduces top-10 forecasting recall by 1.4 percentage points, confirming the design has value.
-- **Strong zero-shot performance on clinically relevant tasks.** TrajGPT achieves competitive or best zero-shot results on multiple benchmarks: e.g., 67.2% AUPRC for insulin usage prediction and 72.8% for CHF classification on PopHR, and 45.1% AUPRC for sepsis detection on eICU (Tables 1 and 2). These demonstrate that the pre-trained representations transfer to downstream tasks.
-- **Clinically interpretable visualizations.** Figure 3 shows that token embeddings cluster by disease category and that sequence representations separate insulin-positive from insulin-negative diabetic patients. The trajectory case studies in Figure 4 connect model predictions to comorbidity patterns, which is valuable for clinical adoption.
+- **Time-specific inference is a genuinely novel and robustly supported contribution.** Rather than auto-regressive rollout, TrajGPT uses the recurrent state at the last observation plus the target timestep offset (Δ_{t_{n'},n}) to directly predict at an arbitrary future time. This yields a consistent +6.2% recall gain over auto-regressive inference at K=10 on PopHR (Table 3: 71.7% vs 65.5%) and +3.7%/+4.4% on eICU at K=10/K=20 (Table 2). The gain also widens with forecast horizon (Figure 6), providing mechanistically coherent evidence that the ODE interpretation is operationally useful.
+
+- **Scale and ecological validity of the PopHR evaluation.** Pre-training on 489,000 patients with 112 records each from a real-world provincial insurance claims database—then evaluating on CHF classification and insulin-initiation prediction—represents one of the most realistic clinical evaluation settings in the irregular time-series literature. The PopHR and eICU experiments together cover classification, forecasting, and drug prediction, demonstrating breadth.
+
+- **Computational efficiency advantage is concrete.** SRA achieves O(N) training and O(1) inference complexity (Section 3.3), compared to O(N²) / O(N) for standard Transformers and the more expensive ODE integration required by ContiFormer. This is practically meaningful for clinical data with long patient histories.
+
+- **Trajectory visualization is clinically grounded (Figure 4).** The predicted risk trajectories for a diabetic patient link spikes in diabetes risk between ages 59–62 to obesity, chronic IHD, hypothyroidism, and arrhythmia—all established diabetes comorbidities. The CHF patient's risk spikes correspond to circulatory disease clusters. This interpretability goes beyond accuracy metrics.
+
+---
 
 ## Weaknesses
 
@@ -14,48 +26,94 @@ This paper proposes TrajGPT, a Transformer for irregularly-sampled clinical time
 None.
 
 ### Major
-- **ODE interpretation in Eq. 5 contains a sign error that breaks the claimed equivalence.** The paper defines A = ln(Λ_t)/Δ with Λ_t = diag(1/γ_t). Because γ_t ∈ (0,1], this yields A with non-negative eigenvalues and a transition matrix e^{AΔ} = diag(1/γ_t) > 1, implying an unstable continuous system whose state explodes. This contradicts the discrete recurrence S_n = γ_n S_{n-1} + … in Eq. 2, which requires e^{AΔ} = γ_n < 1. The correct definition should use Λ_t = diag(γ_t). As written, the paper does not establish TrajGPT as a discretized ODE of the claimed form, undermining a central theoretical contribution.
-- **Time-specific inference is critically underspecified and appears circular.** Section 3.2 states that to forecast a target (x_{n'}, t_{n'}), the model computes O_{n'} = Q_{n'} S_{n'} with S_{n'} = D_{Δ} S_n + K_{n'}^T V_n. Per Eq. 1, however, Q_{n'} = X_{n'} W_Q e^{iθ t_{n'}} and K_{n'} = X_{n'} W_K e^{-iθ t_{n'}}, both of which require the unobserved target observation x_{n'} itself. The paper neither resolves this dependency (e.g., via a learned time-only query) nor provides an alternative inference algorithm. As presented, the mechanism for forecasting arbitrary target timesteps in a single step is incoherent.
-- **Empirical advantages over strong baselines are frequently within statistical noise and lack significance testing.** Table 1 reports bootstrap standard errors of roughly ±2–4%, yet several margins between TrajGPT and strong baselines are smaller than one standard error (e.g., PopHR top-10 recall: 71.7±2.6 vs. TimelyGPT 70.3±3.1 and mTAND 70.2±2.5; CHF zero-shot: 72.8±2.4 vs. PatchTST 72.2±2.3). The paper boldfaces “best” results without paired statistical tests, so the evidence does not credibly establish superiority on these metrics.
+
+- **Pre-training confound undermines architectural attribution claims.** TrajGPT is compared against (a) Transformer baselines pre-trained via masked reconstruction (40% timesteps zeroed, Zerveas et al., 2021) and (b) specialized models (mTAND, GRU-D, ODE-RNN, RAINDROP, etc.) trained entirely from scratch (Section 4.4 explicitly: "they were trained from scratch"). TrajGPT uses next-token prediction pre-training on 489K patients—a materially different and arguably superior pre-training paradigm. The core architectural claim—that SRA's data-dependent decay and time-specific inference, not the pre-training regime, drive improvements—cannot be cleanly disentangled from the current design. The evidential pressure here is sharpened by the fact that scratch-trained mTAND *outperforms* pre-trained TrajGPT on CHF (85.4% vs 83.9%, Table 1), a result the paper dismisses in one sentence ("its reliance on a bespoke shallow model...limits its scalability"). If a shallow, single-task, no-pretraining baseline beats the pre-trained model on one of three headline tasks, the paper owes a substantive analysis, not a scalability deflection. A pre-training-controlled architecture comparison (e.g., pre-train TimelyGPT with the same next-token objective on the same 489K-patient corpus) would substantially clarify what is driving performance.
+
+- **The ablation for the primary architectural novelty (data-dependent decay) is not statistically supported.** Table 3 shows removing decay gating reduces top-10 recall by 1.4% (71.7% → 70.3%). However, Table 1 reports TrajGPT's bootstrap standard error as ±2.6%. The 1.4% improvement falls entirely within one standard error; no significance test is reported. The paper cannot credibly claim, on this evidence, that data-dependent decay meaningfully outperforms fixed decay. This matters specifically because data-dependent gating is the primary differentiation from TimelyGPT/BiTimelyGPT, which are cited as the closest prior work. Additionally, the temperature parameter τ = 20 (Section 3.1) is introduced precisely to prevent rapid decay from small γ_n values but is never ablated—its effect on whether γ_n actually varies meaningfully in practice is uncharacterized.
+
+- **A figure explicitly cited in the paper is missing ("Fig. ??").** Section 5.1 states: *"We visualized the projected head-specific decay vectors w_i^h in Eq. 4 using the UMAP techniques (Fig. ??)."* The reference is unresolved—this is not a PDF-parser artifact but a missing figure in the submission. The multi-head decay vectors are offered as evidence that different heads "capture different patterns," which is one of the interpretability claims in the abstract. Without this figure, the multi-head design's interpretability argument is entirely unsubstantiated.
 
 ### Minor
-- **Pre-training protocol differs systematically across models, confounding comparisons.** TrajGPT is pre-trained with next-token prediction while competing Transformers use masking-based pre-training (Section 4.4). A fairer ablation would hold the pre-training objective constant to isolate the architectural contribution of SRA.
-- **Abstract slightly overstates the zero-shot story.** The abstract claims TrajGPT performs drug usage and phenotype classification “without requiring task-specific fine-tuning,” yet Table 1 presents fine-tuned TrajGPT as a primary result and shows that fine-tuned baselines sometimes match or exceed it (e.g., mTAND on CHF fine-tuning: 85.4 vs. 83.9).
+
+- **Zero-shot classification protocol is never formally defined.** Sections 4.2 and 4.3 report zero-shot classification results as headline numbers (67.2% AUPRC for insulin, 72.8% for CHF, 45.1% for sepsis) but do not state how a binary label is derived from the pre-trained representation without task-specific parameters. Figure 3.b qualitatively illustrates clustering, suggesting nearest-centroid or threshold-based classification—but this is never specified. Without a reproducible protocol, these zero-shot results cannot be independently reproduced.
+
+- **The ablation table contains an unexplained "?" entry.** Table 3 (line 243) shows `TrajGPT (without Pre-training) | 67.1 | ?` for the auto-regressive inference column. No explanation is provided for why this result is missing. An incomplete ablation table in the final submission is an oversight.
+
+- **The time-specific inference formula contains an unexplained dependency.** In Section 3.2, the state update for time-specific inference is written as `S_{n'} = D_{Δ} S_n + K_{n'}^T V_n`, where `K_{n'} = X_{n'} W_K e^{-iθt_{n'}}`. Since `X_{n'}` is the embedding of the observation being *predicted*, this formulation requires clarification of how `X_{n'}` is instantiated at inference time (e.g., a [BLANK] token, zeroed embedding, or last-observation embedding). The paper does not explain this. This is a methodological clarity gap for the paper's most validated contribution.
 
 ### Trivial
-- Typo “BitMimicGPT” in Table 1 (should be BiTimelyGPT).
+
+- None verified as non-parser-artifact issues beyond what is already listed above.
+
+---
 
 ## Nice-to-Haves
-- Add failure-mode case studies to Figure 4, especially for time-specific inference, to reveal extrapolation errors or excessive smoothing.
-- Include an ablation comparing data-dependent decay to a simple parametric decay γ_{nm} = exp(−α(t_n − t_m)) to isolate whether learned gating is necessary or a fixed timescale suffices.
+
+- **Pre-training-controlled ablation**: Pre-train TimelyGPT/BiTimelyGPT on the same PopHR corpus with next-token prediction and compare directly. This would sharply clarify whether SRA or the pre-training objective is the driver.
+- **Quantitative interpolation evaluation**: Interpolation capability is central to the paper's framing but validated only via two case studies. A held-out evaluation with withheld intermediate timestamps would strengthen this claim.
+- **Ablation of τ ∈ {1, 5, 10, 20}**: Understanding how temperature controls effective decay selectivity would help validate the data-dependent decay claim.
+- **Quantitative analysis of γ_n by disease type**: The paper claims TrajGPT assigns higher γ_n to chronic diseases. Providing aggregate statistics (e.g., mean γ_n for chronic vs. acute phenotype codes) would directly validate the central motivation for data-dependent decay.
+
+---
 
 ## Removed Points
-These points are flagged to be removed, treat them with caution.
-- **Criticism about model/dataset existence or availability:** The paper cites all models and datasets; they are assumed to exist and be available. Concerns about “not yet released” or “cannot be independently verified” are reviewer knowledge gaps, not author errors.
-- **Typos, spelling, grammar, formatting artifacts:** These are parser issues in the extracted text, not present in the original submission.
-- **Missing appendix or proofs in appendix:** The parser strips appendix sections; they exist in the original submission.
-- **Pre-training differences as a fatal flaw:** While suboptimal for isolating architectural contributions, comparing full systems with their standard pre-training paradigms is common in representation learning papers and does not invalidate the empirical results.
-- **BitMimicGPT typo as a substantive weakness:** This is a trivial presentation issue.
+
+*These points are flagged to be removed; treat them with caution.*
+
+- **"BitMimicGPT" label in Table 1** (Harsh Critic): This is almost certainly a PDF-parser garble of "BiTimelyGPT." Removed per the rule on formatting/parser artifacts.
+
+- **BiTimelyGPT appearing in forecasting columns despite being encoder-only** (Harsh Critic): Section 4.4 states that encoder-only models "require fine-tuning for forecasting tasks"—fine-tuning is exactly how they are evaluated (Table 1 has a "fine-tuning" column). The critic's concern that BiTimelyGPT's forecasting scores are "unexplained" is a misread of the evaluation protocol.
+
+- **PrimeNet bolded in related works** (Harsh Critic): Pure formatting criticism. Removed.
+
+- **ZOH discretization from SSM literature** (Harsh Critic): The paper explicitly cites Gu et al. (2022) for ZOH and presents the ODE connection as a principled interpretation rather than a derivational novelty. The novel element—input-dependent A, B, C parameters in the ODE—is correctly flagged as related to Mamba, and the paper lists Mamba as a baseline. The critique that TrajGPT "does not distinguish itself from Mamba" is a misread; the paper does not claim to invent neural ODE-like parameter dependence, only to apply it in the SRA context for healthcare irregular sampling. Removed.
+
+- **ContiFormer performs competitively despite quadratic complexity claim** (Harsh Critic): ContiFormer's scores are consistently below TrajGPT's on forecasting (52.8/67.2/76.9 vs. 57.4/71.7/84.1 at K=5/10/15). The paper's quadratic complexity claim remains valid; performance gap is real even if not enormous. Removed.
+
+- **Data-dependent decay strength claimed by Strength Finder**: The Strength Finder cites Table 3's 1.4% improvement as confirming data-dependent decay. As verified above, this falls within the reported standard error. Dropped—the weakness wins.
+
+- **"Dual-mode formulation" strength** (Strength Finder): This is a generic property of SSMs/RetNet-style architectures, not novel to TrajGPT. Dropped as non-specific.
+
+---
 
 ## Novel Insights
-None beyond the paper's own contributions.
+
+The most genuinely useful insight in this paper—supported by both theory and experiment—is the framing of time-specific inference as a direct consequence of the ODE interpretation: because the recurrent state evolves with a step-size parameter that can be set independently of the training sequence, the model can "skip" to an arbitrary future timestep without sequential rollout, eliminating accumulated error. The consistent 4–6% recall gains across ablation conditions and increasing gains with forecast horizon (Figure 6) show this is a practically meaningful design choice that goes beyond the usual autoregressive vs. direct prediction distinction. The connection between data-dependent decay parameters and the neural ODE interpretation (input-dependent A, B, C matrices) is also a coherent theoretical contribution, though its empirical payoff relative to fixed decay remains unconfirmed.
+
+---
 
 ## Suggestions
-1. Fix the sign error in Eq. 5 by replacing Λ_t = diag(1/γ_t) with diag(γ_t), and verify that the appendix derivation is consistent.
-2. Explicitly define how Q_{n'} and K_{n'} are computed when x_{n'} is unobserved at inference time (e.g., learned query embedding, time-only embedding, or autoregressive proxy). Without this clarification, the time-specific inference claim is invalid.
-3. Report paired statistical significance tests or confidence intervals for the differences between TrajGPT and the best baseline in Tables 1–2, because many margins are smaller than the reported standard errors.
+
+1. **Clarify the time-specific inference formula**: Add one sentence specifying what `X_{n'}` is instantiated as at inference time (a [BLANK] token, zeroed vector, or last-observation replay), and confirm or correct whether K_{n'} actually participates in the state update at inference.
+2. **Report significance tests in the ablation**: Bootstrap confidence intervals or paired t-tests for the data-dependent decay ablation (and all ablations) would resolve whether the 1.4% gap for decay gating is reliable.
+3. **Include or explain the missing multi-head decay figure**: Either add the figure or explicitly defer it to the appendix with a correct citation.
+4. **Define the zero-shot protocol formally**: Add one paragraph in Section 3 or Section 4 specifying how the sequence embedding is converted to a binary class prediction in the zero-shot setting.
+5. **Address the "?" in Table 3**: Either fill in the missing result or explain why it is absent.
+6. **Investigate the mTAND CHF result**: The fact that a scratch-trained shallow model outperforms pre-trained TrajGPT on CHF classification deserves a dedicated analysis rather than a dismissal.
+
+---
 
 ## Score and Decision
 
-**Calibration anchors:**
-- **High (≥6):** MOTOR (7.5, Accept spotlight) — first TTE foundation model for EHR, massive scale, thorough experiments, strong cross-site validation. TrajGPT is below this: smaller scale, narrower tasks, and flawed theoretical framing.
-- **High (≥6):** ACSSM (8.0, Accept Oral) — novel theoretically-motivated method for irregular time series with correct derivations and strong empirical results. TrajGPT falls well below this due to the sign error in its ODE derivation.
-- **Medium (~5):** TimelyGPT (5.5, Reject) — direct predecessor with similar architecture but no math errors; rejected for being incremental and lacking theory. TrajGPT adds theory but it is incorrect, and adds an underspecified inference mode, so it should score no higher.
-- **Medium (~5):** XTSFormer (5.0, Reject) — missing key baselines and organizational issues, but no mathematical errors in core claims. TrajGPT has more serious theoretical flaws.
-- **Low (≤4):** FactTest (4.67, Reject) — extensive experiments but core statistical claims were unsupported/incorrect. TrajGPT shares this pattern: empirical work is real, but central theoretical claims are flawed.
-- **Low (≤4):** “Is Pre-training Truly Better Than Meta-Learning?” (4.5, Reject) — rigorous experiments but marginal effect sizes weakened conclusions. TrajGPT has similarly small margins and adds mathematical errors.
+**Calibration anchors used:**
 
-**Comparison:** TrajGPT has real empirical contributions on an important clinical problem, but the sign error in Eq. 5 and the circular/underspecified time-specific inference are substantive flaws in the core technical claims. These issues are more severe than the weaknesses in the medium-scoring anchors (TimelyGPT, XTSFormer) and comparable to the low-scoring anchors with unsupported core claims (FactTest). The paper would need to correct the ODE mathematics and rigorously define time-specific inference to reach the medium band.
+| Path | Avg Score | Relationship to TrajGPT |
+|---|---|---|
+| `/human_reviews/2sCcTMWPc2.md` (TimelyGPT) | 5.5 (Reject) | Direct predecessor — same pre-training confound, fewer tasks, no ODE framing |
+| `/human_reviews/NialiwI2V6.md` (MOTOR) | 7.5 (Spotlight) | EHR foundation model on 55M records, 19 tasks, 3 databases — much stronger experimental control |
+| `/human_reviews/zg3ec1TdAP.md` (EHR long-context) | 7.0 (Poster) | EHR FM with rigorous comparative evaluation, longer contexts |
+| `/human_reviews/lHo8Do0nfZ.md` (PTE4TS) | 3.5 (Reject) | Weak time-series pre-training paper, missing ablations, limited experiments |
+| `/human_reviews/8zJRon6k5v.md` (ACSSM) | 8.0 (Oral) | Rigorous continuous-time model for irregular time series with tight theoretical grounding |
+| `/human_reviews/4VIgNuQ1pY.md` (Neural SDEs) | 6.67 (Spotlight) | Well-grounded continuous-time model for irregular time series, thorough experiments |
 
-MY FINAL SCORE: <pineapple>4.5</pineapple>
+**Reasoning:** TrajGPT is clearly above PTE4TS (3.5): it has two large clinical datasets, multiple tasks, a novel inference procedure with strong empirical support, and a coherent theoretical framework. It sits near TimelyGPT (5.5) in terms of structural similarity and the shared pre-training confound problem—but adds genuine contributions (time-specific inference, ODE framework, larger evaluation). The missing figure, undefined zero-shot protocol, and non-significant ablation of the core novelty prevent a clear accept. The paper falls short of MOTOR (7.5) and Neural SDEs (6.67), which have cleaner experimental designs and more rigorous ablations. The appropriate score is **5.0**—a marginal reject that could be strengthened with controlled architectural comparisons and resolved presentation gaps.
+
+**Originality**: Moderate — time-specific inference is a novel and useful idea; data-dependent decay is incremental over TimelyGPT.  
+**Importance**: High — healthcare irregular time-series is an important real-world problem with large-scale data.  
+**Claim support**: Partially — time-specific inference is well-supported; data-dependent decay is not.  
+**Experimental soundness**: Moderate — large-scale evaluation but methodological confound in comparisons.  
+**Clarity**: Fair — missing figure, undefined zero-shot protocol, incomplete ablation table are concrete gaps.  
+**Value to community**: Moderate — the time-specific inference idea and PopHR benchmark are genuinely useful contributions.
+
+MY FINAL SCORE: <pineapple>5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>
