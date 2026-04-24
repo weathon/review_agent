@@ -1,2 +1,0 @@
-grep_file{"pattern": "training|train", "abs_path": "/home/wg25r/review_agent/iclr2025/papers/YK8eO7BEkJ.txt"}
-grep_file{"pattern": "epoch|iteration|step|config", "abs_path": "/home/wg25r/review_agent/iclr2025/papers/YK8eO7BEkJ.txt"}
