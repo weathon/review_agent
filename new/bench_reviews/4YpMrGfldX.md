@@ -1,28 +1,26 @@
-Now let me search for calibration anchors.Now I have enough to write the consolidated review. Let me compile it.
+Now let me search for calibration papers.Now I have enough information to write the consolidated review. Let me compile my findings.Now I have sufficient information to write the final consolidated meta-review.
 
 ---
 
 ## Summary
 
-TAAE (Transformer Audio AutoEncoder) is a ~950M-parameter, predominantly transformer-based speech codec achieving ultra-low bitrates of 400–700 bps. The key technical contributions are: (1) a ViT-style encoder/decoder with most temporal downsampling concentrated at the input/output boundary; (2) a modified FSQ bottleneck with a novel *post-hoc residual decomposition* enabling single-model multi-bitrate operation without retraining; and (3) a two-stage pretraining/finetuning procedure using WavLM-Large perceptual loss. Evaluated on LibriSpeech test-clean, TAAE outperforms recent baselines (Mimi, SemantiCodec) on all objective metrics at lower bitrates, and achieves strong subjective MUSHRA scores.
+The paper proposes TAAE (Transformer Audio AutoEncoder), a ~950M-parameter transformer-based neural speech codec using a Finite Scalar Quantization (FSQ) bottleneck. The key contributions are: (1) a predominantly transformer-based encoder-decoder architecture scaled to ~1B parameters, (2) a novel post-hoc residual FSQ decomposition enabling flexible bitrate control from a single trained model, and (3) a two-stage training regimen with WavLM-Large perceptual fine-tuning. The system achieves state-of-the-art performance at 400–700 bps on objective metrics (Table 2) and large margins in a MUSHRA subjective evaluation (Fig. 2).
 
 ---
 
 ## Strengths
 
-- **State-of-the-art objective results at ultra-low bitrates (Table 2):** TAAE at 700 bps achieves PESQ 3.09, STOI 0.92, SI-SDR 4.73, Mel 0.86 — outperforming Mimi at 1.1 kbps (PESQ 3.01, STOI 0.90, SI-SDR 2.20) across every metric. The 400 bps single-token variant similarly beats all baselines at comparable bitrates.
+- **Large and consistent objective gains across all metrics simultaneously** (Table 2): TAAE at 400 bps achieves SI-SDR 3.18, PESQ 2.96, STOI 0.90 — competitive with Mimi at 1100 bps (PESQ 3.01, STOI 0.90), and decisively outperforming all other systems at comparable bitrates across all five metrics. The margins are too large to be dismissed as noise.
 
-- **Novel post-hoc residual FSQ decomposition (Section 3.2.1, Eqs. 3–4, Table 1):** The mathematical characterization of the L = 2^n + 1 constraint and the Minkowski-sum argument guaranteeing that quantized latents remain within the training distribution is technically sound and enables flexible bitrate adjustment without retraining. This is a genuinely novel contribution for codec bottleneck design.
+- **Post-hoc residual FSQ decomposition** (Sec. 3.2.1, Eqs. 3–4): The insight that FSQ level structures conforming to $L = 2^n + 1$ admit a training-free residual decomposition via Minkowski sums — with a guarantee that quantized latents remain within the training distribution — is mathematically elegant and practically valuable. This allows a single trained model to serve both single-token (400 bps) and two-token (700 bps) configurations without retraining, which RVQ cannot do post-hoc.
 
-- **Successful scaling of transformer codec to ~1B parameters (Section 4.2, Appendix A.2):** The paper is the first to demonstrate that a predominantly transformer-based codec scales effectively to this regime, with scaling experiments (250M → 500M → 1B) confirming consistent performance improvement.
+- **MUSHRA subjective evaluation** (Fig. 2) shows ~30 point gap over the closest competitor (Mimi at 550 bps) and reaches near-ground-truth quality (~90) at 700 bps. Despite methodology concerns, the magnitude of the gap is sufficiently large that it would survive modest improvements to experimental rigor.
 
-- **Hybrid FSQ training strategy (Section 3.2):** Combining straight-through estimation, uniform noise approximation, and random level selection is shown (ablations in Appendix A.1) to be essential for achieving good codebook utilization and enabling post-hoc bottleneck adjustment. Near-optimal codebook utilization (Appendix A.8) is a concrete demonstration.
+- **Scaling experiments confirm consistent improvement** (Sec. 4.6, App. A.2): 250M → 500M → ~1B parameter variants all improve, supporting the central claim that transformer architectures scale effectively in the codec setting.
 
-- **Cross-lingual generalization (Appendix A.5):** Despite English-only training on ~105k hours, TAAE generalizes to unseen languages competitively with or better than multilingual-trained baselines — a meaningful empirical finding.
+- **Causal/streaming variant** (App. A.4, mentioned in Sec. 4.6): Achieves minimal degradation vs. the non-causal model while outperforming the dedicated streaming codec Mimi, despite significantly fewer training steps and less data — a meaningful practical result.
 
-- **Causal variant retains competitive performance (Appendix A.4):** The streaming variant shows minimal degradation versus the non-causal model and outperforms Mimi objectively, important for real-world deployment.
-
-- **Open-source code and models:** Committed release at github.com/Stability-AI/stable-codes, enabling reproducibility and downstream use.
+- **Training stability apparatus** (Sec. 3.1): QK-norm, LayerScale, high-ε LayerNorm, and weight normalization are well-motivated and appropriately cited, making the large-scale training methodology reproducible.
 
 ---
 
@@ -33,85 +31,93 @@ None.
 
 ### Major
 
-- **Scale confound: architectural contribution cannot be isolated from parameter count.** TAAE has ~950M parameters versus Mimi ~600M, SpeechTokenizer ~100M, DAC ~74M, Encodec ~37M (Table 12). The paper's central framing (Section 1: "One major contribution of this work is to design a new codec architecture that is predominantly transformer-based") positions the *architecture* as the driver of gains. But no experiment controls for parameter count: there is no CNN codec (e.g., DAC/Mimi architecture) trained at ~950M parameters to disentangle architectural contribution from raw scale. The scaling ablation in Appendix A.2 only shows TAAE at 250M/500M/1B — it does not answer whether a CNN at 1B would achieve similar results. This matters because Section 3.1 acknowledges that "TAAE uses a transformer-based architecture, providing enhanced scalability, albeit with reduced parameter efficiency" — this implicitly concedes that transformers need more parameters than CNNs for the same task, making it doubly important to establish whether the architecture or the scale is doing the work.
+- **Entangled contributions prevent attribution of gains to "transformer scaling."** The paper's headline claim is that *scaling a transformer architecture* drives the improvements. However, the proposed system bundles at least four independent changes relative to all baselines: (1) transformer vs. CNN architecture, (2) FSQ vs. RVQ bottleneck, (3) WavLM-Large perceptual fine-tuning (absent from every baseline, and described in Sec. 3.4 as "essential in producing intelligible speech"), and (4) a modified discriminator. No baseline in the paper combines even two of these changes, and there is no CNN codec trained at a comparable parameter count (~900M) to isolate the architectural contribution. The scaling ablation (App. A.2) shows that TAAE improves as it grows from 250M → 1B parameters, but this does not establish that a transformer scales better than a CNN at the same budget. The paper could equally plausibly be titled "WavLM perceptual loss fine-tuning is the key to low-bitrate speech codec quality." This is a real limitation, not merely an academic quibble: it means the claimed "transformer scaling" contribution is unverified by the experimental design.
 
-- **Non-standard subjective evaluation methodology.** Section 4.3 explicitly states the MUSHRA test is conducted "without hidden anchor." The hidden reference anchor in ITU-R BS.1534 (classically a 3.5 kHz LP-filtered reference) calibrates the lower end of the scale across experiments and listeners; without it, absolute scores are unconstrained and cannot be compared to external benchmarks. The question wording — "evaluate the quality proximity... where 0 = no resemblance, 100 = perfectly the same" — conflates resemblance with perceptual quality, which is not standard MUSHRA. Additionally, 24 participants recruited by "openly sharing a link in a number of public forums" with no reported screening criteria, headphone requirements, or attention checks is an uncontrolled panel. The paper explicitly notes following "the precedent of previous works (Zhang et al., 2023b; Défossez et al., 2022)" which partially mitigates the concern, but the MUSHRA scores (Ground Truth ~90/100 rather than ≥95 in controlled tests) suggest calibration issues. The combined result is that the 30-point margin over Mimi in Figure 2 should be interpreted cautiously; it may reflect calibration artifacts as much as true quality differences. The subjective claim of "strongly out-perform" in the abstract rests on this instrument.
+- **MUSHRA evaluation methodology is insufficiently rigorous for the paper's strongest claim.** The paper asserts "strongly out-perform existing baselines in both objective and *subjective* tests" (abstract). The MUSHRA test: (a) uses N=24 online listeners recruited by "openly sharing a link in public forums" with no headphone check or hearing screening; (b) explicitly omits the hidden anchor required by the MUSHRA protocol (ITU-R BS.1534); (c) excludes DAC and Encodec post-hoc based on objective metrics — the same criterion correlated with the outcome being measured; (d) reports no statistical significance tests. The paper acknowledges following prior works (EnCodec, SpeechTokenizer) in omitting the anchor, but precedent does not make the methodology sound. Given that the subjective evaluation is presented as the *primary* evidence of perceptual SOTA, these methodological weaknesses materially weaken that claim. (The enormous margins — ~30 points — partially compensate, but do not fully resolve the concern.)
 
 ### Minor
 
-- **Baselines evaluated at below-intended operating points.** DAC (designed for 8 kbps) is evaluated at 1–2 kbps using only 2–4 of its RVQ levels, producing catastrophically poor numbers (PESQ 1.64, SI-SDR −6.51 at 1 kbps). SpeechTokenizer is similarly truncated. RVQ codebooks are jointly trained, and partial stacks are qualitatively different from the model's intended operation. This inflates the apparent margin over these specific baselines, even though the fairer comparisons with Mimi and SemantiCodec — which are designed for low-bitrate operation — still favor TAAE and are the appropriate primary reference points.
+- **MOSNet saturation for all three TAAE configurations** (Table 2): All three TAAE variants — 400 bps, 700 bps, and continuous (no quantization) — report identical MOSNet scores of 3.36, to three significant figures. This strongly suggests MOSNet has hit a ceiling at this quality level and cannot differentiate between model configurations that differ by 300 bps or the presence of quantization at all. The paper does not comment on this. If the metric is saturating for TAAE, it may also be approaching saturation for the best baselines, reducing its discriminative value across the entire comparison table.
 
-- **In-distribution test set.** Training uses Librilight (a LibriSpeech-derived dataset) and MLS English; evaluation uses LibriSpeech test-clean, which is in-distribution. Baselines were predominantly trained on more diverse data. This gives TAAE a home-field advantage that is not disclosed in the paper and inflates the apparent objective margins. The authors acknowledge the training data is audiobook-dominated (Section 5) but do not connect this to the test-set choice.
+- **24kHz baseline confound not quantified** (Sec. 4.4): For Encodec and Mimi (24kHz models), the evaluation pipeline is: upsample 16kHz → encode → decode → downsample to 16kHz → evaluate. This applies two additional signal-processing steps to the baselines that TAAE does not undergo. The paper acknowledges the difference in operating rates but makes no attempt to quantify or neutralize the confound. Mimi is a primary subjective comparator, making this a practical concern.
 
-- **Causal model relegated to appendix despite being the deployment-relevant variant.** For the stated application (generative speech pipelines, streaming TTS, real-time dialogue), the non-causal model cannot be used out of the box. The causal model (Appendix A.4) should arguably be the primary result, with the non-causal version as an upper bound. Presenting the non-causal model as the headline result while the practical variant is in the appendix understates an important deployment limitation.
-
-- **24 kHz baseline evaluation pipeline.** Encodec and Mimi are evaluated by upsampling to 24 kHz, encoding, decoding, then downsampling to 16 kHz for metric computation. This resampling chain introduces artifacts charged to the baseline rather than the codec. A fairer evaluation would assess these models on their native-rate audio.
+- **WavLM perceptual fine-tuning advantage not reflected in limitations.** Section 5 ("Limitations") discusses data domain and sample rate but does not mention the ~950M parameter count being 10–100× larger than all baselines, nor the use of a speech-specialized perceptual loss (WavLM-Large, trained specifically on speech) unavailable to any baseline. These are the two most consequential confounds in the comparison, and their omission from the limitations section is a gap.
 
 ### Trivial
-- The discriminator introduces three simultaneous changes (parameter scaling, unevenly spaced STFT resolutions, magnitude scaling) without isolating their individual contributions — a missing ablation that would strengthen but not invalidate the paper.
+
+- The rationale for the specific Bernoulli parameter p=0.5 and the "twice" procedure in the quantization noise mixing strategy (Sec. 3.2) is not motivated. This is a hyperparameter with potential effect on the post-hoc residual decomposition quality.
 
 ---
 
 ## Nice-to-Haves
 
-- A controlled parameter-count comparison: train a CNN-based codec (e.g., DAC/Mimi architecture) at ~950M parameters and compare against TAAE to isolate architectural vs. scale contribution.
-- A properly controlled crowdsourced listening test using validated frameworks (e.g., webMUSHRA with headphone screening and attention checks), with a hidden anchor, to confirm the MUSHRA margin over Mimi.
-- Evaluation on an out-of-distribution test set (e.g., VCTK, CommonVoice) to quantify the in-distribution advantage of the LibriSpeech test-clean choice.
-- Causal model as the primary result, with non-causal as the upper bound.
-- Spectrogram visualization for failure modes (overlapping speakers, non-audiobook prosody) to quantify the training distribution limitation acknowledged in Section 5.
+- An ablation training a large CNN codec (~900M parameters) with identical data, FSQ, and WavLM fine-tuning would be the definitive test of the "transformer scaling" contribution and substantially strengthen the paper's core claim.
+- A direct FSQ vs. RVQ comparison at the same parameter count and training setup in the main paper (rather than appendix) would help isolate the quantization contribution.
+- Out-of-domain subjective evaluation (e.g., VCTK, conversational speech) alongside the LibriSpeech test-clean results would strengthen generalization claims beyond the in-domain setting.
+- A comment on MOSNet saturation behavior in Table 2 would improve the integrity of the metric reporting.
 
 ---
 
 ## Removed Points
 
-*These points are flagged to be removed; treat them with caution.*
+*These points are flagged to be removed, treat them with caution.*
 
-- **Harsh Critic – "post-hoc vs. native FSQ residual decomposition is missing":** The paper's mathematical argument explains why the post-hoc formulation is valid (latents remain in-distribution). Demanding a training-time residual FSQ baseline is reasonable as a nice-to-have, but not a core flaw — the mathematical argument is non-trivial and the inference-time results support the approach.
+- **"Open-source release commitment as a strength"** (Strength Finder): Generic; applicable to any paper with a GitHub link. Dropped per rules on non-specific strengths.
 
-- **Harsh Critic – "causal version should be primary result" (as a major flaw):** Moved to Minor/Nice-to-Have. The paper explicitly frames TAAE as a component for generative pipelines, and both causal and non-causal variants are evaluated. The non-causal model is not misrepresented.
+- **"Hybrid quantization training strategy as a distinct strength"** (Strength Finder): The Bernoulli mixing procedure is a reasonable engineering detail, but the paper provides no ablation of p=0.5 or the "twice" procedure in the main paper, making it difficult to attribute credit to this specific choice. Kept as a very minor element under architecture description but not treated as a standalone strength.
 
-- **Harsh Critic – "SI-SDR inapplicable to generative codecs":** The paper already handles this (Table 2 footnote: "We do not report SI-SDR results for SemantiCodec"). The remaining SI-SDR comparisons are appropriate for waveform-reconstruction codecs.
+- **"In-domain evaluation as a fatal flaw"** (Harsh Critic): The paper does evaluate on unseen languages (App. A.5) and unseen sequence lengths (App. A.6). The in-domain concern is real but falls at most to "minor"; it does not invalidate the main results, which are on the standard LibriSpeech test-clean benchmark used by all prior works cited.
 
-- **Strength Finder – "models will be released / open-source":** Kept as a strength since the code and model promise is explicitly stated (Section 1 and link provided).
+- **"Sliding window / RoPE interaction must be in main paper, not appendix"** (Harsh Critic): App. A.6 validates length generalization. This is an appendix-placement complaint, not a substantive flaw.
+
+- **"Clipping to [-1,1] lacks empirical estimate of occurrence frequency"** (Harsh Critic): This is a trivial implementation detail about a rare edge case; the mathematical guarantee that the output is within the training distribution is the relevant claim, which is established analytically in Sec. 3.2.1.
+
+- **"Ceiling log2 bitrate calculation vs. entropy-coded bitrates"** (Harsh Critic): The paper addresses entropy-coded bitrates in App. A.8. Criticism based on an appendix-stripped version does not apply.
+
+- **"Generalization behavior at longer sequences deserves more than appendix treatment"** (Harsh Critic): Pure appendix placement criticism; App. A.6 confirms the behavior, which is sufficient.
 
 ---
 
 ## Novel Insights
 
-The most genuinely novel element is the post-hoc residual FSQ decomposition: using the L = 2^n + 1 level constraint and the Minkowski-sum lattice structure to enable hierarchical residual quantization *after* training, with a mathematical guarantee that quantized latents stay within the training distribution. This addresses a real pain point in codec design — the inability to cheaply adjust bitrate post-training — and the mathematical exposition is clean. A secondary observation is that the ViT-style patching strategy (concentrating temporal downsampling at encoder/decoder boundaries rather than distributed across convolutional blocks) may be a general design principle worth exploring in audio autoencoders beyond this specific codec.
+The post-hoc residual FSQ decomposition (Sec. 3.2.1) is genuinely novel: the observation that the subset structure $\ell_{2^{n-1}+1} \subset \ell_{2^n+1}$ and the Minkowski sum construction guarantee that residually-decomposed latents lie within the training-distribution codebook is a mathematically clean result with direct practical impact. It enables a single model to serve multiple bitrate regimes and both discrete-token (autoregressive LM) and continuous (diffusion) generative pipelines, removing a longstanding barrier to deploying codecs in multi-modal pipelines without per-bitrate retraining. The interaction between quantization-noise training and this post-hoc flexibility — where noise training implicitly smooths the latent space enough that coarser decompositions remain within bounds — is an insightful and under-appreciated design choice.
 
 ---
 
 ## Suggestions
 
-1. **Address the scale confound explicitly:** Either provide a CNN baseline at ~950M parameters, or reframe the central claim as "scaling transformers achieves high-quality low-bitrate speech coding" (demonstrating the scaling route) rather than implying architectural superiority at matched scale. The former is more compelling scientifically; the latter is honest about what the experiments actually show.
-2. **Fix or reframe the subjective evaluation:** Either rerun with proper MUSHRA methodology (hidden anchor, screened participants) or describe the test as an "informal listening study following prior work conventions" and avoid using it as primary evidence for the abstract's "strongly outperform" claim.
-3. **Add an out-of-distribution evaluation split** to quantify the in-distribution advantage and validate claimed generalization (the cross-lingual experiments in Appendix A.5 are a good start but should include English out-of-domain speech).
+1. **Isolate the transformer-vs-CNN contribution**: Train a CNN codec at ~900M parameters with identical FSQ bottleneck, WavLM fine-tuning, and training data. Even a modest ablation (e.g., 250M CNN vs. 250M TAAE) would substantially validate the headline claim.
+2. **Improve MUSHRA methodology**: Rerun with ≥30 participants, at minimum include a hidden low-pass anchor, apply listener calibration (minimum attention check), and report 95% CIs or post-hoc statistical tests. The huge margins suggest the result will survive this; doing it properly removes a major vulnerability.
+3. **Add MOSNet saturation note to Table 2**: A one-sentence comment noting ceiling behavior would improve the table's interpretability and show methodological awareness.
+4. **Expand limitations section**: Explicitly acknowledge the 10–100× parameter count gap and the WavLM advantage as confounds alongside the data limitations already discussed.
 
 ---
 
 ## Score and Decision
 
-**Calibration anchors:**
+**Calibration anchors consulted:**
 
 | Paper | Path | Avg Score | Comparison |
 |---|---|---|---|
-| WavTokenizer | `/home/wg25r/review_agent/human_reviews/yBlVlS2Fd9.md` | 6.50 | Most similar: single-token audio codec, state-of-the-art claims, accepted poster. TAAE has more architectural novelty (transformer scale-up, post-hoc FSQ) and stronger objective margins, but also has larger scale confound. |
-| VChangeCodec | `/home/wg25r/review_agent/human_reviews/qDSfOQBrOD.md` | 5.75 | Rejected neural speech codec. Less novel than TAAE, narrower contribution. TAAE is clearly above this. |
-| DC-Spin | `/home/wg25r/review_agent/human_reviews/OW332Wh9S5.md` | 4.75 | Rejected speech tokenizer. Weaker methodology and contribution than TAAE. TAAE is well above this. |
-| HarmonyLM | `/home/wg25r/review_agent/human_reviews/mp8ZgMZ1RG.md` | 1.67 | Low-quality audio LM paper, clearly below TAAE. |
-| Zipformer | `/home/wg25r/review_agent/human_reviews/9WD9KwssyT.md` | 7.50 | Accepted oral, strong architectural contribution with well-controlled ablations. TAAE has a similar spirit (scaling transformers for audio) but lacks the controlled baseline comparisons that made Zipformer strong. |
+| WavTokenizer (Accepted Poster) | `yBlVlS2Fd9.md` | 6.5 | Most topically similar: single-token audio codec, MUSHRA test, state-of-the-art claims, similar methodology issues. TAAE has larger empirical margins, more novel FSQ contribution, but worse attribution entanglement. |
+| FSQ: VQ-VAE Made Simple (Accepted Poster) | `8ishA3LxN8.md` | 6.5 | Foundational FSQ paper that TAAE builds on; TAAE's contribution is larger in scope but builds on this method. |
+| Zipformer (Accepted Oral) | `9WD9KwssyT.md` | 7.5 | Transformer for speech, rigorously ablated with isolated architectural contributions. TAAE lacks this isolation. |
+| MAGNeT (Accepted Poster) | `Ny8NiVfi95.md` | 7.33 | Masked audio generation; strong empirical results with good methodological practice. Stronger attribution than TAAE. |
+| VoiceNoNG (Rejected) | `BVsFp5rQxd.md` | 3.5 | Low-scoring speech audio paper; weak contribution and unclear methodology. TAAE is far stronger empirically. |
+| VocalNoNG-level low anchor | `YTxx02MnTS.md` | 3.5 | Low-scoring vocoder; weak novelty. TAAE is clearly above this band. |
 
-**Reasoning:** The WavTokenizer (6.50, accepted poster) is the closest comparator. TAAE has more novelty per contribution — the post-hoc residual FSQ is technically original and the scale-up is first-of-its-kind — but faces a real unresolved confound (scale vs. architecture) and a methodologically questionable subjective test. The objective results in Table 2 are robust and represent genuine advances at the target bitrate range. The paper is clearly above the rejected codec papers (5.75 and below) and merits acceptance as a poster-level contribution. The scale confound and MUSHRA issues prevent a higher score. Placing at **6.5**, in line with WavTokenizer and slightly below Zipformer.
+**Assessment**: TAAE sits between WavTokenizer (6.5) and Zipformer/MAGNeT (7.3–7.5). It has larger empirical gains than WavTokenizer and a more elegant technical contribution (post-hoc residual FSQ), but shares the same MUSHRA methodology weakness. The attribution problem (multiple bundled contributions, no CNN-at-scale ablation) is more significant than anything in WavTokenizer and puts it below the Zipformer/MAGNeT band, which feature properly isolated contributions. The paper clearly belongs in the 6–7 range; I place it at **6.5**, aligning with WavTokenizer as the closest anchor, with a slight upward adjustment for the stronger empirical margins and more original technical insight.
 
-**Originality:** Solid — novel FSQ formulation and transformer-based codec at scale are genuine first contributions.
-**Importance:** High — low-bitrate speech coding is critical infrastructure for modern speech generation pipelines.
-**Claims vs. support:** Partially overstated — "strongly outperforms" in the abstract is too strong given the non-standard MUSHRA and scale confound.
-**Soundness of experiments:** Good for objective metrics; weaker for subjective.
-**Clarity:** Well-written and well-structured.
-**Value to community:** High — open-source code/models, novel FSQ approach, scaling insights.
+**Overall evaluation**: The paper makes a genuine contribution to the speech codec field with a novel FSQ decomposition technique, strong empirical results, and a well-engineered large-scale system. The inability to isolate the "transformer scaling" contribution and the methodological weaknesses of the subjective evaluation prevent a higher rating. These are not fatal — the objective improvements are real and large — but they leave the headline claim incompletely substantiated.
 
-**Final Score: 6.5 — Borderline Accept (Poster)**
+- **Originality**: Good — post-hoc residual FSQ is novel; transformer codec architecture is largely a scaled-up engineering effort.
+- **Importance of research question**: High — low-bitrate high-quality speech tokens are directly relevant to generative AI pipelines.
+- **Claims well-supported**: Partially — objective claims are well-supported; subjective and "transformer-scaling" claims are not.
+- **Soundness of experiments**: Mixed — objective evaluation is thorough; subjective evaluation is underpowered and non-standard.
+- **Clarity of writing**: Good — architecture is clearly described; contribution framing occasionally conflates multiple factors.
+- **Value to research community**: Solid — the FSQ decomposition technique and the scaling behavior are publishable contributions.
+
+**Decision: Accept (borderline/poster).**
 
 MY FINAL SCORE: <pineapple>6.5</pineapple>
 MY FINAL DECISION: <orange>Accept</orange>

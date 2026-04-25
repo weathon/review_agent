@@ -1,113 +1,96 @@
-Now let me search for calibration anchors to score this paper appropriately.Now I have enough information to write the final review.
+Now let me search for calibration anchors.Now I have enough context to write the final review. Let me synthesize everything carefully.
 
 ---
 
 ## Summary
 
-The paper introduces the Radial Basis Operator Network (RBON), a novel operator approximation scheme built on two single-layer RBF sub-networks (a branch net for function input and a trunk net for query locations), with weights computed analytically via the Moore-Penrose pseudoinverse. The paper extends the universal approximation theorem of Chen & Chen (1995b) to normalized RBONs (NRBON), introduces F-RBON for frequency-domain operation, and reports empirical results on three PDE benchmarks (Wave, Burgers, Euler-Bernoulli Beam) and one real-world scientific application (CO₂-to-temperature). The central claim is that RBON outperforms LNO, FNO, and DeepONet by several orders of magnitude in most cases.
+The paper introduces the Radial Basis Operator Network (RBON), a novel operator network built entirely from radial basis functions, with theoretical grounding from Chen & Chen (1995b). RBON uses K-means clustering to place RBF centers and the Moore-Penrose pseudoinverse to solve for weights in closed form — no gradient descent is required. The paper benchmarks RBON against LNO, FNO, and DeepONet on three PDE problems and a real CO₂-to-temperature mapping task, reporting that RBON variants achieve errors orders of magnitude smaller than competing methods in several settings.
 
 ---
 
 ## Strengths
 
-- **Genuine architectural novelty**: RBON is the first operator network explicitly derived from the RBF universal approximation theorem of Chen & Chen (1995b), extending the DeepONet paradigm (which was derived from the FNN UAT) to radial basis functions. This is a clean conceptual contribution (Section 2.1, Theorem 2.1 and Equation 2).
+- **Architecturally novel and compact RBF-based operator network (Section 2.1/2.2, Table 1):** RBON is a direct generalization of the Chen & Chen (1995b) RBF universal approximation theorem to the operator setting, analogous to how DeepONet extended the sigma-neuron theorem. This is a genuine and clean conceptual contribution. The implementation restricts both sub-networks to ≤15 nodes each (≤225 multiplier parameters), yet matches or beats DeepONet which uses "over 10,000 products between trunk and branch outputs" (Section 3.1.4).
 
-- **Clean theoretical extension**: Corollary 2.1.1 provides a correct and well-stated extension of the universal approximation result to normalized RBONs, using a natural re-weighting of the coefficients (Eq. 3-4). The proof sketch is straightforward and the corollary follows immediately, as claimed.
+- **Closed-form weight solution (Section 2.2):** Replacing iterative gradient descent with a single Moore-Penrose pseudoinverse solve is a real computational advantage. The paper notes that iterative least-mean-squares alternatives produce larger errors on average, motivating the closed-form choice.
 
-- **Extreme parameter efficiency**: RBON caps at 225 multiplier parameters (≤15 nodes per sub-network), yet achieves competitive or superior accuracy compared to DeepONet with >10,000 trunk-branch products (Section 3.1.4). This is a meaningful practical efficiency advantage worth highlighting.
+- **Competitive PDE results in several settings (Table 1):** On the Beam equation — reproduced from the LNO paper itself — RBON achieves OOD error of 1.5E-8 vs. LNO's 6.8E-3 and FNO's 1.5E-3. F-RBON achieves best-in-class ID and OOD error on the Wave equation (3.0E-6 ID, 8.6E-3 OOD). These are genuine results that indicate the method works.
 
-- **Genuinely rigorous OOD protocol for Burgers**: Training on sinusoidal initial conditions $u_0(x) = a\sin(\pi x)$ and testing on polynomial $u_0(x) = bx(x-1)$ (Section 3.1.2) is a more stringent cross-function-class OOD test than is common in the operator learning literature, and is an appropriate methodological advancement regardless of RBON's specific performance there.
-
-- **Code availability** at the anonymous repository enables reproducibility.
+- **Real observational data application (Section 3.2, Table 2):** Testing on Mauna Loa CO₂-to-temperature data using real physical measurements distinguishes the paper from purely synthetic PDE benchmarks. RBON achieves 0.07 L² relative error on local temperature prediction vs. LSTM (0.35-0.51) and LNO (0.94-0.95).
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-
-*None that fully invalidate the conceptual contribution, but see Major issues below which collectively raise serious doubts about the experimental narrative.*
+*None that outright invalidate the paper's core concept, but the combination of the two major issues below makes the headline quantitative claims unreliable.*
 
 ### Major
 
-- **Baseline configurations appear severely undertuned, undermining the main comparative claim.** DeepONet achieves 9.9E-1 (≈100%) relative error on both in-distribution and OOD Burgers data (Table 1). This is consistent with the network predicting the mean rather than the operator output. The paper mentions "early stopping significantly improved OOD errors" but the reported ID error of 9.9E-1 remains catastrophic — suggesting the DeepONet as implemented is not functioning as a proper baseline. Similarly, LNO achieves 5.6E-1 on the Wave equation in-distribution — essentially near-random prediction — despite being described as "the primary comparison" and "a benchmark standard" (Section 1.1). If the baselines are misconfigured, the orders-of-magnitude improvements in Table 1 are uninformative comparisons that tell us nothing about relative architectural merit. The paper provides no hyperparameters, architecture sizes, or training details for competing methods, making it impossible to assess fairness.
+- **K-means instability makes the headline quantitative claims statistically indefensible.** The paper itself acknowledges in Section 4 that "errors [can differ] by several orders of magnitude between runs of the K-means algorithm." Examining Table 1: RBON Beam (ID) reports a mean of 4.1E-8 with a 95% CI margin of error of **3.3E-6** — roughly 80× the mean. The abstract's headline claim of "less than 1×10⁻⁷ in some benchmark cases" is drawn from exactly this result. A point estimate whose confidence interval spans three orders of magnitude above and below it conveys no statistical information about the method's true capability. The proposed remedy — running K-means multiple times and picking the best — introduces selection bias and is described without specifying the number of runs or the exact selection criterion, rendering the results non-reproducible. This fundamentally undermines the quantitative case for the method.
 
-- **K-means instability fundamentally undermines reliability.** The paper explicitly states: "the majority of the variation in train/test error is mostly due to the varying results from the location parameters determined by the K-means clustering" and that "errors [can differ] by several orders of magnitude between runs" (Section 2.2 and Section 4). The proposed solution — "run K-means multiple times and select the configuration that minimizes overall within-cluster distances" — is an informal heuristic. Crucially, the reported results in Table 1 apparently reflect a selected K-means run, while competing methods receive no analogous best-of-$k$ treatment. This constitutes implicit hyperparameter tuning for RBON that is denied to baselines. The margins of error in Table 1 are also inconsistent: for the Beam RBON ID case, the mean is 4.1E-8 but the margin of error is ±3.3E-6 — two orders of magnitude larger than the mean — making the reported result statistically meaningless as a point estimate.
-
-- **The "first frequency-domain operator network" claim is overclaimed.** Section 1.2 states: "The RBON is the first network to successfully learn an operator entirely in both the time domain and frequency domain." However, as described in Section 2.3, F-RBON simply applies the FFT to the input data before running the standard RBON algorithm. No architectural modification specific to the frequency domain is introduced — it is preprocessing. Moreover, FNO (Li et al., 2021) — which the paper itself cites — is explicitly designed around Fourier-mode operations as a core component of its architecture, and LNO (Cao et al., 2024) operates in the Laplace domain. Claiming FFT-preprocessed RBF interpolation as the "first" frequency-domain operator network is incorrect and misrepresents prior work.
+- **Potentially misconfigured LNO baseline calls the "orders-of-magnitude" comparison into question.** LNO achieves 5.6E-1 in-distribution L² error on the Wave equation and 1.7E-1 on Burgers. These are effectively near-random-prediction errors for smooth, well-conditioned PDEs. The paper provides no LNO hyperparameters, training budget, number of parameters, or indication that the official implementation was used. If LNO is poorly configured, the "several orders of magnitude" improvement — which is the paper's primary competitive claim — is invalid. The same benchmark from Cao et al. (2024) should replicate well; unexplained 56% in-distribution error demands explicit justification.
 
 ### Minor
 
-- **The unexplained OOD < ID anomaly for the Beam equation.** RBON achieves 4.1E-8 ID error but 1.5E-8 OOD error (Table 1). Genuine generalization does not typically improve further from the training distribution. The most plausible explanations — that the OOD source function ($f = ae^{-x}$ vs training $f = ae^{-0.05x}$) happens to be simpler for the kernel to represent, or that this is an artifact of K-means run selection — are never discussed. For the paper's most extreme result, this is an important omission.
+- **Overclaimed novelty for frequency-domain learning.** Section 1.2 states RBON is "the first network to successfully learn an operator entirely in both the time domain and frequency domain." FNO's defining architectural feature is learning in Fourier space. The F-RBON's distinction is that it accepts complex-valued frequency-domain arrays as direct input, which is a different (and narrower) claim than stated. The current phrasing misrepresents what FNO already does and should be narrowed to something like "the first RBF operator network that natively handles complex-valued frequency-domain inputs."
 
-- **The weight-averaging step is ad-hoc and unjustified.** The implementation in Section 2.2 solves one weight vector $\xi_\ell$ per query point $y_\ell$, yielding $L$ weight vectors, then takes the element-wise average as the final weight vector $\xi$. No theoretical justification for this averaging is provided. Why is the average of query-point-specific weight vectors the correct approach? This affects every reported result and should be motivated or compared to alternatives (e.g., solving jointly for all query points).
+- **Weight-averaging heuristic lacks justification (Section 2.2).** The weight vector ξ is obtained by element-wise averaging of L weight vectors ξ_ℓ, each solved independently for a different query point. There is no theoretical justification for why averaging weights trained at different query locations produces a better shared weight vector than, e.g., using a single representative query location or solving a joint system. This step is central to the algorithm yet receives no analysis or ablation.
 
-- **Scientific overclaiming in the CO₂-to-temperature application.** The paper concludes that results from Section 3.2 "impl[y] a robust model capable of providing reliable future temperature projections based on various atmospheric CO₂ scenarios" (Section 3.2). A single-input model trained on CO₂ concentrations cannot isolate CO₂ effects from confounders it never observes. The claim that "the effects of other contributing elements are learned in the operator approximation" is unfounded — a model with no access to those elements cannot learn their individual contributions. The result demonstrates a useful predictive correlation, but the scientific interpretation should be more cautious.
+- **Framing the comparison without training cost disclosure.** RBON's "training" is a one-shot linear algebra solve on a system of size NM × J (where NM ≤ 225). Comparing raw accuracy against gradient-trained neural operators without disclosing wall-clock training times, sample complexity, or inference costs makes it impossible to contextualize the trade-offs. This is a framing gap rather than an invalid comparison, but it weakens the paper's ability to make a case for practical adoption.
 
-- **Limited benchmark scope.** Only three PDEs are tested (Wave, Burgers, Beam), all on simple 1D or 1+1D spatiotemporal domains with small training sets. The 225-parameter cap is an interesting constraint but also means the method is tested in a narrow regime. It is unclear how RBON scales as training set size or problem complexity grows (the pseudoinverse computation scales as $O(J \cdot M \cdot N \cdot L)$).
+- **CO₂-temperature scientific interpretation is overstated (Section 3.2).** The claim that results "impl[y] a robust model capable of providing reliable future temperature projections based on various atmospheric CO₂ scenarios" is not supported. The model was validated on held-out years of the same historical monotone trend, not on counterfactual CO₂ scenarios. CO₂ and global temperature are both monotonically increasing with seasonal modulation and high correlation with time, making this closer to smooth regression on a shared trend than a test of operator generalization.
 
 ### Trivial
 
-- None worth listing separately from the minor issues above.
+- **Corollary 2.1.1 is presented as a substantive extension but is immediate.** It follows directly from Theorem 2.1 by rescaling the coefficients to produce the normalized form. The result is valid but adds no non-trivial mathematical content beyond what is required to define NRBON.
 
 ---
 
 ## Nice-to-Haves
 
-- A comparison against other closed-form kernel-based operator methods (e.g., Gaussian process regression in function spaces) would help contextualize RBON's performance within its natural method class, in addition to comparisons with gradient-trained neural operators.
-- A scaling study showing how RBON accuracy and compute cost vary with training set size $J$ and number of RBF nodes would clarify the practical regime where RBON is advantageous.
-- Error maps over the space-time domain (rather than only scalar $L^2$ error) would reveal whether RBON errors are concentrated at boundaries, discontinuities, or late-time — useful for practitioners.
-- Reporting results across multiple K-means initializations with confidence intervals, or making the best-of-$k$ selection procedure explicit and applying it consistently across all methods, would substantially strengthen the reliability of Table 1.
+- A systematic study of K-means run-to-run variability (e.g., histograms or box plots of L² error over repeated runs per experiment) would tell readers which reported results are stable and which are incidental best-case picks. This is particularly important for the Beam and NRBON-Wave results.
+- Wall-clock training and inference comparisons would appropriately contextualize the closed-form vs. iterative trade-off.
+- An ablation of the weight-averaging step versus alternative pooling strategies would strengthen the methodological case.
+- Comparing RBON against kernel regression baselines (e.g., Gaussian process operator regression) would situate the method within its natural computational family.
 
 ---
 
 ## Removed Points
 
-*These points are flagged to be removed; treat them with caution.*
+*These points are flagged to be removed, treat them with caution.*
 
-- **"The comparison is structurally invalid because RBON is not a neural network"** (Harsh Critic, Point 1): REMOVED. RBF networks with analytically computed weights are a legitimate subclass of single-hidden-layer networks with a long history in machine learning. Comparing different approaches to the same operator approximation problem is not inherently invalid. The paper appropriately frames RBON as an operator network in the tradition of Chen & Chen (1995b). The concern about different training paradigms is *partially* valid (see Major weakness on baseline misconfiguration) but does not make the entire comparison framework invalid.
+- **"RBON comparison is 'structurally unfair'" (Harsh Critic #1 framing):** While training cost asymmetry is a real gap (kept as Minor weakness), the claim that this *invalidates* the benchmark framing is removed. The paper is presenting a closed-form method as an alternative to gradient-trained methods; pointing out it achieves lower error with less computation is the *point*, not a flaw. The concern is retained only as a framing gap (missing cost disclosure).
 
-- **"Near-zero errors on linear Beam equation are 'artifacts of pseudoinverse interpolation'"** (Harsh Critic, Point 2): PARTIALLY REMOVED / RETAINED AS MINOR. The paper itself notes "operator networks generally exhibit smaller errors for the Beam equation due to their ability to accurately represent linear operators" (Section 3.1.4), showing awareness that linear problems favor interpolation methods. The unexplained OOD < ID result is retained as a Minor weakness but framing it as "uninteresting" ignores that the result still demonstrates useful empirical performance.
+- **"Corollary 2.1.1 is false / circular" (Harsh Critic #2.1):** The corollary is mathematically valid (the normalized form's universal approximation follows by coefficient rescaling). It is minor in scope but not incorrect. Retained only as a Trivial note.
 
-- **"Burgers OOD framing overstates success"** (Harsh Critic, Section 1.2 note): REMOVED. RBON achieving 2.6E-1 on the cross-class Burgers OOD test is a genuine result. Whether it is "impressive" is a matter of framing, but the test protocol itself is a genuine contribution to OOD evaluation rigor.
+- **Strength: "First to learn in frequency domain" (Strength Finder #3):** Removed as a strength since this claim is overstated relative to FNO's established Fourier-domain operation. Retained as a Minor weakness on overclaimed novelty.
 
-- **Strength: "First operator network capable of learning in both time and frequency domain"** (Strength Finder, Point 3): REMOVED. As established in the Major weakness above, this claim is overclaimed given FNO's Fourier-mode architecture. The F-RBON variant is a reasonable engineering contribution but not a first.
-
-- **Strength: CO₂/temperature demonstrating "robust future projections"**: REMOVED/WEAKENED. The scientific significance is overstated, as detailed in the Minor weakness.
+- **Strength: "OOD generalization across entirely different function classes" as a standout result:** Weakened. On Burgers OOD, NRBON achieves 1.0E-1 while FNO achieves 1.7E-2 — FNO is 6× better. The paper presents this as "quite remarkable," but RBON is actually the weaker method here on this specific benchmark. The result is retained only as a demonstration that RBON does not catastrophically fail on function-class OOD, not as a best-in-class result.
 
 ---
 
 ## Novel Insights
 
-The most genuinely novel observation — which neither reviewer surfaced clearly — is that the RBON's analytical weight computation via pseudoinverse creates an implicit model selection problem: K-means run selection effectively becomes a critical hyperparameter analogous to neural architecture search, and without a principled selection criterion, the method's reported performance may reflect a lucky initialization rather than systematic superiority. This connects to a deeper question: can an operator approximation scheme whose performance varies by several orders of magnitude across random initializations be considered a reliable operator learner? The paper's best-run selection heuristic may actually be more principled than classical hyperparameter tuning (since it uses an unsupervised within-cluster distance criterion), but this needs formal analysis. More broadly, the paper opens a question about whether the closed-form, kernel-interpolation nature of RBON gives it a fundamental accuracy advantage over gradient-trained networks on smooth, low-dimensional operator problems — a question that cannot be answered with the current baselines.
+The most genuinely novel observation across the reviews is the combination of (1) closed-form RBF operator approximation as a valid, compact alternative to gradient-trained neural operators, and (2) the intrinsic K-means instability that makes the RBF center placement stochastic and potentially unstable. This tension — closed-form optimality of the *weights* given *fixed centers*, but combinatorial sensitivity to *which centers are chosen* — is the core statistical challenge for this class of method. Resolving this through stable center-selection strategies (deterministic initialization, spectral clustering, or regularized placement) rather than best-of-K-runs selection would be the key step needed to convert a promising architectural idea into a reliable method.
 
 ---
 
-## Suggestions
+## Calibration Anchors
 
-1. **Re-run all baselines carefully**: Report DeepONet, LNO, and FNO architecture sizes, hyperparameters, and training curves. Investigate and explain why DeepONet achieves 99% error on Burgers and LNO achieves 56% on Wave — and fix or acknowledge these configurations.
-2. **Report K-means variance honestly**: Show the distribution of errors across K-means runs (e.g., 10–50 random seeds), not just the best-run result. If the best-of-$k$ heuristic is used, state it explicitly and apply it consistently across all methods.
-3. **Narrow the "first frequency-domain" claim**: Replace with "the first RBF-based operator network applied in the frequency domain via FFT preprocessing" or similar.
-4. **Explain the OOD < ID anomaly for Beam**: Add analysis of why OOD performance exceeds ID performance for this linear problem.
-5. **Tone down CO₂/temperature scientific claims**: Present this as a demonstration of RBON's flexibility on real observational data, not as a validated climate forecasting tool.
+| Path | Avg Human Score | Comparison |
+|---|---|---|
+| `/home/wg25r/review_agent/human_reviews/UjQthmslFV.md` | 4.75 | Kernel Neural Operators — similar space (novel operator architecture, kernel-based, competitive benchmarks, unfair comparison concerns); RBON has worse statistical reliability issues, similar framing problems |
+| `/home/wg25r/review_agent/human_reviews/mt5NPvTp5a.md` | 5.75 | Orthogonal attention operator — neural operator paper with reasonable baselines and execution; clearly better experimental rigor than RBON |
+| `/home/wg25r/review_agent/human_reviews/0zZEbHLTwf.md` | 3.50 | DeepFDM — PDE operator with unfair comparison (used PDE structure against pure data-driven baselines); similar comparison framing issue but weaker architectural contribution than RBON |
+| `/home/wg25r/review_agent/human_reviews/DWUiUneKMI.md` | 3.00 | Hartley Neural Operators — PDE operator with limited scope, thin experiments; weaker than RBON overall |
+| `/home/wg25r/review_agent/human_reviews/2DbVeuoa6a.md` | 6.75 | Neural Spectral Methods — spectral domain PDE operator with solid experiments and theory; significantly better execution than RBON |
 
----
+**Reasoning:** RBON sits between the KNO paper (4.75) and the DeepFDM paper (3.5). Like KNO, it introduces a genuinely interesting operator architecture with competitive results, but has significant experimental reliability and comparison fairness issues. Unlike DeepFDM, RBON has a solid theoretical foundation (Chen & Chen theorem extension) and real results. The K-means instability acknowledged by the paper itself, combined with suspicious LNO baseline results and the overclaimed novelty, collectively make the quantitative case unreliable. This places the paper below the borderline (KNO at 4.75) rather than above it.
 
 ## Score and Decision
 
-**Calibration anchors:**
+The paper introduces a conceptually clean and novel operator architecture with genuine theoretical grounding and some compelling results. However, it has two major issues that cannot be resolved by rebuttal alone: (1) the headline quantitative claims rest on results with confidence intervals 80× their mean due to K-means instability that the paper itself acknowledges; and (2) the primary baseline (LNO) shows anomalously poor performance (~56% in-distribution error) without any explanation or hyperparameter disclosure, casting doubt on the "orders of magnitude" improvement claims. The overclaimed frequency-domain novelty and unjustified weight-averaging heuristic are additional concerns. Relative to the KNO paper (4.75, withdrawn/reject) which had similar comparison issues but cleaner statistics, and above the DeepFDM/Hartley papers (3.0-3.5) which had weaker contributions, I place this at **4.0**.
 
-| Paper | Avg Human Score | Comparison |
-|---|---|---|
-| wwJJUamHVp (FEONet) | 3.0 | Low anchor: fundamentally miscategorized contribution, weakly evaluated — more severe than RBON. |
-| Di3VLZHZdj (Fatigue/Operator Networks) | 4.0 | Low-medium anchor: application paper with missing baseline details, similar experimental weaknesses to RBON. |
-| UjQthmslFV (KNO) | 4.75 | Medium anchor: novel kernel operator idea with questionable baselines, limited experiments — most similar to RBON. |
-| 8OxL034uEr (MgNO) | 6.5 | High anchor: well-executed operator learning with solid theory and properly run baselines — significantly stronger than RBON. |
-| SyVPiehSbg (ActNet) | 7.5 | High anchor: strong theory + clean experiments, clearly above RBON. |
-
-RBON is closest to KNO (4.75): both introduce a novel single-architecture operator network from a classical approximation theorem, both claim significant outperformance of FNO/DeepONet, and both have questionable baseline configurations. RBON has additional problems beyond KNO — specifically the K-means variance issue rendering reported numbers unreliable, the overclaimed "first frequency-domain" novelty, and the suspicious margin-of-error statistics in Table 1 — which push it below KNO. On the other hand, RBON's theoretical contribution (Corollary 2.1.1) is clean and its OOD protocol is a genuine methodological contribution, preventing it from falling to the FEONet level (3.0).
-
-**Final score: 3.5** — the paper introduces a genuinely novel concept (RBF-based operator networks with analytic weight computation) with real theoretical grounding, but the experimental narrative is substantially undermined by likely misconfigured baselines, K-means-induced instability in reported results, and overclaimed novelty. Without convincing evidence that the comparative results are fair, the core empirical claim cannot be trusted.
-
-MY FINAL SCORE: <pineapple>3.5</pineapple>
-MY FINAL DECISION: <orange>Reject</orange>
+**MY FINAL SCORE: <pineapple>4.0</pineapple>**
+**MY FINAL DECISION: <orange>Reject</orange>**

@@ -1,84 +1,89 @@
-Now let me search for calibration papers.Now I have enough information to write the final consolidated review. Let me compile my findings.
+Now let me run calibration searches to position this paper relative to similar work.Now I have enough information to write the final review. Let me synthesize everything.
 
 ---
 
 ## Summary
-HyperDAS introduces a transformer-based hypernetwork for mechanistic interpretability that automates two previously manual steps in distributed alignment search (DAS): (1) selecting the token positions where a concept is realized in the residual stream, and (2) identifying a concept-specific linear subspace via Householder transformation. Evaluated on the RAVEL benchmark with Llama3-8B, HyperDAS-Asymmetric achieves an average Disentangle score of 84.7% vs. 76.0% for the MDAS baseline. The paper also provides thorough diagnostic analyses of training pathologies and layer-specific intervention behaviors, and honestly discusses faithfulness concerns.
+
+HyperDAS is a hypernetwork-based framework that automates two key components of Distributed Alignment Search (DAS): (1) token-position selection for intervention in the residual stream and (2) dynamic subspace identification via a Householder transformation. The hypernetwork takes a natural-language concept description and cross-attends to the target LLM's hidden states to produce concept-conditioned alignment weights and rotation matrices. Evaluated on the RAVEL benchmark with Llama3-8B, HyperDAS achieves 84.7% average Disentangle score, surpassing the prior SOTA of MDAS at 76.0%.
 
 ---
 
 ## Strengths
 
-- **SOTA performance on RAVEL with clear numerical gains (Table 3a):** HyperDAS-Asymmetric (per-domain) achieves 84.7% average Disentangle vs. 76.0% for MDAS, with particularly large gains on City (70.8/93.9 Causal/Iso vs. 55.8/77.9), Verb (93.0/98.9 vs. 74.3/79.6), and Occupation Iso (99.1 vs. 88.1). The single-model All-Domains variant also beats MDAS (80.7 vs. 76.0), showing the method generalizes without per-domain fine-tuning.
+- **State-of-the-art on RAVEL** (Table 3a): HyperDAS-Asymmetric achieves 84.7% average Disentangle score vs. MDAS's 76.0%, with consistent gains across four of five entity types, and marginal improvement on Nobel Laureates (75.25 vs. 74.75 Disentangle). Figure 3b further shows that HyperDAS dominates MDAS across all 16 evaluated layers.
 
-- **Layer-specific token selection reveals novel interpretable patterns (Figure 4):** HyperDAS consistently targets entity tokens in counterfactual inputs across all layers (83.5%→97.7%→99.8%), while base token targeting evolves from random/BOS at layer 7, to entity tokens at layer 15 (98.7%), and then selects JSON syntax tokens at layer 29. The deep-layer JSON syntax finding is a specific, testable new observation about how attribute information is distributed in Llama3-8B.
+- **Novel and principled Householder subspace construction** (Section 3.3, Eq. 10): Using a Householder reflection to rotate a fixed orthogonal matrix into a concept-conditioned orthogonal matrix is mathematically clean—it preserves column orthogonality by construction without auxiliary regularization, and is fully differentiable.
 
-- **Householder vector analysis provides genuine mechanistic insight (Figures 5–6):** The PCA clustering of Householder vectors shows per-attribute groupings (Figure 5), and the cosine similarity matrix (Figure 6) reveals that semantically related attributes cluster more tightly (e.g., Longitude–Latitude: 0.87, Country–Continent: 0.87) than unrelated ones—consistent with the interpretation that HyperDAS is identifying distinct concept-specific subspaces within a shared entity representation.
+- **Automated token localization with recovered heuristics** (Figure 4): At middle layers, HyperDAS selects entity tokens 97–99% of the time without being told to, recovering known heuristics from the literature. The deeper-layer behavior (syntax-token selection at L29) is a genuinely novel observation arising from learned localization that would be invisible to methods with fixed token heuristics.
 
-- **Memory efficiency advantage over MDAS at scale (Section 4.2):** For 23 RAVEL attributes, MDAS requires 110.3 GB vs. HyperDAS's 68 GB, since HyperDAS's hypernetwork is shared across concepts rather than requiring per-attribute models. This is a concrete, quantified practical advantage.
+- **Memory efficiency at scale** (Section 4.2): At 23 RAVEL attributes, HyperDAS uses 68 GB total vs. MDAS's 110.3 GB, since HyperDAS memory does not scale per-attribute. This is a concrete practical advantage, clearly quantified.
 
-- **Careful mitigation of faithfulness concerns through base-prompt masking and sparsity loss design (Section 4.2, Figure 7):** The paper identifies and closes a concrete failure mode—the hypernetwork conditioning on whether base and target attributes match rather than localizing the concept—via attention masking. The sparsity loss analysis (Figure 7) distinguishes three qualitatively distinct regimes (no sparsity, correct sparsity, excessive sparsity) and explains why each fails or succeeds, which is a more informative diagnostic than typical hyperparameter ablations.
+- **Masking strategy preventing trivial shortcut** (Section 4, "Masking of the Base Prompt"): Masking base-prompt attribute tokens to prevent the hypernetwork from conditioning on base-vs.-target attribute matching is a non-obvious design insight that directly closes a degenerate failure mode.
+
+- **Sparsity loss analysis** (Figure 7): The clear three-regime analysis (no sparsity → many-to-one collapse; correct sparsity → learned localization; excessive sparsity → model editing) provides useful design guidance for future work using soft-to-hard discretization in training.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-None.
+*None.*
 
 ### Major
 
-- **Confounded comparison prevents clean attribution of gains to automated token selection.** HyperDAS and MDAS differ simultaneously on at least three axes: (a) token selection (learned vs. fixed last entity token), (b) training objective (single CE + sparsity loss vs. MDAS's multi-task causal objective), and (c) model capacity (8-block transformer hypernetwork + Householder subspace vs. a simpler rotation matrix). The paper's central claim is that *automating token-position search* is valuable, but no ablation holds model capacity and training objective fixed while varying only token selection. The natural control—HyperDAS architecture with fixed token positions (e.g., last entity token, as MDAS uses)—is absent. Without this, it is impossible to determine how much of the ~8.7-point gain comes from automated localization versus increased model capacity or loss differences. This is the primary methodological gap in the paper.
+- **Symmetric All-Domains variant catastrophically collapses — and this goes unexplained.** Table 3a shows Symmetric All Domains achieving Causal scores of 16.8%, 2.0%, 6.1%, 21.6%, and 13.6% — a pattern consistent with the model defaulting nearly always to the [SELF] row (never intervening), while achieving near-perfect Iso scores (94–99%). The RAVEL Disentangle average of 54.8% obscures a complete causal failure. The paper presents this result with no diagnosis. Section 4.2 discusses sparsity-loss pathologies and asymmetric token selection, but neither explains why the Symmetric + All-Domains combination causes such complete failure. If this variant breaks due to a conflict between symmetry enforcement and multi-domain prompt diversity, or due to sparsity-loss dynamics at scale, that explanation is absent. Without it, readers cannot assess when to trust HyperDAS variants and what the condition for stable training is.
 
-- **Symmetric All-Domains model collapse is unexplained, creating a tension with the faithfulness narrative.** The paper argues in Section 4.2 that symmetric localization (same token for "get" and "set" operations) is more principled for faithful interpretation. Yet the Symmetric All-Domains model catastrophically fails: Causal scores of 16.8 (City), 2.0 (Nobel), 6.1 (Occupation), 21.6 (Physical Object), 13.6 (Verb), averaging to just 54.8 Disentangle—far below even the MDAS baseline (76.0). The per-domain Symmetric model barely edges MDAS (76.9 vs. 76.0). The method that actually works (Asymmetric) selects different token positions for base vs. counterfactual prompts—a property the paper labels an "interesting finding"—but this means the method is not localizing a stable concept at a consistent position, which undermines the faithfulness argument. The paper acknowledges this tension but offers no explanation for the multi-domain collapse and no architectural remedy.
+- **Missing ablation isolating token-localization from subspace-identification contributions.** HyperDAS differs from MDAS in at least three ways: (a) automatic token selection vs. fixed last-entity-token heuristic, (b) dynamic Householder subspace vs. fixed per-attribute subspace, and (c) ~2.4× higher compute budget. No experiment holds two of these fixed while varying the third. The paper's framing emphasizes token localization as a core innovation, and the layer-dependent localization analysis (Section 4.1) is interesting precisely because it attributes behavior to the learned alignment. Yet there is no quantitative evidence linking improved token localization to the benchmark gain. A "fixed-last-entity-token + HyperDAS subspace" ablation vs. "HyperDAS tokens + MDAS-style subspace" ablation is the most important missing experiment.
 
 ### Minor
 
-- **"Best layer between 10–15" selection procedure not fully specified (Table 3a caption).** The paper states results are from "the best layer between 10 and 15" for each method, but does not explicitly state whether this selection is made on held-out validation data or on test data. If test data was used for layer selection, the comparison is subtly optimistic. This should be clarified.
+- **No empirical faithfulness test.** Section 4.2 devotes considerable space to the concern that HyperDAS "injects information rather than faithfully interpreting it." The response is architectural and design-based (Householder orthogonality, sparsity loss, base-prompt masking), which is reasonable, but purely qualitative. The paper identifies the right question but does not answer it empirically. A comparison of HyperDAS-selected tokens/subspaces against DAS-identified tokens/subspaces on attributes held out from training, or checking whether HyperDAS-selected positions yield similar counterfactual outputs as DAS-found positions, would directly address this. The paper flags this appropriately as an open problem, but its prominence in the framing (abstract) warrants more than design reasoning.
 
-- **Multi-token selection (53% of cases) lacks follow-up analysis.** Section 4.2 states that HyperDAS selects multiple intervention tokens 53% of the time. This is noted as a "finding," but the paper does not analyze how multi-token versus single-token selections correlate with Disentangle, Causal, or Iso scores. Understanding this trade-off would clarify whether multi-token selection reflects genuine multi-site encoding or is an optimization artifact—especially relevant given the faithfulness discussion.
+- **Layer selection remains manual.** The paper localizes concepts "within the residual stream of a fixed layer" and reports results from "the best layer between 10 and 15." While the "Towards Automating" framing is appropriately hedged, the introduction positions HyperDAS against a "brute-force search through potential hidden representations" — which in practice involves both layer and token search. HyperDAS automates two of the three key search dimensions (token position and subspace direction), but layer remains a post-hoc selection. This should be stated more explicitly in the paper to avoid misleading readers. It is not a fatal flaw but it does limit the scope of the automation claim.
 
-- **Single Householder step is not motivated for high-dimensional subspaces.** Section 3.3 uses a single Householder reflection to transform a fixed initial matrix $\mathbf{R}^l$ into a concept-specific subspace $\mathbf{R} = \mathbf{R}^l \mathbf{H}$. A single Householder transformation reflects across one hyperplane and can change at most one pair of directions. For a 128-dimensional subspace within a 4096-dimensional ambient space, this may not adequately cover the space of possible concept-specific subspaces. The paper does not motivate why one step is sufficient, though the empirical results suggest it works in practice.
+- **Single target model.** All experiments use Llama3-8B. Given that the paper claims to introduce a general methodology for automating interpretability, one additional model (even a smaller one) would significantly strengthen the generality claim. The limitation is acknowledged in the conclusion, which is appropriate, but weakens the scope of the conclusions.
 
 ### Trivial
-None substantive beyond what is noted above.
+
+- **Householder cosine similarity interpretation.** Figure 6 shows Country–Timezone similarity of 0.84, Country–Longitude of 0.69. The Latitude–Longitude similarity of 0.97 is cited as evidence of "highly similar subspace." The baseline for comparison (would a randomly initialized HyperDAS produce similarly high cross-attribute similarities?) is not provided, making it hard to calibrate how separable the learned subspaces actually are.
 
 ---
 
 ## Nice-to-Haves
 
-- **Ablation with fixed token positions** using the full HyperDAS architecture would directly test whether automated localization contributes independently of model capacity. Even a subset of RAVEL domains would be informative.
-- **Transfer to a second target model** (e.g., Mistral-7B or GPT-2 for ground-truth structure known tasks) would substantially strengthen generalization claims beyond the current single-model evaluation.
-- **Out-of-distribution evaluation** on entity types not seen during training would assess whether the hypernetwork generalizes to new domains or memorizes RAVEL structure.
-- **Intervention on Longitude subspace to see if it affects Latitude** would test whether the high Householder vector similarity (0.87) between those attributes reflects genuine shared encoding or insufficient sensitivity.
+- A per-example case study showing HyperDAS-selected tokens vs. MDAS's last-entity-token heuristic on specific examples where the heuristic is known to fail would ground the token-localization contribution concretely. Figure 4 shows aggregate statistics but a qualitative case study would be more persuasive.
+- Layer selection automation (hierarchical HyperDAS) is the natural next step to complete the automation story and would close the gap between the title and the contribution.
+- Evaluation on a second LLM would substantially strengthen generality claims.
 
 ---
 
 ## Removed Points
-*These points are flagged to be removed; treat them with caution.*
 
-- **"No comparison to exhaustive DAS"** (Harsh Critic): Computationally infeasible by design—exhaustive search is exactly what HyperDAS aims to replace. Demanding exhaustive DAS as an evaluation baseline contradicts the stated motivation of the paper. Removed as a strawman.
-- **Claim about column-wise softmax contradicting sparsity loss** (Harsh Critic): The paper states "column-wise softmax G = ColumnSoftmax(G^i)" and Equation 13 penalizes row-wise sums. The critic claims these contradict each other, but this appears to be a notation ambiguity. The underlying logic (softmax normalizes one direction, sparsity loss constrains the orthogonal direction) is coherent given the paper's description, and the empirical analysis in Figure 7 confirms correct behavior. This is a formatting/notation ambiguity at best. Removed as a misreading.
-- **Layer 29 absent from Table 3a** (Harsh Critic): Layer 29 is discussed in Section 4.1 and Figure 3b as part of a qualitative layer-behavior analysis—it is not claimed to be the best-performing layer. Not including it in Table 3a (which reports best-layer results for benchmark comparison) is correct practice. Removed as a non-issue.
-- **"HyperDAS selects multiple tokens 53% of the time and this is a faithfulness concern"** (Harsh Critic raises as inconsistency): The paper honestly raises this tension itself. The concern is already present and acknowledged; the critic duplicating it as a separate point adds no new information. Kept only in the main Minor section above with a request for more analysis.
-- **Claim Longitude–Latitude cosine similarity is 0.97** (Harsh Critic): The actual table value is 0.87 (Figure 6). The 0.97 figure appears in the alt-text description in the parsed document, which is a PDF parser artifact. The underlying point (high similarity between these two attributes) is valid at 0.87 but less dramatic. The 0.97 number is not the actual paper value and was removed from the analysis accordingly.
+*These points are flagged to be removed — treat them with caution.*
+
+1. **Harsh Critic: "The claim 'outperforms MDAS across all entity splits' is incorrect."** The paper claims HyperDAS-Asymmetric outperforms MDAS across all entity splits in Disentangle score. Verifying Table 3a: Nobel Laureate Disentangle = (55.4+95.1)/2 = 75.25 vs. MDAS = (56.0+93.5)/2 = 74.75. HyperDAS-Asymmetric does technically win on Disentangle (the paper's primary metric), even though Causal alone is marginally lower. The claim is technically accurate. **Removed as a mischaracterization.**
+
+2. **Harsh Critic: "Per-domain training requires five models vs. MDAS's one — unfair comparison."** The paper explicitly reports both the All-Domains (single-model) and Per-Domain (five-model) variants. The All-Domains HyperDAS (80.7%) still beats MDAS (76.0%), so the SOTA claim is not dependent on the per-domain advantage. Furthermore, using more specialized models to prove a stronger point (per-domain beats MDAS more clearly) is intentionally favorable to the authors, not inflated unfairly. **Removed as unfair criticism per rules.**
+
+3. **Harsh Critic: Questioning expressivity of a single Householder reflection.** The claim that a single Householder reflection may be insufficient for large subspace rotations is theoretically speculative and not grounded in observed failure modes. The empirical results (SOTA performance, well-clustered Householder vectors in Figure 5) do not support this as an active failure. **Removed as speculative.**
+
+4. **Strength Finder: "Discovery of novel intervention sites is a faithfulness-validated finding."** The claim that syntax tokens "store attributes" as validated by HyperDAS is flagged by the paper itself as potentially confounded by the faithfulness concern. A strength about a finding that the paper itself frames as possibly a "hack" is misleading. **Moved to Minor weakness category instead.**
+
+5. **Harsh Critic: The hypernetwork uses Llama3-8B token embeddings, limiting transferability.** True but this is a natural architectural choice for a method designed to interpret a specific target model, and the paper does not claim cross-model transfer as a contribution. **Removed as scope creep.**
 
 ---
 
 ## Novel Insights
 
-The most genuinely novel observation—one that goes beyond the paper's headline benchmark improvement—is the layer-stratified token selection finding (Figure 4): HyperDAS selects JSON syntax tokens (e.g., `{`) at deep layers (Layer 29) as intervention sites, rather than entity tokens. This runs counter to the dominant assumption in knowledge editing and localization that entity information resides at entity tokens, and is specific enough to be tested independently. Combined with the Householder vector similarity analysis (Figure 6), which shows geographically correlated attributes (Latitude/Longitude, Country/Continent) share more similar subspaces than unrelated ones, the paper provides a data-driven window into how Llama3-8B distributes attribute information across positions and layers.
+The most genuinely novel observation in the paper is the layer-dependent token selection behavior (Figure 4): at shallow layers, HyperDAS's localization is nearly random; at middle layers (~L15), it converges to the standard last-entity-token heuristic; at deep layers (~L29), it begins selecting JSON syntax tokens and other structural positions. This suggests that attribute information migrates from entity representations toward structural/syntactic positions at deeper layers — a finding that, if further validated for faithfulness, could reshape assumptions in knowledge editing and probing work that fix intervention sites to entity tokens. The ability of an end-to-end trained architecture to discover this pattern without being told is itself an argument for automation in interpretability.
 
 ---
 
-## Evaluation on Key Axes
+## Suggestions
 
-- **Originality:** Moderate-to-high. Combining hypernetwork-based token selection with Householder subspace construction for end-to-end DAS is a genuinely novel architectural contribution.
-- **Importance of research question:** High. Automating token-position search in mechanistic interpretability addresses a real bottleneck.
-- **Claims well supported:** Partially. The SOTA result is well-supported numerically, but the attribution of that result specifically to automated localization is not cleanly supported due to the missing fixed-token ablation.
-- **Soundness of experiments:** Moderate. Experiments are carefully done for the RAVEL benchmark, but generalization beyond Llama3-8B and RAVEL is not tested.
-- **Clarity of writing:** Good. The paper is unusually transparent about failure modes and limitations.
-- **Value to research community:** Moderate-to-high. The method, analysis, and findings (especially layer-specific behaviors) are practically useful to the mechanistic interpretability community.
+1. **Ablation: Fixed token (MDAS-style) + HyperDAS subspace vs. HyperDAS token + fixed subspace** — run both and quantify which component drives the 8.7 pp gain over MDAS. This is the single highest-impact experiment.
+2. **Diagnose the Symmetric All-Domains collapse** — at minimum, add a targeted discussion of why this variant fails. Even a brief qualitative analysis (does it always select [SELF]? does it degrade under specific prompt formats?) would help readers know when to avoid this variant.
+3. **Quantify faithfulness empirically** — compare HyperDAS-selected token positions with DAS-found positions on a held-out attribute to test whether the localization is genuinely discovering model-internal structure.
 
 ---
 
@@ -86,22 +91,23 @@ The most genuinely novel observation—one that goes beyond the paper's headline
 
 **Calibration anchors:**
 
-| Paper | Path | Avg Score | Comparison to HyperDAS |
+| Paper | Path | Avg Score | Comparison |
 |---|---|---|---|
-| Sparse Feature Circuits (Oral) | I4e82CIDxv.md | 8.00 | Broader scope, comprehensive ablations, cleaner attribution of contributions; HyperDAS is below this tier |
-| Not All LM Features Are 1D Linear | d63a4AM4hb.md | 7.00 | Similar: novel technical method on LMs with SOTA results; HyperDAS has the confounded-ablation gap that this paper avoids |
-| Principled Evaluations of SAEs | 1Njl73JKjB.md | 7.00 | Similar: principled interpretability methodology, well-evaluated; comparable scope but that paper does not have a confounded-ablation problem |
-| Mechanistic Interpretability Identifiable | 5IWJBStfU7.md | 7.00 | Novel framing with good analysis, accepted as poster; HyperDAS is empirically stronger but has the missing ablation |
-| Towards Unifying Interpretability (Reject) | uOrfve3prk.md | 5.25 | Similar motivation to HyperDAS but less focused contribution; HyperDAS is clearly above this |
-| Causal Interventions in Latent Language (Reject) | fSbPwHjdDG.md | 3.00 | Rejected; much weaker: causal claim not adequately supported. HyperDAS is substantially above this |
-| Meta-Models for Automated Interpretability (Reject) | fM1ETm3ssl.md | 3.00 | Conceptually similar (automated interpretability via meta-model) but far weaker execution, limited experiments, no rigorous eval. HyperDAS is substantially stronger. |
+| Towards Meta-Models for Automated Interpretability | fM1ETm3ssl | 3.0 | Same area (automating interpretability), but proof-of-concept with limited results; HyperDAS is substantially stronger with SOTA benchmark results and a principled architecture |
+| Llamas think in English (causal interventions) | fSbPwHjdDG | 3.0 | Uses causal interventions on LLMs but narrow contribution and weak analysis; HyperDAS has much stronger results |
+| Unifying Interpretability and Control | uOrfve3prk | 5.25 | Evaluates interpretability methods with intervention; similar scope, similar level of execution quality |
+| Mechanistic Permutability | MDvecs7EvO | 6.5 | Mechanistic interpretability with novel matching method on Gemma 2; comparable contribution level, somewhat more thorough |
+| Towards Principled Evaluations of SAEs | 1Njl73JKjB | 7.0 | Principled interpretability evaluation; more thorough ablations and multi-model coverage |
+| Sparse Feature Circuits | I4e82CIDxv | 8.0 | Strong oral; thorough methodology, multiple models, downstream applications; clearly stronger than HyperDAS |
 
-HyperDAS sits above the medium tier (5.25–5.75) due to genuine SOTA results, solid diagnostic analysis, and technically sound architecture. It falls short of the 7.0–8.0 tier due to the missing token-selection ablation (the core contribution is not cleanly separable from confounds) and the unexplained symmetric collapse. I place it at **5.5**: stronger than borderline papers with mixed results, but below the accepted posters that have clean attribution of contributions.
+HyperDAS clearly outpaces the 3-score proof-of-concept papers with genuine SOTA results and a novel architecture. It falls below the 7-8 band primarily due to: the unexplained Symmetric All-Domains failure, missing component ablation, single model coverage, and unresolved (by experiment) faithfulness question. It sits most naturally near the 5.25–6.5 range. The SOTA result and novel Householder mechanism push it above borderline; the missing ablation and unexplained failure mode pull it back from 6.5. I position it at **5.5**, a borderline-to-weak-accept, reflective of a solid, publishable contribution with meaningful open questions.
 
-**Decision:** Borderline. The paper makes a real contribution and the analysis is careful and honest. However, the missing ablation means the headline claim—*automated token selection drives performance*—cannot be verified from the experiments as presented. If the key ablation (fixed-token HyperDAS) were added and showed a gap, this would be a clear accept. Without it, the work demonstrates that a more powerful model achieves better results, which is a weaker and less novel finding.
-
-## Score and Decision
-**Score: 5.5**
+**Originality:** Moderate-to-high. The hypernetwork-based DAS automation is novel, and the Householder subspace construction is technically elegant.  
+**Importance of research question:** High. Automating interpretability is a central challenge.  
+**Claims supported by evidence:** Partially. SOTA claim is well-supported; the "automating interpretability" framing slightly overstates coverage; faithfulness claim is not empirically demonstrated.  
+**Soundness of experiments:** Moderate. RAVEL results are convincing, but missing ablation and single model limit confidence.  
+**Clarity of writing:** Good. The method is clearly described and design choices are motivated.  
+**Value to the research community:** Moderate-to-high. Sets a new benchmark baseline and introduces a reusable architecture for automated feature localization.
 
 MY FINAL SCORE: <pineapple>5.5</pineapple>
-MY FINAL DECISION: <orange>Reject</orange>
+MY FINAL DECISION: <orange>Accept</orange>

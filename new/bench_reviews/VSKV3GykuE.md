@@ -1,24 +1,22 @@
-Now let me do calibration searches to properly score this paper.Now I have enough to write the final review.
-
----
+Now let me search for calibration anchors.Now I have enough information to write the final review. Let me synthesize.---
 
 ## Summary
 
-RAC-LoRA proposes a theoretically grounded low-rank adaptation framework that fixes one of the two LoRA matrices randomly and trains the other, converting the otherwise intractable bilevel LoRA optimization into a projected gradient descent problem admitting standard convergence analysis. The paper proves O(1/T) sublinear rates for smooth non-convex objectives and linear rates under the PL condition, demonstrates that LoRA and COLA can diverge on a concrete quadratic example, and extends the framework to federated learning.
+RAC-LoRA proposes a new parameter-efficient fine-tuning framework that chains randomized asymmetric LoRA blocks, fixing one matrix randomly per step and optimizing only the other. The key insight is that this reduces each chain step to a randomized preconditioned gradient descent update on the original smooth loss, enabling the first provably convergent LoRA-type method that actually models low-rank updates (as opposed to COLA's theory which replaces them with full-rank updates). The paper proves O(1/T) convergence to a stationary point in the non-convex setting and linear convergence under the Polyak–Łojasiewicz (PL) condition, covering GD, SGD, Random Reshuffling, and a federated learning extension.
 
 ---
 
 ## Strengths
 
-- **Counterexample genuinely motivating (Figure 1, Eq. 2):** The 3×3 quadratic example with M = Diag(10, 1, …, 1) concretely and reproducibly shows that LoRA and COLA diverge at the theoretical step size 1/L, while AsymmLoRA converges to a suboptimal stationary point. This is a real negative result that directly motivates the work.
+- **Concrete counterexample motivating the framework (Section 3, Figure 1):** The 3×3 quadratic with M = Diag(10,1,...,1) cleanly and reproducibly shows that LoRA and COLA diverge at the theoretically correct step size η = 1/L, while AsymmLoRA converges to a sub-optimal stationary point. This is the strongest motivating piece of the paper.
 
-- **Key theoretical insight: asymmetric design yields projected GD (Section 5.1, Eq. 3–4):** Fixing one matrix randomly reduces the subproblem to a convex quadratic in the trainable matrix, whose minimizer takes the closed-form Â = −η(B_S^⊤B_S)†B_S^⊤∇f(W). This makes the outer update W^{t+1} = W^t − γH∇f(W^t) with H an orthogonal projection — a clean connection to sketched/projected gradient descent that is the correct way to analyze LoRA-style methods.
+- **First provably convergent LoRA-type method that preserves low-rank structure (Theorems 5.3 and 5.5):** Section 2.2 correctly identifies that COLA's existing theory replaces low-rank optimization with a full-rank ΔW analysis, making it irrelevant to what the algorithm actually does. RAC-LoRA's convergence proof works directly in the (B_S, Â) parameterization. Theorem 5.3 gives E[‖∇f(W̃^T)‖²] ≤ 2(f(W^0)−f*) / (λ_min^H γ T) and Theorem 5.5 gives linear convergence under PL—both with explicit dependence on rank through λ_min^H = r/n under isotropic sampling.
 
-- **Explicit convergence rates recovering classical GD at full rank (Theorems 5.3 and 5.5):** Setting λ_min^H = 1 recovers standard GD rates; setting λ_min^H = r/n for isotropic distributions recovers the correct rank-scaled bound. The machinery is self-consistent and the rates are verifiable.
+- **Remark after Assumption 5.1 (Section 5.2):** The derivation that isotropic sampling gives E[H] = (r/n)I via rotational invariance is unusually concrete, provides an easily satisfiable sufficient condition, and makes the convergence rate's dependence on rank directly interpretable. Setting r = n recovers standard GD.
 
-- **MNIST chaining experiment (Table 3):** With the same 133 trainable parameters, RAC-LoRA achieves 92.0% vs. AsymmLoRA's 62.3% (Gaussian A setting), and with 912 parameters achieves 96.1% vs. 81.6%. This is the paper's clearest empirical evidence that chaining the asymmetric update substantively helps, and the comparison is fair (matched budget, matched parameters).
+- **Table 3 (MNIST, Section 6.2.2):** By matching trainable parameter budgets and intentionally restricting capacity (rank 1, pre-train on digits 0–4, fine-tune on 5–9), the MNIST experiment isolates the effect of chaining. RAC-LoRA (Gaussian/Zero) achieves 92.0% vs. AsymmLoRA's 62.3% at identical 133-parameter budget—a 30-point gap. This is the most unambiguous empirical evidence that the chaining procedure delivers genuine benefit.
 
-- **Breadth of theoretical coverage (Table 1):** The framework analyzes GD, SGD, Random Reshuffling, and a federated variant (Fed-RAC-LoRA), both under non-convex and PL conditions — a comprehensive theoretical contribution for a single paper.
+- **Broad optimizer and setting coverage (Table 1):** Results for GD, SGD, Random Reshuffling, and Fed-RAC-LoRA under both non-convex and PL regimes provide a complete theoretical picture.
 
 ---
 
@@ -29,85 +27,74 @@ None.
 
 ### Major
 
-- **Practical algorithm (AdamW) diverges from the analyzed algorithm (GD/SGD/RR) — no formal justification for this substitution.** Algorithm 1 explicitly allows "any iterative solver" for the subproblem, and the paper analyzes GD, SGD, and RR (Appendix C–E). In practice, both experiments (RoBERTa/GLUE and MNIST, Sections 6.2.1–6.2.2) use AdamW with 10 epochs per block. AdamW is not analyzed anywhere in the paper. Unlike standard GD, AdamW applies adaptive per-parameter second-moment scaling and decoupled weight decay, which fundamentally changes the update trajectory relative to the analyzed closed-form projective step. There is no formal bound or informal argument guaranteeing that the approximate inner-loop solution via AdamW leads to the same guarantees as the analyzed GD step. The experiments therefore validate a heuristic, not the proven algorithm. This gap limits the extent to which the theory is "supported by experimental results" as claimed in the abstract.
+- **NLP experiments are empirically unconvincing and the LoRA baseline appears misconfigured.** Table 2 is the paper's main real-world benchmark. RAC-LoRA averages 77.0 across four GLUE tasks, below both LoRA (78.5) and COLA (77.6). More critically, the authors' LoRA replication achieves 75.2 on RTE, compared to 86.6 in the LoRA* row (taken directly from Hu et al., 2021). This 11-point gap on a single task is large enough to suggest that the authors' experimental setup is not replicating the baselines correctly—different epoch counts (100 vs. task-specific 30–80), learning rate schedules, or rank settings. Because all comparisons in Table 2 (including COLA and RAC-LoRA) are run under the same potentially suboptimal configuration, the validity of the relative comparisons is compromised. The paper acknowledges underperformance candidly, but the explanation ("these tasks don't require extra capacity") is post-hoc and not validated by any diagnostic.
 
-- **Primary NLP results underperform plain LoRA (Table 2).** RAC-LoRA with 10 chains × 10 epochs achieves an average GLUE score of 77.0, compared to 78.5 for locally reproduced LoRA (1 chain × 100 epochs) and 82.8 for Hu et al.'s LoRA. The paper explains this by asserting the GLUE tasks are "easy" and a single LoRA is "already enough to obtain performance close to that of FPFT." While this framing is plausible, it is circular: the benchmark was chosen by prior work (AsymmLoRA, COLA) as the standard evaluation, and the paper's explanation amounts to claiming the method only helps where single-block LoRA is clearly insufficient. This regime is never precisely characterized, and no standard NLP benchmark is offered where RAC-LoRA is clearly superior to LoRA.
+- **No experiments at scales where LoRA is practically deployed.** The largest model tested is RoBERTa-base (125M parameters). The paper's motivating application is LLM fine-tuning, but no experiment touches 1B+ parameter models, instruction tuning, commonsense reasoning, or code generation—the settings where LoRA is most practically relevant. Without at least one demonstration that chaining improves over single-block AsymmLoRA in an NLP setting where FPFT clearly outperforms LoRA, the core empirical premise of the paper (RAC-LoRA bridges LoRA and FPFT) has no real-world anchor beyond a contrived MNIST split.
 
 ### Minor
 
-- **"Bridge to FPFT" claim is only partially supported.** The Remark after Assumption 5.1 correctly computes λ_min^H = r/n for isotropic distributions, and Section 6.1 (linear regression) explicitly notes "convergence speed is proportional to r/n." This degradation is therefore acknowledged. However, the practical implication — that for typical LoRA settings (n ~ 4096, r = 2–8) the bound is hundreds to thousands of times looser than standard GD — is not discussed in the context of the "bridge to FPFT" framing. Given realistic dimensions, the chaining required to match FPFT convergence speed could be prohibitively long. The abstract and introduction should more carefully qualify what "bridge" means given this penalty.
+- **Abstract overclaims convergence guarantee without qualification.** The abstract states "We provide provable guarantees of convergence to the same solution as FPFT" without qualification. In the general non-convex setting, Theorem 5.3 only guarantees convergence to a stationary point (E[‖∇f‖²] → 0), which may be a local minimum or saddle point far from FPFT. Convergence to f* (same as FPFT) is only established under the PL condition (Theorem 5.5). The paper's contribution bullet in Section 2.3 correctly qualifies this distinction, but the abstract creates a misleading impression of the general result.
 
-- **Fed-RAC-LoRA is listed as a contribution but has no experiments.** Section 2.3 and the abstract mention federated learning as a contribution; the algorithm (Algorithm 2) and theory (Appendix F) are provided. But no federated experiments appear anywhere in the paper. For a system-level contribution, the absence of empirical validation is a notable gap.
+- **No explicit connection to sketch-and-project gradient descent literature.** The RAC-LoRA update W^{t+1} = W^t − γ H_B^t ∇f(W^t) (Equation 3) with a random projection matrix H_B^t is structurally identical to sketch-and-project gradient descent. The convergence rates in Theorems 5.3 and 5.5 (O(1/T) non-convex, linear under PL, with rate degraded by λ_min^H = r/n) parallel known results in that literature. The paper does not position its theoretical contribution relative to this body of work or articulate what mathematical novelty the theorems add beyond the interpretation of LoRA as randomized projection descent. If the novelty is primarily the connection itself, that remains a genuine conceptual contribution but should be framed explicitly.
 
-- **Comparison scope in Table 2 is limited.** COLA and RAC-LoRA are run for 10 chains × 10 epochs while LoRA* from Hu et al. uses a different training budget (30–80 epochs per task). The authors note this (asterisk in the caption), but do not attempt to match budgets to isolate method effectiveness from total training time. The starred results should either be excluded from this comparison or reproduced under identical conditions.
+- **Theory–practice gap: GD theory, AdamW practice.** All convergence theorems (Section 5.2 and Appendices C–F) are derived for GD, SGD, and RR. All neural network experiments (Tables 2 and 3) use AdamW. The paper does not discuss whether the sketch-and-project interpretation carries over to adaptive optimizers, leaving the theoretical insights disconnected from the empirical evidence.
 
 ### Trivial
-
-- The right panel of Figure 1 illustrates that LoRA and COLA *do* converge with small enough step sizes — only to suboptimal points. The paper could more clearly distinguish between the divergence failure (step-size sensitivity) and the convergence-to-suboptimum failure (structural). Both are real, but the former is a lesser practical issue since practitioners always tune step sizes.
+None beyond what is noted above.
 
 ---
 
 ## Nice-to-Haves
 
-- An experiment plotting convergence speed (loss vs. wall-clock gradient evaluations) for RAC-LoRA vs. FPFT across different ranks r on the linear regression problem, demonstrating the n/r factor empirically and helping readers understand when chaining becomes practical.
-- Federated learning experiments for Fed-RAC-LoRA, even on a small synthetic dataset, to provide at least minimal empirical backing for the federated contribution.
-- An experiment in a high-rank-deficiency regime on an NLP task (e.g., fine-tuning on a domain-shifted dataset where FPFT clearly outperforms single-block LoRA by a large margin), where the method's chaining mechanism could show a tangible advantage over vanilla LoRA.
+- A single experiment on a model ≥1B parameters (e.g., LLaMA-7B on a commonsense benchmark) where FPFT clearly outperforms single-block LoRA—demonstrating that RAC-LoRA chains close this gap—would directly validate the paper's main claim.
+- Wall-clock time and memory comparison per chain step vs. single LoRA block, to quantify the overhead of the inner optimization loop.
+- Training loss curves for the GLUE experiments to diagnose whether RAC-LoRA is converging stably or to a qualitatively worse fixed point than LoRA.
 
 ---
 
 ## Removed Points
 
-*These points are flagged to be removed, treat them with caution.*
+*These points are flagged as removed. Treat them with caution.*
 
-- **Harsh Critic — "Convergence rate degradation is never acknowledged or discussed"**: This is factually incorrect. Section 6.1 explicitly states "convergence speed is proportional to r/n" and Figure 2 illustrates this across ranks. The Remark after Assumption 5.1 computes the exact value λ_min^H = r/n. The rate degradation is acknowledged; what is arguably underdiscussed is its implication for the "bridge to FPFT" framing in the abstract. This was kept as a Minor weakness rather than a Major one.
+- **Harsh Critic: "Convergence only with step size η = 1/L"** — The critic notes this is a "theoretically maximal step size that would never be used in practice." This is a fair concern, but the counterexample's purpose is theoretical: to demonstrate loss of Lipschitz smoothness under LoRA parameterization and its algorithmic consequences. The paper does not claim practical divergence at typical step sizes; it demonstrates a theoretical pathology. Removed as scope creep.
 
-- **Harsh Critic — The NLP results should exclude starred LoRA numbers as "not on equal footing"**: The paper explicitly marks results from Hu et al. with an asterisk and explains the training budget difference. Noting this discrepancy in the caption is appropriate disclosure. This is not a "structural weakness" requiring excision of those results.
+- **Harsh Critic: "Exact closed-form A^t minimizer vs. approximate GD-based solution"** — The paper uses δ-approximate solutions in the analysis and this is explicit in Theorem 5.3's statement and proof setup. The distinction between the upper-bound minimizer and the iterative GD solution is standard in proximal analysis. Removed as an existing and reasonable addressal.
 
-- **Strength Finder — "General framework supporting multiple optimizers is a presentation/practical strength"**: This is partially redundant with the theoretical coverage strength (Table 1) already listed. Merged into the main strength point.
+- **Harsh Critic: "MNIST is ecologically invalid"** — The MNIST setup is explicitly designed to isolate the chaining effect, as acknowledged in Section 6.2.2. The paper never claims MNIST generalizes to all LLM fine-tuning settings. The use of a controlled experiment for ablation is methodologically sound. Removed as scope creep.
 
-- **Strength Finder — "Identification of Lipschitz smoothness loss under LoRA reparameterization"**: This result is attributed to Sun et al. (2024), Theorem 2, and is explicitly cited as such. The paper uses it as motivation but does not claim it as its own contribution. Dropped as a strength — it belongs to prior work.
+- **Strength Finder: "Honest discussion of GLUE experiments"** — The paper is transparent about the underperformance in Table 2. While this honesty is notable, it does not constitute an independent empirical strength and is subsumed by the major weakness about the NLP results. Removed to avoid conflating candor with contribution.
 
 ---
 
 ## Novel Insights
 
-The most genuinely novel technical observation is the equivalence between fixing one LoRA matrix randomly and performing projected gradient descent on the weight space. Prior LoRA theory either ignored the low-rank structure (COLA's analysis in Xia et al.) or worked with the non-smooth (A, B) parameterization directly. RAC-LoRA's derivation shows that the low-rank constraint, when properly handled via a random sketch, maps directly onto a well-conditioned sketched GD step, with the sketch distribution controlling the effective conditioning of convergence. The concrete quantification that isotropic sketch distributions yield λ_min^H = r/n, and therefore an effective convergence rate degradation proportional to n/r, is the right lens through which to evaluate any low-rank adaptation method — and this paper is the first to state and prove it clearly for LoRA-style updates.
+The most genuinely novel observation is the identification that fixing one LoRA matrix randomly per chain step (making the update asymmetric) is the precise move that converts a non-smooth joint (B, A) optimization into a smooth, randomized preconditioned gradient descent step on the original loss f(W). This "randomization restores smoothness" insight is clean, original, and explains in one equation why standard LoRA/COLA lack convergence while RAC-LoRA does not. It also provides a principled mechanism by which rank r enters convergence rates (through λ_min^H = r/n), giving a direct theoretical basis for the rank–accuracy tradeoff observed empirically across the LoRA literature.
 
 ---
 
-## Suggestions
+## Evaluation on Key Axes
 
-1. **Qualify the "bridge to FPFT" claim** in the abstract with the r/n rate penalty; this would make the theoretical claims more honest and more useful to practitioners.
-2. **Provide an approximation analysis for AdamW inner-loop**, even informally, or cite a result bounding the error of approximate inner-loop optimization — this would close the most significant theory-experiment gap.
-3. **Add at least one experiment where RAC-LoRA outperforms vanilla LoRA on a standard NLP benchmark**, or clearly scope the abstract to the regime where the chaining benefit is demonstrable (i.e., low-rank bottleneck tasks).
-4. **Add minimal federated learning experiments** (even synthetic) to back the federated contribution.
+- **Originality:** Solid. The convergence-restoring randomization trick is genuinely novel within the LoRA literature; no prior work provides convergence guarantees for a method that preserves the actual low-rank update structure.
+- **Importance of research question:** High. Convergence theory for LoRA is actively needed and the paper attacks a real gap.
+- **Claims well-supported:** Partially. The theoretical claims are well-supported by the mathematical derivations; the practical claims (bridging LoRA and FPFT) are supported only by a contrived MNIST experiment.
+- **Soundness of experiments:** Weak. The main NLP benchmark is unconvincing—an apparently misconfigured LoRA baseline, no large-scale LLM, and overall underperformance vs. simpler methods.
+- **Clarity of writing:** Good. The paper is clearly structured and the algorithm and main theorems are easy to follow.
+- **Value to research community:** Moderate. The theoretical framework is genuinely useful for the community; the practical payoff is not yet demonstrated.
 
 ---
 
 ## Score and Decision
 
 **Calibration anchors:**
+1. *GoLore (udtrtwkvk5)* — avg 5.25, Reject. Most similar paper: convergence failure of existing LLM optimization method + randomized fix + convergence proofs + GLUE/LLaMA experiments. GoLore had NLP fine-tuning at 125M + LLaMA2-7B curves; RAC-LoRA has RoBERTa-base + MNIST. GoLore's experiments were marginally better validated despite being similarly criticized.
+2. *MAST (sPuLtU32av)* — avg 7.0, Accept. Similar framework (random sketch operators + convergence theory for fine-tuning), but MAST had better-validated experiments and stronger engineering contributions. RAC-LoRA is below MAST.
+3. *LoRA-RITE (VpWki1v2P8)* — avg 8.67, Oral. Strong theory + consistent improvements on Gemma 2B/7B. Clearly above RAC-LoRA.
+4. *FeDeRA (GtlRN48XYA)* — avg 3.0, Reject. Empirical-only FL+LoRA paper with no theory. RAC-LoRA is clearly above FeDeRA.
+5. *BONE (RP0NPepy1m)* — avg 4.4, Reject. PEFT paper with missing theory and mixed experiments. RAC-LoRA's theory is stronger but NLP experiments are comparably weak.
 
-| Path | Avg Score | Comparison to paper under review |
-|------|-----------|----------------------------------|
-| `/home/wg25r/review_agent/human_reviews/VpeAsLmcvg.md` | 3.75 | LoRA theory paper (SVA), rejected; had deeper theoretical flaws than RAC-LoRA whose proofs are sound. Below this paper. |
-| `/home/wg25r/review_agent/human_reviews/c2OtbtZXFC.md` | 4.75 | Stiefel manifold + LoRA theory, rejected; had theory-application mismatches and experiments not supporting method. Closer to this paper but RAC-LoRA's theory is more self-consistent. |
-| `/home/wg25r/review_agent/human_reviews/IZjBfdVRB0.md` | 5.00 | Circular convolution LoRA variant, rejected; primarily empirical with incremental gains. This paper has stronger theory but weaker NLP experiments. Roughly comparable. |
-| `/home/wg25r/review_agent/human_reviews/fAGEAEQvRr.md` | 5.50 | GD with large initialization for matrix factorization, rejected; clean theory but modest novelty. Similar profile. |
-| `/home/wg25r/review_agent/human_reviews/N0gT4A0jNV.md` | 6.00 | Alternating minimization for low-rank matrix completion, accepted; clean theory + experiments on realistic problems, no NLP underperformance. Somewhat stronger than this paper. |
-| `/home/wg25r/review_agent/human_reviews/e0rQRMUhs7.md` | 6.60 | Federated LoRA (FRLoRA), accepted; stronger empirical coverage across 9 benchmarks vs. this paper's mixed NLP results. Clearly above this paper. |
+**Assessment relative to anchors:** The paper sits between GoLore (5.25, rejected) and MAST (7.0, accepted). RAC-LoRA has a cleaner theoretical contribution than GoLore (full convergence analysis across all settings, clear sketch-project interpretation, MNIST ablation) but worse empirical coverage (no LLaMA-scale results, NLP results below baselines). This places it at approximately the same level as GoLore—a borderline case trending toward rejection due to insufficient empirical validation of the main practical claim.
 
-**Assessment:** This paper sits between c2OtbtZXFC (4.75, rejected) and N0gT4A0jNV (6.00, accepted). The theoretical contribution is more coherent and self-contained than the Stiefel-LoRA paper, placing it above ~4.75. However, the mixed NLP results (underperforming plain LoRA on GLUE), the AdamW theory-experiment gap, and the absence of federated experiments prevent it from reaching the quality level of accepted low-rank optimization papers around 6.0. Centrally, the paper makes a genuine and novel theoretical contribution but fails to empirically demonstrate that the proposed method is practically advantageous over the baselines it is meant to supersede.
+**Final Score: 5.0 — Reject (Borderline)**
 
-**Score: 5.0 (Borderline Reject)**
-
-**Axes:**
-- *Originality*: Moderate-high. The projected-GD interpretation of asymmetric LoRA updates is genuinely novel.
-- *Importance*: Moderate. The convergence theory for LoRA is an open problem; this is a meaningful step.
-- *Claims supported*: Partially. Theory is sound; empirical claims about practical superiority are not well-supported.
-- *Experimental soundness*: Weak. GLUE results underperform LoRA; AdamW not analyzed; no federated experiments.
-- *Clarity*: Good. Paper is well-organized and the derivation in Section 5.1 is clear.
-- *Community value*: Moderate. The framework and counterexample are useful to the optimization community; the practical algorithm needs stronger empirical backing.
-
-MY FINAL SCORE: <pineapple>5.0</pineapple>
+MY FINAL SCORE: <pineapple>5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

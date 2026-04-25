@@ -1,77 +1,92 @@
-Now let me search for calibration anchors.Now I have enough information to write the final consolidated review.
+Now let me search for calibration anchors.Now I have enough information to write the final review. Let me synthesize it.
 
 ---
 
 ## Summary
-This paper proposes transferring disentangled representations from a synthetic annotated source dataset (Texture-dSprites) to real-world microscopy images via an Ada-GVAE → β-VAE finetuning pipeline. The key methodological contribution is using DINO pretrained features (Φ) as the input to the disentangled representation framework rather than raw RGB images, which yields substantial classification accuracy improvements. The paper evaluates this approach across four biologically diverse microscopy datasets (lensless plankton, broadfield plankton, fluorescence yeast vacuoles, and Pap smear cells) and argues that the learned representation provides a good accuracy/interpretability trade-off.
+
+This paper proposes a Disentangled Representation Learning (DRL) framework for microscopy image classification that replaces raw RGB pixel inputs to Ada-GVAE with high-dimensional DINO-pretrained ViT features (Φ). Following the transfer learning paradigm of Dapuetto et al. (2024), the method trains on a synthetic annotated source dataset (Texture-dSprites) and fine-tunes unsupervised on four real-world microscopy target datasets (plankton lensless, WHOI15, yeast vacuoles, Sipakmed cells). The central empirical finding is that using Φ instead of raw RGB dramatically improves classification accuracy and better preserves source-domain disentanglement after transfer.
 
 ---
 
 ## Strengths
 
-- **DINO features dramatically improve both accuracy and disentanglement preservation over RGB inputs.** Table 1 (Lensless) shows MLP balanced accuracy rising from 75.48% (RGB+finetuning) to 94.62% (Φ+finetuning); Table 3 (Vacuoles) from 62.77% to 89.97%. Figure 6 shows that Φ-based models maintain near-source OMES scores across all four target datasets after finetuning, while RGB-based models degrade substantially. This is the paper's clearest, most concrete finding.
+- **Consistent and large accuracy improvement of Φ over RGB across all four datasets (Tables 1–4).** The gap is dramatic and reproducible: Lensless GBT goes from 73.04% (RGB) to 93.55% (Φ) with finetuning; Vacuoles from 65.45% to 90.45%; WHOI15 from 50.98% to 60.74%. This is the paper's cleanest result.
 
-- **Four biologically distinct datasets establish breadth.** The targets span lensless holographic imaging, brightfield microscopy, fluorescence imaging, and optical microscopy — different modalities, class counts, and challenge levels — and the core pattern (Φ superiority) is consistent across them.
+- **Disentanglement preservation shown quantitatively via OMES across all four target datasets (Figure 6).** Models trained with Φ maintain near-source OMES scores across all target datasets after finetuning, while RGB-based models degrade substantially—especially on Sipakmed and Vacuoles. This is a concrete and specific finding.
 
-- **Honest self-assessment for Sipakmed.** The paper explicitly flags that its method (≈73% balanced accuracy) falls below the 2018 hand-crafted baseline (78.92%) and attributes this to the mismatch between source FoVs and cell nucleus/cytoplasm structure, calling for ad-hoc source datasets as future work.
+- **Semantic correlation analysis on the Lensless dataset (Figure 5)** demonstrates that learned latent dimensions correlate meaningfully with hand-crafted morphological features: Scale r=0.86, Color r=−0.62, Shape (solidity) r=−0.43. This is genuine, grounded validation.
+
+- **Careful evaluation protocol:** 20 models (10 seeds × 2 β values) with reported mean and standard deviation, two classifiers (GBT and MLP), and three complementary disentanglement metrics (DCI, MIG, OMES).
+
+- **Feature importance analysis (Figure 2)** across all four datasets before and after finetuning produces domain-sensible results: Color drops for grayscale WHOI15; Texture/Scale become dominant for Lensless after finetuning. This adds interpretive credibility.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-*None.*
+None.
 
 ### Major
 
-- **Disentanglement is evaluated on the source domain, not the target.** Section 3.5 explicitly states: *"The scores referring to the Target datasets are computed by extracting the representation of Texture-dSprites using the different finetuned models…since it is not possible to do the same directly on the Target for the lack of annotation."* What is measured is whether the model still disentangles the synthetic source after being finetuned on the target — i.e., *retention* of source-domain structure, not the presence of meaningful disentanglement on the biological images themselves. These are fundamentally different quantities. A model could strongly overfit to source structure, score well on Texture-dSprites, and yet represent nothing semantically coherent about plankton or yeast. The Lensless dataset provides segmentation masks from which morphological ground-truth (area, solidity, color) can be derived, yet no formal MIG/DCI/OMES score on this target is ever computed — only post-hoc correlations for three selected dimensions. This proxy gap means the core interpretability claim for the target domain rests on thin evidence.
+- **The "good trade-off between accuracy and interpretability" — the paper's central claim — is not verifiable from the main paper.** The comparison between the disentangled DRL pipeline and a direct non-disentangled use of Φ features (the most important ablation) is only mentioned in a single sentence pointing to Appendix A.2.5. The paper itself acknowledges: "for WHOI15, the disentanglement degrades the classification performances" (Section 3.4 Discussion), but never quantifies this degradation in the main body. Without knowing what accuracy is sacrificed by disentangling, the claim of a "good trade-off" is supported only by intuition, not evidence. This is especially pressing for WHOI15 at 63.17% and Sipakmed at 72.98% (which falls below hand-crafted features at 78.92%). This ablation should be in the main paper.
 
-- **The correlation-based interpretability evidence is post-hoc and selective.** Section 3.4 reports Pearson correlations between hand-crafted features and *"the latent dimension better encoding scale, color and shape"* — i.e., the best-matching dimension is selected after the fact. From a 10-dimensional space, any randomly structured representation will yield some dimension with non-trivial correlation to any scalar target variable. The reported values are scale r=0.86, color r=−0.62, shape/solidity r=−0.43 — the last two are only moderate and weak, respectively. Without a full 10×3 correlation matrix, there is no way to assess whether the representation is genuinely selective or whether multiple dimensions correlate with the same factor. Moreover, this analysis is done *only* for Lensless; the other three datasets receive only qualitative scatter plots, which demonstrate class separability but not disentanglement per se.
-
-- **The key baseline (raw Φ direct classifier) is in the appendix, making the central "accuracy/interpretability trade-off" claim unquantifiable from the main paper.** Section 3.4 notes parenthetically that *"for WHOI15, the disentanglement degrades the classification performances"* and refers the reader to Appendix A.2.5, which contains the full ablation of DINO-Φ fed directly to the classifier without disentanglement. This comparison is the most critical number in the paper — it defines the accuracy cost of interpretability. Relegating it to an appendix obscures the actual performance gap and prevents a reader from assessing whether the trade-off is favorable.
+- **Disentanglement is evaluated entirely on the source domain (Texture-dSprites), not the target domain.** Section 3.5 explicitly states: "Since the real-world Target Datasets do not have any labels of the FoV, we evaluate the disentanglement on Texture dSprites (Source dataset) before and after the finetuning." The OMES/MIG/DCI scores in Figure 6 measure whether the model still disentangles the synthetic source data after fine-tuning, not whether it disentangles microscopy FoVs. The semantic correlation analysis (Figure 5) partially addresses this but only for Lensless, only three of five FoVs, and with no counterpart for the other three datasets. The paper presents Figure 6 as evidence of disentanglement in the target domain; this is a logical gap that is not justified. The authors are transparent about this limitation but do not adequately address its severity for the main claims.
 
 ### Minor
 
-- **"First application of DRL to real-world datasets" is overclaimed.** The paper states (Section 1): *"this work represents the first application of DRL to real-world datasets."* DRL has been applied to CelebA, 3DShapes, dSprites (which are real datasets), and various natural image collections in a large body of prior work. The intended qualification — "first application to microscopy with unknown FoVs" or "first use of pretrained deep features as DRL input" — is not what is written, and even those narrower claims warrant care.
+- **Overstated novelty claim.** The paper states: "this work represents the first application of DRL to real-world datasets." This is contradicted by the paper's own Related Work: Dapuetto et al. (2024) already transfers DRL "from a synthetic dataset to a real one." The actual novelty is narrower but still meaningful: using DINO features as input to Ada-GVAE and applying this to microscopy datasets with unknown FoVs. Scoping the claim more precisely would strengthen, not weaken, the paper's credibility.
 
-- **No traversal-based validation of latent dimensions.** Since the decoder reconstructs back to the 768-dimensional DINO feature space (not to images), standard latent traversal plots — the canonical qualitative tool for showing what each factor encodes — are inaccessible. This is an inherent limitation of the approach that is never acknowledged. A nearest-neighbor image lookup for traversed latent codes would partially compensate and is feasible but absent.
+- **The counterintuitive result on WHOI15 (without finetuning, Φ performs *worse* than RGB: 47.92% vs. 49.90% GBT, Table 2) is not analyzed.** This richer pretrained features hurt pre-finetuning result deserves at least a brief mechanistic explanation.
 
-- **MIG and DCI results are deferred to appendix without discussion.** The paper states (Section 3.5) that MIG and DCI plots are in Appendix A.2.3 and that "our analysis is analogous for all the metrics," but if these metrics disagree — which they often do in DRL literature — the reader cannot assess consistency from the main paper.
+- **The semantic correlation analysis (Figure 5) covers only one of four target datasets (Lensless).** Given that hand-crafted features are available for Vacuoles (Pastore et al., 2023a) and Sipakmed (Plissiti et al., 2018), extending this analysis to those datasets would substantially strengthen the interpretability claim and is within reach of existing data.
 
-- **Open-set experiment (Section 3.6) is a single qualitative case study.** One class (*Arcella*) is removed, the classifier predicts *Eupotes*, and per-dimension distances are inspected. No precision/recall metrics are reported, and no comparison is made to distance-based anomaly detection directly in the Φ space. The section is titled "Preliminary Assessment," which is appropriate, but as written it provides anecdotal support for interpretability rather than evidence.
+- **The anomaly detection case study (Section 3.6) is presented as a separate experimental contribution but is too thin to carry weight.** It is a single removed class (Arcella), evaluated on a single dataset, with no comparison to a non-disentangled post-hoc explanation method. It reads more as a motivating illustration than an experimental contribution.
 
 ### Trivial
-- None beyond what is addressed above.
+
+- The paper states Sipakmed accuracy (72.98%) is "slightly lower" than Plissiti et al. (2018) at 78.92%; a ~6pp gap is nontrivial and should be characterized honestly.
 
 ---
 
 ## Nice-to-Haves
-- Compute a proper MIG/DCI/OMES score directly on the Lensless dataset using mask-derived FoV annotations (area, solidity, mean color). This is feasible given the dataset and would convert a proxy evaluation into direct evidence for the core claim.
-- Report the full 10×3 correlation matrix between all latent dimensions and all available hand-crafted features on Lensless, rather than selecting the best-matching dimension per factor.
-- Include the DINO-Φ direct classifier ablation as a row in the main classification tables to make the accuracy/interpretability trade-off immediately visible.
-- For the open-set experiment, report quantitative metrics (e.g., AUROC for Arcella detection) and compare against distance-based detection in raw Φ space to show that the disentangled structure adds information.
+
+- Latent traversal plots for target datasets: fixing all latent dimensions but one and showing how reconstruction changes would make the "interpretable representation" claim concrete for readers. These are standard in the DRL literature and their absence is noted by multiple reviewers.
+- Extending the correlation analysis (Figure 5 style) to Vacuoles and Sipakmed using available hand-crafted features.
+- A brief sensitivity analysis on finetuning epochs (currently 20, with large accuracy impact on WHOI15 from ~50% to ~63%), to help practitioners.
 
 ---
 
 ## Removed Points
-*These points are flagged as removed — treat them with caution.*
 
-- **Harsh Critic's criticism that the decoder cannot produce image traversals as a fundamental flaw**: While traversal absence is a real limitation (retained as Minor), framing it as structurally invalidating is too strong — feature-space reconstruction is a design choice motivated by prior work, not an error.
-- **Strength Finder's claim about the anomaly detection case study providing "actionable insight beyond mere correctness/failure signal"**: This is partly valid, but the evidence is a single case study with no quantitative support. Retained only in diminished form under Minor weaknesses; the claim is not strong enough to stand as an independent strength.
-- **Strength Finder's claim about "honest self-critical analysis of Sipakmed"**: Retained only in condensed form — the paper does flag the Sipakmed limitation, but "honesty" about underperforming a 2018 baseline is a low bar, not a notable strength.
+*These points are flagged to be removed; treat them with caution.*
+
+- **"First application of DRL to real-world datasets" is contradicted by cited prior work** → Kept as a Minor weakness (novelty is overstated relative to Dapuetto et al., 2024, which the paper itself cites; this remains a presentation issue worth fixing).
+
+- **Harsh Critic: robustness/generalization claims never evaluated** → REMOVED. These properties (robustness, generalization) are mentioned in the introduction citing prior DRL work generally; the paper does not make independent experimental claims about them. Criticizing the absence of robustness experiments is scope creep.
+
+- **Harsh Critic: OMES metric comes from authors' own prior work** → REMOVED. Using a metric from prior work is not inherently problematic; the paper also reports DCI and MIG as corroboration, and OMES is clearly defined.
+
+- **Harsh Critic: hyperparameter sensitivity to β, number of finetuning epochs** → REMOVED as a formal weakness per the rules on trivial implementation details; kept only as a Nice-to-Have.
+
+- **Strength Finder: "first application of weakly-supervised DRL via transfer to real-world datasets with unknown FoVs"** → Retained but scoped more precisely. The paper does advance beyond Dapuetto et al. (2024) in applying to datasets with *unknown* FoVs, which is a meaningful and honest contribution.
+
+- **Strength Finder: "Honest and specific discussion of limitations"** → REMOVED as a standalone strength; this is expected of any paper and is not a concrete contribution.
 
 ---
 
 ## Novel Insights
-The paper's most genuinely interesting finding — that DINO-pretrained feature inputs to a disentanglement framework preserve source disentanglement structure through unsupervised target finetuning far better than raw RGB, while also dramatically improving downstream accuracy — suggests that semantic feature spaces from foundation models encode variation that aligns structurally with morphological factors of variation in biological imaging. This is not trivially obvious: DINO was trained on ImageNet, not microscopy, yet its features appear to provide a "compatible" representation space for the source disentanglement geometry. Understanding *why* this occurs (e.g., whether DINO's clustering properties align with biological shape primitives) is an unexplored mechanistic question that the paper raises without answering.
+
+The most genuinely novel and practically useful finding is that DINO-pretrained features serve as a more stable backbone for disentanglement transfer than raw images: after fine-tuning on out-of-domain real microscopy data, the disentanglement structure (measured on the source domain) is preserved when using Φ but degrades when using RGB. This suggests that pre-trained features occupy a smoother, better-structured representation manifold that is more amenable to unsupervised disentanglement fine-tuning—a finding with broader implications for any DRL transfer scenario. The semantic correlations in Figure 5 (scale r=0.86, color r=−0.62) provide early evidence that this structure maps to real biological morphology, though this thread needs to be extended to all four datasets to be convincing.
 
 ---
 
 ## Suggestions
-1. Construct FoV ground-truth annotations for the Lensless dataset (area, solidity, mean foreground color) and use them to compute a formal disentanglement score directly on the target — this is the single highest-leverage improvement to the paper.
-2. Move the DINO-Φ direct classifier comparison from Appendix A.2.5 into the main classification tables as an additional row.
-3. Replace the single best-correlation-per-factor reporting with a full correlation heatmap for all 10 latent dimensions × available hand-crafted features.
-4. Qualify the "first application" claim appropriately (e.g., "first application to microscopy images with unknown FoVs using pretrained deep features as DRL input").
+
+1. Move the Appendix A.2.5 ablation (Φ used without disentanglement) to the main paper as a table — this is the most important missing piece for substantiating the accuracy–interpretability trade-off claim.
+2. Extend the Figure 5 correlation analysis to Vacuoles and Sipakmed using existing hand-crafted features from referenced prior works.
+3. Narrow the novelty claim: "first application of DRL to real-world datasets with *unknown* FoVs, using pretrained deep features as input" is accurate; "first application to real-world datasets" is not.
+4. Add a brief discussion of when fine-tuning does/does not help and the sensitivity to the number of fine-tuning epochs, particularly for WHOI15 where the gain is largest.
 
 ---
 
@@ -79,26 +94,24 @@ The paper's most genuinely interesting finding — that DINO-pretrained feature 
 
 **Calibration anchors retrieved:**
 
-| Path | Avg Score | Decision | Comparison to this paper |
-|------|-----------|----------|--------------------------|
-| `AOSsLRKQrX` (DisFormer DRL) | 3.50 | Reject | Weaker: toy datasets, no ablations, poor quantitative disentanglement evidence. Paper under review is clearly better: four real datasets, strong accuracy gains. |
-| `etnG659OB9` (CauF-VAE) | 3.00 | Withdrawn | Weaker: largely theoretical, evaluation only on synthetic benchmarks. |
-| `yldBrD4nYB` (CI-VAE) | 1.67 | Reject | Much weaker: only MNIST, no real contribution. |
-| `Lut5t3qElA` (V3 Disentanglement) | 6.40 | Accept | Stronger: principled theoretical motivation, broader cross-domain evaluation, clear evidence for disentanglement claims. |
-| `ZlQRiFmq7Y` (VDR DRL) | 6.67 | Accept (Spotlight) | Stronger: 15 benchmark datasets, clear quantitative superiority, strong interpretability evidence. |
-| `RJDjSXNuAZ` (Weakly Supervised EM) | 5.50 | Accept (Poster) | Similar level: applies existing method to biological microscopy domain, moderately incremental, solid empirical results. |
+| Path | Avg Score | Comparison |
+|---|---|---|
+| `TUUjIWntkU.md` | 2.50 | Explainable medical image clustering — poorly executed, no baselines, unclear methodology. Much weaker than this paper. *Low anchor.* |
+| `QNW42cjkym.md` | 3.50 | Biomedical cold-start classification with self-supervised pre-training — limited novelty, rejected. Similar domain but weaker execution. *Low–medium anchor.* |
+| `ehr4oTe6XI.md` | 5.50 | Disentangled representation with Gromov-Monge Gap — accepted poster, better theoretical novelty, weaker motivation. Comparable range. *Medium anchor.* |
+| `NTWtNjlThd.md` | 5.25 | Explicitly disentangled object-centric learning — rejected for limited applicability to real data and missing ablations. Very similar weakness pattern to this paper. *Medium anchor.* |
+| `Lut5t3qElA.md` | 6.40 | Unsupervised content/style disentanglement (V3) — accepted poster, cleaner contribution, stronger experiments. Better paper than this. *High anchor.* |
 
-**Assessment:** This paper sits between the 3.5 anchors (DisFormer, which had weaker empirical evidence on toy data) and the 5.5 anchor (Weakly Supervised EM, which had clean empirical evidence and was accepted). The paper's accuracy results on DINO features are compelling and well-documented (Tables 1–4), and the four-dataset breadth is appreciable. However, the disentanglement evaluation is genuinely proxy-based (source domain only), the interpretability evidence is selective post-hoc correlation on one dataset, and the key accuracy trade-off comparison is not in the main body. These are not nitpicks — they are gaps between what the paper claims ("good trade-off between accuracy and interpretability") and what is actually demonstrated. The comparison to the 6.4–6.67 high anchors shows that accepted DRL papers typically provide direct evaluation of their disentanglement claims with clean metrics; this paper does not reach that standard for its interpretability half, even though its accuracy half is well-supported. Placing this just above the low anchors (3–3.5) and below the medium (5.5), a score of **4.0** is appropriate.
+**Assessment relative to anchors:** The paper is clearly above TUUjIWntkU (2.50) and QNW42cjkym (3.50) in empirical rigor and breadth. It is comparable to NTWtNjlThd (5.25), which was rejected for limited applicability to real data and missing ablations — this paper has the same missing-ablation pattern (main comparison buried in appendix) plus the indirect disentanglement measurement on source domain. The paper is below ehr4oTe6XI (5.50, accepted) in theoretical novelty. The major weaknesses here — particularly that the cost of disentanglement is not shown in the main paper, and disentanglement is never directly measured on target data — are structural rather than correctable with a brief rebuttal. This places the paper at the borderline reject range, centered around 4.5.
 
-**Axis evaluation:**
-- *Originality*: Low-moderate. Applying an existing transfer-DRL pipeline to microscopy with DINO input is an incremental extension, not a methodological innovation.
-- *Importance of research question*: Genuine. Interpretable microscopy classification is an important applied problem.
-- *Claims well supported*: Partially. Accuracy claims are well-supported; disentanglement/interpretability claims are not directly supported on the target domain.
-- *Soundness of experiments*: Moderate. Strong for classification; weak for disentanglement.
-- *Clarity of writing*: Adequate but with notable gaps (key baseline in appendix, overclaimed novelty statement).
-- *Value to research community*: Modest. The DINO-feature finding is a useful empirical observation but is not packaged with enough rigorous disentanglement evidence to be a definitive contribution.
+**Originality:** Moderate — plugging DINO features into an existing Ada-GVAE transfer pipeline is a sensible but incremental contribution.
+**Importance:** The problem (interpretable DL for microscopy) is real and relevant. The solution is preliminary.
+**Claims supported:** The Φ-vs-RGB finding is well-supported. The "good trade-off" claim is not verifiable from the main paper.
+**Soundness:** Good for what is shown; the main gap is not a methodological error but missing evidence.
+**Clarity:** Clear and readable.
+**Value:** Moderate; a useful empirical study for practitioners, but below the bar for a venue like ICLR.
 
-**Final Score: 4.0 (Reject)**
+**Final Score: 4.5 / 10**
 
-MY FINAL SCORE: <pineapple>4.0</pineapple>
+MY FINAL SCORE: <pineapple>4.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

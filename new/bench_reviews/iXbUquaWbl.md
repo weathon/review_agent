@@ -1,24 +1,24 @@
-Now let me search for calibration papers.Now I have enough material to write the final review. Let me synthesize everything.
+Now let me search for calibration anchors.Now I have enough to write the final review. Let me synthesize everything.
 
 ---
 
 ## Summary
 
-The paper proposes end-to-end learnable Gaussian Mixture Priors (GMPs) for diffusion-based sampling methods used in variational inference over unnormalized densities. The core contribution is a unified framework that integrates a jointly optimized GMM prior into four distinct diffusion samplers (MCD, CMCD, DIS, DBS) through an extended ELBO objective, supplemented by a theoretical result (Proposition 1) enabling denoising diffusion methods to use arbitrary learned priors. An Iterative Model Refinement (IMR) strategy that progressively adds mixture components using MALA-generated candidates is also proposed for high-dimensional multimodal targets.
+This paper proposes end-to-end learnable Gaussian Mixture Priors (GMPs) for diffusion-based sampling methods (DIS, MCD, CMCD, DBS). The core technical contribution is Proposition 1, which extends denoising diffusion samplers to support arbitrary learned priors by identifying the appropriate drift function, along with a parametric annealing strategy for Langevin diffusion variants. The paper additionally introduces Iterative Model Refinement (IMR), a curriculum that progressively adds mixture components initialized via MALA-guided exploration, and evaluates the full system on six real-world Bayesian inference tasks plus two synthetic benchmarks (Funnel, Fashion).
 
 ---
 
 ## Strengths
 
-- **Proposition 1 enables principled prior learning for denoising diffusion samplers.** The derivation that the stationary distribution of a time-independent backward SDE takes the form of Eq. (15) is a clean theoretical result that directly motivates and enables replacing the standard OU/Gaussian with an arbitrary learned prior (Eq. 17). This is a legitimate, non-trivial technical contribution.
+- **Principled theoretical extension (Proposition 1 + Section 4):** The derivation using the stationary distribution of the uncontrolled backward SDE is technically non-trivial and correctly handles the coupling requirement (Requirement 2) that naive prior substitution would violate. Treating δt as a jointly learned parameter to address the unknown relaxation time is a clean and practical solution.
 
-- **Dramatic improvements on the Funnel benchmark.** Figure 3 (Table in Figure 3) shows that GMP variants increase ESS from 0.307–0.600 (fixed or learned Gaussian) to 0.922–0.950 and reduce ΔlogZ by roughly an order of magnitude across all four diffusion samplers. The qualitative visualization shows mixture components correctly adapting to cover both the neck and opening of the funnel, providing strong, honest evidence for the claimed benefit.
+- **Breadth and consistency of empirical improvements:** Across four diffusion sampler backbones and all benchmark tasks, the GP/GMP variant improves over or matches fixed-prior baselines (Tables 1–2, Figure 3). DBS-GMP outperforms FAB on five of six real-world tasks and achieves the best or near-best results on Funnel (ΔlogZ = 0.012, ESS = 0.949, W₂² = 100.230). The consistency across four architectures strengthens the plug-in framing.
 
-- **Unified treatment across four diffusion sampler families.** Table 1 cleanly categorizes MCD, CMCD, DIS, and DBS by their control function choices, and all four are systematically evaluated. This generality is a practical asset: practitioners can apply GMPs to whichever sampler they already use.
+- **Funnel visualization (Figure 3):** The qualitative result showing GMP components adapting to both the narrow neck and wide opening of the Funnel distribution is a clear, well-supported illustration of how a mixture prior helps with geometrically complex unimodal targets — the paper's single most convincing result.
 
-- **Competitive real-world performance.** DBS-GMP achieves the best or tied-best ELBO on 5 of 6 real-world tasks in Table 2, including competitive performance against FAB and SMC.
+- **IMR mode coverage on Fashion (Figure 4):** DIS-GMP+IMR achieves EMC = 0.780 and Sinkhorn distance 213.776, compared to EMC = 0.007 and Sinkhorn 1671.411 for DIS-GP and EMC = 0.012 / Sinkhorn 1703.023 for DIS-GMP, demonstrating that the combined system (GMP + IMR) solves a genuinely hard multi-modal coverage problem in d = 784.
 
-- **Ablation study in Figure 5 cleanly establishes complementarity of K and N.** Heatmaps across K (mixture components) and N (diffusion steps) consistently show that both dimensions independently improve ESS, supporting the paper's claim that GMPs are complementary to—not redundant with—finer discretization.
+- **Honest evaluation protocol:** The paper uses the same protocol as Blessing et al. (2024), acknowledges the ELBO/mode-coverage tension explicitly in Section 6.2, and includes multi-seed averaging throughout.
 
 ---
 
@@ -29,30 +29,29 @@ None.
 
 ### Major
 
-- **Abstract claim "without requiring additional target evaluations" is contradicted by IMR.** The most dramatic result in the paper—Fashion IMR (EMC from 0.012 to 0.780)—relies on MALA to generate candidate samples, and MALA requires gradient evaluations of log ρ at every step. The paper itself says "employing the Metropolis-adjusted Langevin algorithm (MALA) to generate a set of candidate samples" and the paper adds that "the initial candidate samples as well as the support of DIS without learned prior are initialized such that they roughly cover the target support." The abstract's claim of no additional target evaluations is inaccurate for the IMR setting and should either be removed or carefully scoped to the non-IMR setting.
+- **The C3 (mode-collapse) claim is structurally overclaimed for GMP alone.** Section 5 states: *"To prevent the model from focusing only on a subset of the target support (C3)... GMPs provide a solution by combining multiple Gaussian components, each of which can focus on different subsets of the target support."* Figure 1 likewise presents GMP as the mechanism for C3. However, Figure 4 directly falsifies this for the primary test case: DIS-GMP *without* IMR achieves EMC = 0.012 — statistically indistinguishable from total mode collapse — and actually performs *worse* on ELBO (−38.873 vs. −24.712) and ΔlogZ (18.056 vs. 10.581) than DIS-GP. The anti-mode-collapse behavior is entirely delivered by IMR (requiring MALA, a separate and costly mechanism), not by the mixture structure per se. The paper acknowledges this in Section 6.2 ("the absence of IMR leads to mode collapse across all methods"), but the framing in Section 5 and Figure 1 continues to attribute C3 to GMP alone. This disconnect between the motivating framework and empirical evidence represents a meaningful inconsistency in the paper's narrative and should be corrected.
 
-- **GMP alone (without IMR) fails catastrophically on the Fashion multimodal target.** Table in Figure 4 shows DIS-GMP EMC=0.012 and W₂²=1703.023—i.e., complete mode collapse—comparable to DIS-GP's EMC=0.007. GMP provides no benefit over a learned Gaussian prior for multi-modal coverage in 784 dimensions without MALA-assisted initialization. The paper frames C3 ("mode collapse due to reverse KL minimization") as a challenge addressed by GMPs, but the Fashion experiment directly falsifies this claim for the non-IMR setting. The paper does acknowledge this but downplays it. This is a genuine internal tension: the optimization objective is still mode-seeking reverse KL, so adding components does not by itself prevent collapse. The paper should honestly qualify the scope of C3 mitigation to settings where MALA initialization is used (IMR) or where the target has tractable geometry (Funnel).
+- **Abstract contradicts the IMR component's actual cost.** The abstract states the method achieves improvements "without requiring additional target evaluations." This is true for GMP alone but false for GMP+IMR — the paper's most impressive results (Fashion mode coverage) — since MALA requires gradient evaluations of log ρ. Section 6 does say MALA cost is "comparable to a single gradient step," but this does not change the fact that additional target evaluations *are* required. The abstract claim should be qualified.
 
 ### Minor
 
-- **GP→GMP improvements on real-world tasks are marginal.** For most real-world benchmarks in Table 2, the gain from GP to GMP is small relative to the gain from a fixed prior to GP. For example: MCD-GP (−585.350) → MCD-GMP (−585.276) on Credit; CMCD-GP (−585.178) → CMCD-GMP (−585.162). The paper claims "consistent improvements in performance" broadly, but on Credit, Seeds, and Ionosphere the GMP improvement is barely distinguishable from numerical noise. The Funnel results are more convincing. The paper's rhetoric of "significant improvements" should be calibrated to the actual effect sizes.
+- **GP→GMP increment is negligible on real-world tasks, and the paper does not explain when the mixture helps.** On Table 2, the GP→GMP gain is consistently tiny: e.g., CMCD-GP (−585.178) vs. CMCD-GMP (−585.162), DIS-GP (−585.247) vs. DIS-GMP (−585.223). The dominant gain is the fixed-prior→GP jump (e.g., MCD: −1399 → MCD-GP: −585 on Credit). This pattern has a natural explanation (logistic regression posteriors are near-Gaussian), but the paper claims "GMP yielding further improvements over GP" as though the mixture reliably adds value. The paper should distinguish when a mixture prior is actually needed versus when a single learned Gaussian suffices.
 
-- **MALA cost for IMR is not characterized.** The paper states that MALA cost "is comparable to a single gradient step in most diffusion-based sampling methods" without substantiation. For a 784-dimensional multimodal target, the number of MALA steps, chain length, restart count, and convergence criterion all matter for determining actual cost. These are deferred to Appendix C.2. Given the centrality of IMR to the Fashion results, at minimum a rough wall-clock comparison with other methods should be included in the main body.
+- **The C2 claim (GMP reduces required diffusion steps) is stated but not empirically tested.** Section 5 says GMPs "minimize the number of diffusion steps required." Figure 5 shows ESS monotonically increasing with N for all tasks — the opposite of a diminishing-returns curve that would justify reduced step counts. The paper never provides a cross-budget comparison (DIS-GMP at N=32 vs. DIS at N=128) to validate the C2 claim. As written, this is a theoretical motivation unsupported by empirical evidence.
 
-- **The Fashion IMR results lack a MALA-free ablation.** It is unclear whether the EMC gain comes from the iterative mixture refinement strategy itself (Eq. 22) or from having MALA provide mode-rich candidates. A condition with random or diffusion-based candidate initialization (without MALA) would clarify which component drives the improvement.
+- **FAB outperforms the proposed method on Funnel's best single metric (ΔlogZ = 0.001 vs. 0.005 for CMCD-GMP) but this is not discussed.** FAB uses a fundamentally different mechanism, and its superior partition-function estimation on the very benchmark the paper uses to demonstrate C1–C3 advantages deserves at least a sentence of discussion.
 
 ### Trivial
 
-- **Learned δt values are never reported.** The paper introduces δt as an additional learnable parameter (Section 4.1, Proposition 1) motivated by the unknown relaxation time for non-OU priors, but the learned values of δt are never reported in any experiment. Whether this degree of freedom matters in practice is unclear.
+None.
 
 ---
 
 ## Nice-to-Haves
 
-- **A computational cost table** comparing wall-clock time and total log-density evaluations across methods (including FAB, SMC, CRAFT, and GMP+IMR) would strengthen the efficiency claim.
-- **GMVI baseline with same K and IMR strategy as GMP**, to isolate the contribution of diffusion beyond what the mixture prior alone provides on real-world tasks.
-- **Tracking which modes each component captures** over IMR iterations on the Fashion task would provide stronger validation of the initialization heuristic in Eq. (22).
-- **Adaptive K selection** during training, as mentioned in future work, would make the method fully hyperparameter-free as claimed.
+- **Equal-compute comparison (GMP with K=10 vs. GP at matched wall-clock time):** GMP with K=10 evaluates the mixture at every diffusion step, which increases per-step cost. A brief equal-NFE or equal-wall-clock comparison would make the reported improvements more interpretable.
+- **Additional genuinely multi-modal continuous benchmark without IMR:** A 2D or moderate-dimensional multi-well energy function or GMM target where ground-truth modes are known would clarify whether GMP alone (without MALA-based IMR) can offer any anti-mode-collapse benefit.
+- **Trajectory visualization for C2:** Showing diffusion trajectories (not just endpoints) for DIS-GMP vs. DIS at matched compute would illustrate whether GMP concretely reduces dynamics complexity as claimed.
 
 ---
 
@@ -60,56 +59,46 @@ None.
 
 *These points are flagged to be removed; treat them with caution.*
 
-- **"Structural circularity" of IMR** (Harsh Critic §1): The critic argues that because IMR uses MALA to find modes, the Fashion result "doesn't validate the proposed method's novelty." However, the paper does not hide this—MALA usage is disclosed upfront in Section 6.2, and the contribution of IMR is specifically the heuristic in Eq. (22) for using those candidates to initialize new components. The result validates the initialization strategy, even if MALA provides the candidate pool. This is legitimate methodology, not concealed circularity. Downgraded to a concern about cost accounting (kept as Major above).
+- **Harsh Critic's note on Proposition 1 being asymptotic only:** The paper explicitly states "Proposition 1 thus suggests that for any φ, there exists a δt such that p₀^φ(x₀) = ∫p̃^φ(x_{0:N})dx_{1:N} as N→∞. Empirically, we observe substantial improvements for finite values of N." The paper is transparent about the asymptotic nature of the guarantee, so this is not a criticism.
 
-- **"Reverse KL / GMP conflict is structural and invalidates C3 claim"** (Harsh Critic §2): While it is true that optimizing a GMP under reverse KL does not eliminate mode-seeking pressure in general, the paper's claim is more modest—that expressiveness (multiple components) gives the optimizer more degrees of freedom to distribute across modes. On Funnel, this works well. The deeper criticism that this is theoretically unresolved is valid, but is appropriately captured in the Major weakness above rather than warranting a "Fatal" label, since Funnel provides positive empirical evidence and the paper is honest about the Fashion failure without IMR.
+- **Criticism that "computational cost comparable to a single gradient step" is vague/underestimated:** This is a precision nitpick about an empirical statement in the paper body; the paper is clear MALA does add cost, and the abstract inconsistency is already addressed as a Minor weakness.
 
-- **"MCD without prior performs drastically worse (−1399 vs −585) on Credit is an unexplained anomaly"** (Harsh Critic): This is expected behavior: with a fixed unit-Gaussian prior initialized at zero mean, MCD (which uses only an uncontrolled forward process) is stuck at a poor initialization. The large improvement from MCD → MCD-GP demonstrates the value of prior learning, which is one of the paper's points. This is not an anomaly requiring special explanation.
+- **Strength Finder claim that DBS-GMP outperforms FAB on Cancer (−78.160 vs. −78.287):** Verified correct per Table 2, this is a genuine strength. Kept in strengths above.
 
-- **"FAB achieves better EMC on Fashion (0.349 vs 0.012 without IMR)"** as a baseline challenge: FAB is a resampling-based method with a fundamentally different computational profile, and the paper is comparing DIS-GMP *without IMR* against FAB. This asymmetry is not unfair to the authors' method; the paper's IMR-equipped method substantially outperforms FAB on both EMC (0.780 vs 0.349) and W₂² (213 vs 1186). Per the hard rules, criticisms of unfair comparisons where the asymmetry disfavors the author's method are removed; here it disfavors both without IMR and favors the authors with IMR.
-
-- **"Strengths about no additional target evaluations"** (Strength Finder, supporting strengths): Removed from Strengths because this claim is contradicted by IMR using MALA, as documented above.
+- **Generic "problem is important" strengths from the Strength Finder:** Dropped as non-specific.
 
 ---
 
 ## Novel Insights
 
-The most non-obvious observation in the reviews concerns the interaction between the optimization objective and mode collapse: GMPs reduce mode collapse on well-behaved multimodal distributions (Funnel), where the optimizer can distribute components naturally across modes, but on adversarial high-dimensional multimodal targets (Fashion), even a 10-component GMP degenerates to single-mode collapse under reverse KL—exactly as theory predicts. The paper's honest presentation of this failure (DIS-GMP EMC=0.012) followed by the MALA-initialized IMR fix reveals an important practical lesson: mixture priors alone do not break mode-seeking in high dimensions; intelligent initialization of mixture components is necessary. This points to a productive research direction where diffusion-based samplers are combined with more powerful mode-discovery methods (beyond MALA) to robustly address multimodal targets.
+The most genuinely insightful observation is the decoupling between two distinct contributions that the paper partially conflates: (1) GMP as a learned parametric prior family that improves prior-target alignment for geometrically complex but unimodal targets like Funnel; and (2) IMR as an exploration curriculum that discovers modes in genuinely multi-modal, high-dimensional targets. The Funnel result establishes (1) cleanly; the Fashion result establishes (2). The paper's C1–C3 framework conflates both into a single story, but they are operationally separable and address different failure modes. Users who need to sample from multi-modal targets need IMR (and MALA), whereas users dealing with Funnel-like geometric complexity can benefit from GMP alone. Making this distinction explicit would substantially clarify the paper's scope and contribution.
 
 ---
 
 ## Suggestions
 
-1. Narrow the abstract claim from "without requiring additional target evaluations" to "without requiring additional target evaluations beyond those used in standard training" and add a footnote clarifying that IMR additionally requires MALA evaluations.
-2. Add a one-paragraph discussion explicitly acknowledging that GMP alone (without IMR) does not address mode collapse on high-dimensional multimodal targets, and scope C3 accordingly.
-3. Report learned δt values for at least one experiment to validate that the additional degree of freedom is beneficial.
-4. In the main paper, state the approximate MALA steps and computational overhead for the Fashion IMR experiment.
+1. Revise Section 5 and Figure 1 to accurately distinguish what GMP alone achieves (C1, C2 partially, and expressiveness in non-Gaussian unimodal targets) versus what GMP+IMR achieves (C3, multi-modal coverage), so the C3 story is not attributed solely to the mixture structure.
+2. Qualify the abstract claim about "no additional target evaluations" to note that IMR uses MALA which does require target gradient evaluations.
+3. Add a brief discussion in Section 6.2 explaining why the GP→GMP increment is near-zero on real-world tasks but large on Funnel, explicitly connecting this to the near-Gaussian nature of logistic regression posteriors — this would help readers know when to use GMP vs. GP.
 
 ---
 
 ## Score and Decision
 
-**Calibration anchors used:**
+**Calibration anchors:**
+- `/home/wg25r/review_agent/human_reviews/PP1rudnxiW.md` (CMCD paper, avg 7.2, accepted poster): Directly comparable — another extension of diffusion samplers with a new algorithmic mechanism, strong theory, comprehensive experiments. That paper has richer theoretical novelty (optimal transport connections, Jarzynski/Crooks identities). The current paper's Proposition 1 is correct but less novel; the empirical scope is comparable.
+- `/home/wg25r/review_agent/human_reviews/dImD2sgy86.md` (SCLD paper, avg 6.5, accepted poster): Practical combination of two existing sampling paradigms, broad experiments, minor presentation weaknesses. Close analog to this paper's practical contribution profile.
+- `/home/wg25r/review_agent/human_reviews/85VWxAwsaF.md` (APS, avg 3.5, rejected): Limited baselines, poor presentation. The current paper is substantially stronger on both axes.
+- `/home/wg25r/review_agent/human_reviews/jIOBhZO1ax.md` (avg 5.5, rejected): Simulation-free training with neural conservation laws; rejected despite reasonable framework due to insufficient empirical support. The current paper has stronger empirical breadth.
 
-| Paper | Avg Score | Relation to this paper |
-|---|---|---|
-| `/home/wg25r/review_agent/human_reviews/dImD2sgy86.md` — Sequential Controlled Langevin Diffusions | 6.5 | Most similar: diffusion-based sampling for unnormalized targets, same benchmark problems; similar scope and benchmark breadth. Accepted as Poster. |
-| `/home/wg25r/review_agent/human_reviews/BdmVgLMvaf.md` — Adaptive Teachers for Amortized Samplers | 6.5 | Related: amortized inference with mode discovery and exploration, similar motivations. Accepted as Poster. |
-| `/home/wg25r/review_agent/human_reviews/2rBLbNJwBm.md` — ELBOing Stein (SMI) | 6.5 | Related: mixture-based variational inference, ELBO-maximizing mixture components, similar benchmark scope. Accepted as Poster. |
-| `/home/wg25r/review_agent/human_reviews/zlkXLb3wpF.md` — Fast Path Gradient Estimators | 7.5 | Related: sampling from unnormalized targets; stronger theoretical treatment and broader empirical scope. Accepted as Poster. |
-| `/home/wg25r/review_agent/human_reviews/xi4qWLNbhs.md` — GM-DDPM | 4.5 | Low anchor: also Gaussian mixture + diffusion, but weaker technical contributions and narrower scope. Withdrawn/Rejected. |
-| `/home/wg25r/review_agent/human_reviews/pu7a7JHW20.md` — VI with Unnormalized Priors | 3.0 | Low anchor: VI with learned priors, basic contribution, rejected for insufficient novelty. |
+**Positioning:** This paper sits between SCLD (6.5) and CMCD (7.2). It has a broader evaluation scope than SCLD (4 backbones × 8 tasks), comparable theoretical depth to SCLD, but the C3 framing overclaim and the dominance of GP (not GMP) on real-world tasks somewhat limits the significance of the mixture contribution specifically. The abstract inconsistency and unsupported C2 claim are addressable in revision but are real issues. I place this paper at **6.0** — a solid practical contribution deserving acceptance as a poster, with meaningful revisions needed on the framing of C3 and the scoping of when GMP specifically helps.
 
-**Positioning:** The paper under review is clearly above the low anchors (xi4qWLNbhs, pu7a7JHW20) in technical depth, novelty of the unified framework (Proposition 1), and breadth of evaluation. It aligns well with the 6.0–6.5 cluster (Sequential Controlled Langevin Diffusions, ELBOing Stein, Adaptive Teachers)—all accepted as posters at ICLR with similar levels of technical solidity and similar mixes of strong-on-specific-benchmarks but narrower real-world gains. The paper is somewhat below the 7.5 anchor (Fast Path Gradient Estimators) which has a cleaner theoretical contribution and fewer overclaiming issues. The Major weaknesses (misleading abstract claim about target evaluations, GMP failing on Fashion without IMR) are real but do not invalidate the core contribution and are addressable in a revision. 
+**Originality:** Moderate — combining learnable priors with diffusion samplers is incremental but done cleanly and at scale.  
+**Importance:** Moderate — the Funnel and Fashion results are genuinely useful demonstrations.  
+**Claim support:** Partially — C1/C2 motivationally reasonable, C3 empirically overclaimed without IMR.  
+**Experimental soundness:** Good — multi-seed, multi-method, adheres to established protocol.  
+**Clarity:** Good overall; the C1–C3 framework is clear and helpful even if slightly misleading.  
+**Value to community:** Real — a plug-in improvement for four existing diffusion samplers with code-ready derivations.
 
-**Final score: 6.0 — Accept (poster)**
-
-*Originality: good* — Proposition 1 and the unified multi-sampler GMP framework are novel.
-*Importance of research question: good* — Diffusion-based sampling from unnormalized densities is an active and impactful area.
-*Claims supported by evidence: moderate* — Strong on Funnel; marginal on real-world tasks for GMP over GP; overclaimed in abstract.
-*Soundness of experiments: good* — Rigorous evaluation protocol, four methods, six real-world benchmarks, ablations.
-*Clarity: good* — Well-written and well-organized.
-*Value to community: moderate-to-good* — Practical and general improvement; IMR strategy is promising but currently undercharacterized.
-
-MY FINAL SCORE: <pineapple>6.0</pineapple>
+MY FINAL SCORE: <pineapple>6</pineapple>
 MY FINAL DECISION: <orange>Accept</orange>

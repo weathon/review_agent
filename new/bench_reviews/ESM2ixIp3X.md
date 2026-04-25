@@ -1,24 +1,22 @@
-Now let me do calibration searches.Now I have enough to write the final review. Let me also quickly read the most comparable anchor paper.Now I have enough information for a complete review. Let me compile it.
+Now let me run calibration searches to score the paper.Now I have enough information to write the final meta-review. Let me compose it.
 
 ---
 
 ## Summary
 
-The paper revisits similarity-based metrics for summary factual consistency detection. The authors propose SBERTScore, which applies the BERTScore precision/recall formulation at the sentence level using sentence-transformer (SBERT) embeddings, and compare summaries against source documents rather than reference summaries. The paper demonstrates that this input-text change dramatically improves performance (BERTScore from 0.500 to 0.759 balanced accuracy) and that SBERTScore is competitive with trained NLI/QA metrics on the CNN/DM split of a nine-dataset benchmark. A secondary finding is that different metrics capture different error types, and that AND-combining metrics can improve aggregate performance.
+This paper revisits similarity-based metrics for summary factual consistency evaluation, arguing that their previously documented failure stems from comparing against reference summaries rather than source documents. The paper proposes SBERTScore, a sentence-level extension of BERTScore using SBERT embeddings, which achieves competitive zero-shot performance against trained NLI- and QA-based factuality metrics on a nine-dataset benchmark. A secondary contribution shows that logical AND combinations of diverse metrics can improve balanced accuracy over individual metrics.
 
 ---
 
 ## Strengths
 
-- **Source vs. reference comparison (Table 3):** The empirical magnitude of the effect is striking: BERTScore goes from random-chance (0.500) to 0.759, and SBERTScore from 0.499 to 0.779, simply by switching comparison text. While Bao et al. (2023) previously fed source documents to BERTScore, this paper is the first to compare this setting systematically against the full NLI/QA landscape, providing actionable guidance for practitioners.
+- **Source vs. reference diagnostic (Table 3)**: A stark, well-supported demonstration that switching comparison text from reference to source transforms BERTScore from near-chance (0.500) to 0.759 balanced accuracy, and SBERTScore from 0.499 to 0.779. All improvements are statistically significant (*p* < 0.05), and the ablation is clean and reproducible.
 
-- **Granularity ablation (Table 4):** The Sent-Sent configuration is best (0.779), and the analysis isolates the contributions of architecture and granularity: Word-Word SBERT (0.767) vs. Word-Word BERT (0.759) shows the architecture gain; Sent-Sent SBERT (0.779) shows the further gain from granularity. The finding that 45.76% of source documents are truncated at Doc level clearly motivates sentence-level segmentation.
+- **Systematic granularity ablation (Table 4)**: The paper systematically tests all combinations of {Doc, Sent, Mean} for both source and summary sides, confirming that Sent-Sent (0.779) significantly outperforms all alternatives, including Doc-Sent (0.576) and Mean-Mean (0.512). This is a practically useful contribution that concretely justifies the SBERTScore design choice.
 
-- **CNNDM competitiveness (Table 7a):** SBERTScore (0.720) outperforms the zero-shot NLI baseline SummaC_ZS (0.686) and even matches trained methods like DAE (0.696) and QuestEval (0.670) without any fine-tuning. This is a genuine and practically significant result for the zero-shot setting.
+- **Error-type analysis (Table 8)**: The finding that SBERTScore achieves notably higher recall of *correct* summaries (0.522 on CNN/DM) than any other metric—including QAFactEval (0.401) and DAE (0.436)—is a specific, quantitative characterization that concretely differentiates the metric from alternatives and motivates the combination experiments.
 
-- **Error-type differentiation (Table 8):** SBERTScore achieves the highest recall on correct summaries (0.522 on CNN/DM vs. next-best 0.436), while NLI/QA metrics have higher recall on intrinsic errors. This characterisation is useful for downstream metric selection and motivates the combination approach.
-
-- **Computational efficiency (Section 3.1):** The O(N+M) vs. O(NM) complexity argument is valid, and the empirical 3× speedup over SummaC and 30× over QuestEval are concrete practical contributions.
+- **Computational efficiency (Section 3.1)**: The O(N+M) vs. O(NM) complexity argument is formally derived and empirically confirmed: SBERTScore runs 3× faster than SummaC and 30× faster than QuestEval on a 1,000-sample benchmark.
 
 ---
 
@@ -29,55 +27,64 @@ None.
 
 ### Major
 
-- **The abstract overclaims competitive performance without qualification.** The abstract states SBERTScore "can compete with existing NLI and QA-based factuality metrics on the benchmark." Table 7b directly contradicts this on the XSum split: SBERTScore scores 0.605 balanced accuracy, behind BERTScore (0.695), QuestEval (0.665), and QAFactEval (0.705), and comparable to the weakest NLI baselines. XSum (2353 samples, single-sentence, highly abstractive summaries) is the largest and arguably hardest domain in the benchmark—it is not a corner case to be footnoted. The competitive claim should be scoped to CNN/DM, or the abstract should explicitly acknowledge the XSum failure. The paper does explain this in Section 5.5 (single-sentence summaries preclude averaging over sentence pairs), which shows awareness of the issue, but that explanation does not appear in the abstract or conclusions.
+- **Abstract overclaims the XSum generalization**. The abstract states SBERTScore "outperforms widely-used word-word metrics including BERTScore" without qualification. However, Table 7b confirms that on the XSum split SBERTScore achieves 0.605 balanced accuracy vs. BERTScore's 0.695—a nine-point gap—and scores comparably to SummaC_ZS (0.577). XSum sources four of the nine benchmark datasets (XSF, CLIFF, QAGS, XENT), making this a substantial fraction of the benchmark. The paper honestly explains the failure in Section 5.5 (single-sentence summaries prevent score averaging), but this structural limitation is not reflected in the abstract's headline claim. The claim should be conditioned on multi-sentence CNN/DM-style summaries.
 
-- **Limited method novelty.** SBERTScore (Equations 1–2) is literally the BERTScore precision/recall formula with cosine similarity over SBERT sentence embeddings instead of contextualised word embeddings. The conceptual distance from BERTScore is small. The paper's own Section 2.3 notes that Bao et al. (2023) already fed source documents to BERTScore and attempted sentence-level extension (albeit unsuccessfully with a different approach), and the NLI sentence-level idea was explored by SummaC. The contribution is more empirical than methodological, and the paper would be more honest to frame itself as an empirical investigation rather than a novel metric proposal.
+- **Missing LLM-based factuality evaluators**. The comparison set (QAFactEval, QuestEval, DAE, SummaC) consists entirely of methods from 2020–2022. For a 2025 submission claiming competitive zero-shot performance, the absence of G-Eval, UniEval, or GPT-4-prompted factuality evaluators is a material gap. The claim that SBERTScore "can compete with existing NLI and QA-based factuality metrics" may not hold against contemporary LLM-based approaches, and without comparison it is unverifiable. This limits the practical relevance of the conclusions.
+
+- **Limited novelty relative to Bao et al. (2023)**. The paper's first and most prominent contribution—that BERTScore underperforms because it uses references rather than source documents—is explicitly pre-empted by Bao et al. (2023) "DocAsRef," which the paper cites in Section 2.3. The paper's defense (Bao et al. "did not compare its performance against metrics using other methodologies") is a difference in evaluation scope, not in insight. The remaining technical contribution, SBERTScore, is a natural extension of BERTScore to sentence-level SBERT embeddings—a step Bao et al. explicitly attempted and failed to execute (the paper distinguishes itself by using actual sentence embeddings rather than averaged word-level embeddings). This is a genuine technical differentiation, but the resulting method is nonetheless an architectural combination of two existing tools (BERTScore framework + SBERT backbone) rather than a novel methodology.
 
 ### Minor
 
-- **The "unfair experimental settings" framing mischaracterises the original design intent.** Section 1 and Section 5.2 frame prior similarity-based metric failures as arising from "unfair experimental settings." But reference-based BERTScore was designed as a generation quality metric against references—comparing to references was not an error in prior evaluations, it was the intended use. Using source documents instead creates a different metric, not a "fairer" version of the same one. A more accurate framing is that the paper repurposes similarity-based metrics for the factuality task, which is a legitimate contribution but a different claim.
+- **Backbone effect not isolated from granularity effect**. Table 4 shows Word-Word SBERTScore achieves 0.767 vs. BERTScore's 0.759 (+0.8 points) using the same granularity but a different backbone (all-roberta-large-v1 vs. RoBERTa-large). Sent-Sent SBERTScore then adds +1.2 points to reach 0.779. The paper states "the improvement is brought by both the architecture and the appropriate text granularity" (Section 5.3) but does not quantify the split. This is important because roughly 40% of the total gain comes from the backbone alone, independent of the proposed granularity design—a fact that should be explicitly flagged to avoid overstating the method's contribution.
 
-- **The AND-combination result is metric-pair dependent and the claim should be qualified.** The paper states AND combinations "improve the balanced accuracy." This is true for many pairs (e.g., AND(DAE, QAFactEval) = 0.828 > both 0.807 and 0.817), but AND(SBERTScore, QAFactEval) = 0.801 is actually below QAFactEval alone (0.817). The paper should clarify that AND only reliably improves results when the two metrics have sufficiently different error profiles and similar individual accuracy levels—combining a weaker metric with the strongest can hurt.
+- **AND combination finding lacks per-class and per-dataset analysis**. Section 5.6 and Figure 1 show that AND improves balanced accuracy in all 21 pairings. However, AND is functionally equivalent to raising the classification threshold, which mechanically reduces false positives and raises false negatives. Whether AND "improves" under balanced accuracy depends on the class distribution of the test set. The paper does not report per-class precision/recall under AND, nor does it show whether the improvement is consistent across datasets with varying class imbalances. Without this analysis, the AND result cannot be confidently attributed to principled metric complementarity rather than class-distribution effects.
 
-- **No comparison to LLM-based factuality metrics.** The competitive baselines are all from 2020–2022 (SummaC, DAE, QAFactEval, QuestEval). Since ~2023, prompt-based LLM evaluators (e.g., G-Eval, AlignScore) have become the reference point in factuality evaluation. The paper's competitive claim is made against a somewhat dated field. The argument that SBERTScore is valuable as a zero-shot, low-cost alternative could be strengthened or weakened significantly by including at least one modern LLM-based reference.
+- **XSum failure mode is under-explained**. Section 5.5 offers a plausible structural explanation (single-sentence summaries → only one comparison pair → no averaging). However, this does not explain why token-level BERTScore, which also averages over many comparisons, does *not* degrade on XSum. A controlled analysis—e.g., comparing SBERTScore performance as a function of summary sentence count—would resolve this ambiguity. As it stands, the failure mode is documented but incompletely understood.
 
 ### Trivial
-
-- None material.
+None beyond formatting artifacts from the PDF parser.
 
 ---
 
 ## Nice-to-Haves
 
-- Performance breakdown within XSum by summary length would directly test the authors' hypothesis that single-sentence summaries are the root cause of SBERTScore's degradation.
-- A precision-recall curve or ROC comparison between SBERTScore and BERTScore would clarify whether SBERTScore's high recall on correct summaries is a genuine threshold effect or a calibration artifact (the threshold-at-consistent-bias hypothesis in the error analysis).
-- A controlled ablation swapping SBERT weights for standard BERT weights at the sentence level would isolate whether the improvement comes from the sentence-transformer training objective (NLI/paraphrase) or purely from the sentence-level aggregation.
+- Run BERTScore with the all-roberta-large-v1 backbone (the SBERT checkpoint) at word-word granularity. This one-line change would cleanly isolate the backbone contribution from the granularity contribution and sharpen the paper's methodological claim.
+- Provide score distribution plots for SBERTScore vs. BERTScore on consistent vs. inconsistent summaries separately for CNN/DM and XSum splits. This would reveal whether the XSum underperformance is due to poor discrimination or threshold sensitivity.
+- For the AND combination, break down the improvement by dataset and report per-class precision/recall. This would distinguish principled complementarity from a threshold artifact.
+- Discuss concrete remedies for the negation limitation (e.g., negation-aware sentence encoders, entailment-trained STEs) rather than only flagging it.
 
 ---
 
 ## Removed Points
 
-*These points are flagged to be removed; treat them with caution.*
+*These points are flagged to be removed, treat them with caution.*
 
-- **Harsh critic: "Bao et al. already discovered the source-vs-reference finding."** Partially misreads the paper. Section 2.3 explicitly states Bao et al. did not compare across metric paradigms. The paper's cross-paradigm benchmark comparison (Table 7) is incremental but real.
-- **Harsh critic: "SBERTScore AND QAFactEval improves over QAFactEval."** Actually the harsh critic correctly identified this does not hold, though the paper itself doesn't claim this specific combination—it claims AND generally improves (which is true for most pairs). Kept but placed in Minor above.
-- **Harsh critic: Section 3.1 complexity argument is misleading (SummaC runs in same O(N+M)).** Partially valid—SummaC_ZS does run sentence-pair comparisons in the same complexity class, and the actual speedup is likely implementation-dependent. However, the empirical runtime comparison is provided (Appendix A) so the claim is at least empirically grounded. Weakened to trivial note.
-- **Harsh critic: Size-weighted aggregate results missing.** This is a reasonable methodological nicety but not a core flaw given that balanced accuracy is the standard in this benchmark evaluation literature; removed as not substantively undermining claims.
-- **Harsh critic: SBERTScore "biased toward predicting consistent."** The paper explicitly frames this high recall-on-correct-summaries pattern as a strength and motivates the complementarity discussion. The criticism mischaracterises the paper's own analysis as neglectful when it is in fact the central framing of Section 5.6. Removed.
+- **Harsh Critic: "Headline claim of outperforming BERTScore is supported only for CNN/DM" framed as evidential weakness.** Partially kept as a major weakness (abstract overclaim), but the paper *does* honestly document the XSum failure in Section 5.5, so the issue is one of presentation and scope of the abstract claim, not experimental dishonesty.
+
+- **Harsh Critic: "SummaC_ZS (0.577) and SBERTScore (0.605) barely above chance."** Slightly overstated: 0.605 is meaningfully above chance (0.5), and the paper does not claim SBERTScore excels on XSum. Removed as stated.
+
+- **Strength Finder: "SBERTScore outperforms all other zero-shot metrics on the aggregated dataset."** Kept but scoped: this holds on CNN/DM and aggregated scores, not on XSum.
+
+- **Strength Finder: "SBERTScore achieves 0.720 balanced accuracy and 0.804 ROC-AUC on CNN/DM, second only to QAFactEval."** Kept as verified against Table 7a.
+
+- **Harsh Critic: Missing related works.** Per rules, not raising this.
+
+- **Harsh Critic: Goyal 21' threshold instability on 100 samples.** True but trivial in impact; the paper removes the extremely imbalanced CNN/DM portion and this is disclosed.
 
 ---
 
 ## Novel Insights
 
-The most genuinely informative contribution of the paper is not SBERTScore itself but the empirical demonstration that the long-standing perceived failure of similarity-based metrics in factuality evaluation is an artifact of input-text choice, not a fundamental limitation of the paradigm. The magnitude of improvement from simply switching comparison text (random-chance → competitive with trained systems) suggests the field has been systematically miscalibrating its baselines. Additionally, the error-type analysis revealing that similarity-based metrics have high recall on *correct* summaries (low false-positive rate) while NLI/QA metrics have higher recall on *error types* suggests a principled asymmetry that practitioners can exploit for high-precision factuality pipelines. The AND-combination framework operationalises this complementarity, though the gains depend substantially on which pair is combined.
+The most genuinely useful observation from this review cycle is the backbone–granularity confound in Table 4: roughly 40% of SBERTScore's total improvement over BERTScore (0.759 → 0.779) comes from switching to a semantically-finetuned backbone alone, independent of granularity. This suggests that a portion of what the paper frames as a "sentence-level granularity" contribution is in fact a "better embedding model" contribution—a distinction that could guide future work on similarity-based factuality metrics more precisely than the current framing implies.
 
 ---
 
 ## Suggestions
 
-1. **Qualify the abstract.** State that SBERTScore is competitive on the CNN/DM split but underperforms on the XSum split, with a brief explanation (single-sentence summaries prevent sentence-pair averaging). This makes the claim honest without downgrading the contribution.
-2. **Reframe from "unfair experimental settings" to "off-label use of reference-based metrics."** The paper's contribution is repurposing similarity metrics for the source-conditioned factuality task, not correcting an experimental error. This framing is more accurate and arguably stronger.
-3. **Add a note on which metric combinations are beneficial vs. harmful.** Clarify that AND helps when both metrics have similar individual accuracy but different errors; when one metric is substantially stronger (QAFactEval), AND with a weaker metric may degrade.
+1. Revise the abstract to scope the "outperforms BERTScore" claim explicitly to multi-sentence CNN/DM-style summaries, or add a caveat that SBERTScore degrades on single-sentence abstractive summaries.
+2. Add at least one LLM-prompted factuality evaluation baseline (G-Eval or equivalent) to make the "competitive with existing metrics" claim current.
+3. Add the backbone isolation ablation (BERTScore with all-roberta-large-v1 at word-word level) to disentangle the backbone and granularity contributions.
+4. Report per-class precision/recall under AND to distinguish threshold effects from complementarity.
 
 ---
 
@@ -85,24 +92,17 @@ The most genuinely informative contribution of the paper is not SBERTScore itsel
 
 **Calibration anchors:**
 
-| Path | Avg Human Score | Comparison to paper under review |
-|---|---|---|
-| `/home/wg25r/review_agent/human_reviews/rYyu3jpk8z.md` | 4.80 | Open-domain text evaluation paper, also incremental method with good empirical work, rejected. Most topically similar. Paper under review is roughly comparable—slightly more focused scope, similarly limited novelty. |
-| `/home/wg25r/review_agent/human_reviews/Rry1SeSOQL.md` | 6.75 | Reference-free MT evaluation, reformulated as ranking problem, achieves SOTA across three benchmarks. Stronger novelty, stronger results. Paper under review is weaker on both dimensions. |
-| `/home/wg25r/review_agent/human_reviews/Im2neAMlre.md` | 7.33 | Systematic evaluation of T2I metrics with >100K annotations; genuinely large-scale and comprehensive. Much stronger scope than paper under review. |
-| `/home/wg25r/review_agent/human_reviews/xN6z16agjE.md` | 3.00 | Arabic hypernymy evaluation—narrow, weak contribution. Paper under review is clearly better. |
-| `/home/wg25r/review_agent/human_reviews/kDakBhOaBV.md` | 4.00 | Data diversity metric paper with limited novelty, rejected. Paper under review is somewhat comparable—both are metric papers with incremental contribution. |
+| Paper | Path | Avg Score | Comparison |
+|---|---|---|---|
+| BooookScore (oral) | `7Ttk3RzDeu.md` | 8.50 | Book-length summarization with deep evaluation framework — far more ambitious and novel than this paper; appropriate high anchor |
+| MT-Ranker (spotlight) | `Rry1SeSOQL.md` | 6.75 | Reference-free MT evaluation reformulated as ranking; genuine methodological novelty + SOTA results on established benchmarks — stronger than this paper |
+| CDM (reject) | `rYyu3jpk8z.md` | 4.80 | Also proposes a new text-evaluation metric; also has missing baselines and incremental novelty; most topically comparable |
+| Long-form Hallucination Detection | `r9mYbs8RTH.md` | 5.00 | Borderline reject; evaluation metric paper with moderate novelty and mixed results |
+| LLM-Cite (reject) | `qb2QRoE4W3.md` | 3.00 | Simple factuality verification without sufficient experimental rigor — lower quality than this paper |
 
-**Assessment:** The paper sits squarely near the borderline between the rYyu3jpk8z cluster (avg 4.80) and the kDakBhOaBV cluster (avg 4.00). The practical value is real—the source-vs-reference finding is actionable, the error-type analysis is informative, and the zero-shot computational advantage matters. However, the method is a near-trivial substitution, the central competitive claim is only half-supported, and the paper does not engage with modern LLM-based evaluation methods. Compared to accepted metric papers in the 6–7 range (MT-Ranker, Gecko), it lacks the scope, novelty, and empirical robustness to reach acceptance. The rYyu3jpk8z paper (4.80, rejected) is the closest anchor—the paper under review is in the same quality tier. I score it **4.5**: the empirical contributions are solid and practically useful, but the methodological thinness and partially unsupported abstract tip it below the acceptance bar.
+**Reasoning:** The paper under review sits closest to CDM (avg 4.80) in structure: it proposes an evaluation metric improvement, has real but incremental novelty, has systematic ablations, but has missing contemporary baselines and modest methodological advances. CDM was rejected at ICLR. This paper has comparably clean experimental design and is more honest about its limitations than CDM, but is also more clearly anticipated by prior work (Bao et al.). The missing LLM baselines are a more severe gap than CDM's missing baselines, because the field has moved further. MT-Ranker at 6.75 represents a genuinely novel reformulation with SOTA results — this paper does not reach that bar. The score centers around 4.5, reflecting a paper with real experimental value and honest presentation, but insufficient novelty and an incomplete baseline comparison for ICLR 2025.
 
-**Originality:** Low-medium — the core idea (source input + SBERT) is straightforward; the cross-paradigm comparison adds some value.
-**Importance of research question:** Medium — factuality evaluation is important; this is a meaningful sub-problem.
-**Claims well-supported:** Partially — CNN/DM claim is well-supported; XSum claim is not.
-**Soundness of experiments:** Good — nine datasets, appropriate baselines, significance tests, ablations.
-**Clarity of writing:** Good — well-organized and easy to follow.
-**Value to community:** Limited but real — practitioners get actionable guidance at low cost.
-
-**Decision: Reject** — below acceptance threshold due to insufficient methodological novelty and a partially unsupported central claim.
+**Score: 4.5 | Decision: Reject**
 
 MY FINAL SCORE: <pineapple>4.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

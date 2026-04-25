@@ -1,26 +1,26 @@
-Now let me search for calibration papers.Now I have enough information to write the final review. Let me synthesize everything.
+Now let me search for calibration anchors.Now I have enough context to write the final review. Let me also check the fSbPwHjdDG.md (avg 3.0, causal intervention) paper briefly for comparison.Now I have enough information to write a comprehensive final review.
 
 ---
 
 ## Summary
 
-This paper investigates how "belief directions" in LLM latent spaces are sensitive to contextual premises. The authors introduce four error scores (E1–E4) measuring different types of context-consistency violations in belief probes, propose Contrast Consistent Reflection (CCR) as a more stable variant of CCS, and conduct a causal intervention experiment to test whether belief directions mediate truth-value inference. Results show that probes are context-sensitive but also inappropriately sensitive to irrelevant contexts, and that instruction tuning shifts the error profile toward premise-polarity sensitivity.
+This paper investigates how "belief probes" — linear probes on LLM latent representations that predict truth values of sentences — behave in the presence of in-context information (NLI-style premise-hypothesis pairs). The authors introduce four principled error scores (E1–E4) measuring different failure modes in truth-value judgment under contextual variation, propose CCR (Contrast Consistent Reflection) as a more stable variant of CCS, and conduct a causal intervention experiment to test whether belief directions mediate in-context inference. Key findings include that all probes show sensitivity to irrelevant contexts (E1/E2 near 1), that instruction tuning shifts models toward E4-type errors, and that moving premise representations along belief directions shifts hypothesis probabilities in the expected direction.
 
 ---
 
 ## Strengths
 
-- **Principled error score framework (Table 1)**: The four error scores E1–E4, normalized by premise effect (PE), cleanly separate distinct failure modes — sensitivity to corrupted/unrelated premises (E1, E2) versus violations of conditional/marginal belief consistency (E3, E4). This is a concrete analytical contribution that enables direct, cross-method comparisons in a single table (Table 2).
+- **Novel and principled E1–E4 error framework (Table 1, Section 3.3):** The four error scores operationalize distinct, normatively grounded failure modes — sensitivity to corrupted/unrelated contexts (E1, E2), and deviations from conditional vs. marginal belief behavior (E3, E4) — with premise-effect normalization making scores comparable across probing methods. This goes substantially beyond prior work (e.g., Burns et al. 2023) which included contextual datasets but never analyzed context impact systematically.
 
-- **Instruction-tuned vs. pretrained model finding (Figure 3)**: Using OLMo-7B and OLMo-7B-Instruct (same base model, different training) is a well-controlled natural experiment. The finding that instruction tuning shifts the model's error profile toward E4-dominance in later layers — meaning premise polarity affects hypothesis probability disproportionately — is interpretable and connects internal representations to training regime differences.
+- **Finding that prior and contextual beliefs are not orthogonally represented (Figure 2, Section 4.1):** No-prem probes trained without any premise still exhibit systematic premise sensitivity at test time, and most achieve good accuracy on p(h;q+). This is a concrete, verifiable finding with real implications for the belief-direction literature.
 
-- **Directionally specific causal intervention (Figure 4)**: Moving affirmed premise representations *backward* along the belief direction causes entailed hypotheses to decrease in probability and contradicted hypotheses to increase — the directionality is exactly as predicted, providing suggestive evidence of causal mediation beyond mere correlation.
+- **Probes consistently outperform LM-head baseline (Table 2):** The comparison to the LM-head baseline is appropriate and cleanly executed, showing that representation-level truth information is not fully surfaced by generation — relevant for understanding inconsistency hallucinations.
 
-- **CCR objective (Eq. 2, Section 3.1)**: The Householder-reflection formulation is a clean single-term alternative to CCS that provably avoids the degenerate solution (p(x⁺) = p(x⁻) = 0.5), without requiring a separate confidence loss term. The geometric motivation is clear and mathematically sound.
+- **Instruction-tuning effect on E3/E4 balance (Figure 3):** The finding that OLMo-7b-Instruct leans toward E4 errors in later layers compared to the base model — i.e., instruction tuning makes models more compliant with asserted premises — is specific, layer-resolved, and plausibly explained by the instruction-tuning objective.
 
-- **Metalinguistic negation template**: Using "Saying that X is [in]correct" avoids presupposition failures that arise from negating object-level sentences directly. This is a principled and reproducible design choice that strengthens the validity of E3/E4 measurements.
+- **CCR formal non-degeneracy argument (Section 3.1):** CCR avoids the degenerate solution of CCS (p(x+) = p(x-) = 0.5) via the Householder reflection constraint. The mathematical argument is explicit and correct; the practical improvement in convergence stability is a genuine contribution even if minor.
 
-- **Code publicly released** (anonymous GitHub link provided), enabling direct reproducibility.
+- **Careful prompt design (Section 4, Figure 1):** Using the "Saying that [X] is [in]correct" framing avoids attributing beliefs to explicitly mentioned characters (as criticized by Farquhar et al. 2023 and Zhu et al. 2024), and the meta-statement negation sidesteps presupposition-preservation problems with internal negation. These design choices are specific and well-motivated.
 
 ---
 
@@ -31,31 +31,33 @@ None.
 
 ### Major
 
-- **Missing null-direction control for the causal intervention (Section 4.2)**: The experiment moves premise representations along the belief direction θ and measures the effect on the hypothesis's position along the same θ. There is no control condition — e.g., a random orthogonal direction of equal magnitude — to rule out the hypothesis that *any* perturbation of comparable magnitude produces a similar downstream shift. Without this, the ~10 percentage point effect is consistent with a generic perturbation response rather than a specific causal role of the belief direction. The causal mediation claim in the abstract is presented with more confidence than the single-model, no-control design supports. Additionally, the probe direction used for intervention was found on the same hypothesis-premise pairs used to evaluate the outcome, which is a circular dependency; an independent outcome measure (e.g., LM-head token probabilities for "correct"/"incorrect") would break this circularity.
+- **The causal intervention lacks a direction-specificity control:** Section 4.2 shows that moving affirmed premise representations *backward* along belief directions decreases entailed-hypothesis probabilities and increases contradicted-hypothesis probabilities by up to ~10 percentage points. This is consistent with causal mediation, but the experiment does not include the essential control: applying the same magnitude intervention along a *random* direction (or orthogonal direction) to verify that the observed effect is specific to the belief direction and not a general consequence of perturbing premise representations. Without this control, the experiment establishes that belief directions *can* influence hypothesis positions, but cannot rule out that any direction of the same magnitude would produce similar effects. The paper's second stated contribution — "demonstrating that belief directions causally mediate natural language inference" — is thus overstated. The appropriate hedged claim would be that belief directions participate in causal mediation, consistent with (but not exclusively establishing) the directional hypothesis.
 
 ### Minor
 
-- **E1/E2 OOD confound not resolved (Section 4, paragraph 2)**: When evaluating E1 and E2, no-prem probes are tested with corrupted or unrelated premises appended — a strictly out-of-distribution condition for those probes. The paper acknowledges this ("The other combinations are out of distribution") but still interprets the near-1.0 E1/E2 scores as evidence of the model's insensitivity to truth-relevance, without ruling out that the probe simply extrapolates poorly to any OOD input. The paper should distinguish probe calibration failure from underlying model belief failure more carefully.
+- **E1/E2 ≈ 1 implications are underexplored:** The finding that corrupted (random-character) and unrelated premises shift probe outputs with magnitudes comparable to relevant premises (E1, E2 ≈ 0.4–1.0+) is reported honestly in Table 2 and briefly discussed. However, the paper's dismissal ("arbitrary spurious correlations are unlikely to be coherent") is too thin given the severity of the finding. If arbitrary text in context moves the probe as strongly as a semantically relevant premise, it is worth investigating whether this is driven by contextual *length*, *position*, or *syntactic structure* rather than semantic content — a targeted analysis that would clarify what the probe is actually capturing and strengthen the paper's defense of the belief-direction interpretation.
 
-- **Corrupted premise design may conflate OOV response with truth-insensitivity**: Replacing all characters in each word with random characters produces near-unreadable strings that are far outside the model's natural text distribution. The model's response to this could reflect sensitivity to gibberish tokens rather than sensitivity to a meaningful but truth-irrelevant proposition. A weaker, grammatical distractor corruption would provide a cleaner test of the intended property.
+- **CCR contribution is empirically thin:** While the formal argument for non-degeneracy is sound (Section 3.1), the paper omits CCS from the main Table 2 ("full table in Appendix B"), and does not report variance of final solutions across seeds or convergence statistics. The claim that CCR achieves "more stable convergence" is stated and plausible (Figure 3b illustrates CCS's instability), but is not quantified. This limits the reader's ability to evaluate the practical significance of the contribution.
 
-- **CCR stability claim is anecdotal (Section 3.1)**: CCR is listed as a contribution, but the stability advantage over CCS is supported only by the statement "in our experience CCS does not consistently converge." No convergence curves, seed variance, or systematic comparison is provided. Given that CCS is omitted from the main Table 2 (deferred to appendix), this makes the comparative case harder to evaluate.
-
-- **Scaling claim based on two data points**: "Error scores show no sign of scaling with model size" is stated as a finding, but rests only on 7b vs. 13b comparisons. The paper correctly acknowledges in the Limitations section that "additional experiments are needed"; the claim should be weakened correspondingly in the main text.
-
-- **Layer selection for intervention does not match paper's own peak-sensitivity finding**: The intervention is applied to layers 8–14 following Marks & Tegmark (2023), but Figure 2b shows premise sensitivity peaking around layers 15–20 for Llama2. Applying the intervention before the information is most salient may underestimate the causal effect and is not directly motivated by the paper's own analysis.
+- **Causal intervention conducted on a single model (Llama2-13b):** The intervention experiment uses only Llama2-13b in layers 8–14, with no justification for the layer range and no results on OLMo models. Reporting results across at least one additional model or confirming robustness to adjacent layer ranges would substantiate the generality of the finding.
 
 ### Trivial
-None that survive filtering.
+
+- The observation that error scores "show no sign of scaling with model size" (7B vs. 13B Llama) is interesting, but the paper's framing does not sufficiently hedge: this is only one model family at two sizes, and the limitations section acknowledges it. It should be consistently framed as a preliminary null observation rather than a conclusion about scaling.
 
 ---
 
 ## Nice-to-Haves
 
-- A null-direction control (random or orthogonal direction of equal magnitude) in the intervention experiment would substantially strengthen the causal claim with minimal additional cost.
-- An independent outcome measure for the intervention — e.g., LM-head token probabilities for "correct"/"incorrect" — would break the circular dependency between the probe used for intervention and the one used for measurement.
-- A larger model (e.g., 70b) or at least a third model size would allow the scaling negative result to be more convincingly characterized.
-- Qualitative examples of E1/E2 failures (specific hypothesis-corrupted-premise pairs with actual probe probabilities) would make the nature of the sensitivity failure more concrete and legible.
+- **Random direction control for causal intervention:** Add a control where the same magnitude intervention is applied along a random Gaussian direction and a PCA direction from the same premise representations. This is the single experiment that would most substantially strengthen the causal mediation claim.
+
+- **Mechanism analysis for E1/E2 failures:** Investigate whether E1/E2 magnitude correlates with corrupted premise length or position to determine if the probe is reacting to semantic content or to surface-level textual properties.
+
+- **Layer-wise error score plots:** Table 2 reports only two "representative" layers per setting. Layer-wise plots of E1–E4 analogous to Figure 2 would reveal whether errors are concentrated or distributed, providing richer mechanistic evidence.
+
+- **Quantitative convergence comparison between CCR and CCS:** Reporting variance of directions across random seeds, or frequency of degenerate solutions, would solidify the CCR contribution.
+
+- **Probing the meaning relation R:** As acknowledged in the limitations, probing for R (entailment/contradiction/neutral) would allow separation of failures in representing the relation from failures in propagating it to H's truth value — a natural extension the paper identifies correctly.
 
 ---
 
@@ -63,55 +65,51 @@ None that survive filtering.
 
 *These points are flagged to be removed; treat them with caution.*
 
-- **Harsh Critic: E3/E4 mutual exclusivity limits normative conclusions** — The paper explicitly acknowledges this in Section 3.3 ("it is impossible to have a score of zero for both simultaneously"). The mutual exclusivity is a feature of the framework design, not a flaw: E3 and E4 measure deviations from *two different valid belief regimes*, and the paper is clear about what each measures. The framework's value is in characterizing *which* failure mode dominates, not in achieving a zero score on both. Partially removed (downgraded to minor/nice-to-have); the paper's framing is defensible.
+- **EntailmentBank contradiction validity concern (Harsh Critic Section 4 note):** The critic suggests that "wrong answer" hypotheses might not be logically contradicted by the premises. The paper provides a concrete example (a factual ARC science question with a clear correct answer, where wrong answers are factually contradicted by supporting premises). The construction is defensible, and this concern conflates "incorrect" with "unrelated" in a way that the paper addresses by design.
 
-- **Harsh Critic: SNLI and EntailmentBank pooled as if equivalent** — Table 2 clearly presents the datasets in separate, labeled blocks with separate rows. The paper does not pool them and discusses them separately. Removed as a strawman.
+- **Marginal belief definition (Harsh Critic Section 3.2 note):** The paper explicitly uses footnote 3 to explain why it leaves the expression unsimplified, which is a reasonable and clear choice. This is not a weakness.
 
-- **Harsh Critic: CCS omitted from main table undermines CCR comparison** — The full table is in Appendix B per the paper; we cannot assess appendix content and should not penalize authors for this. Removed per the appendix rule.
+- **Scaling null finding (Harsh Critic Section 4.1 note):** The paper's limitations section already appropriately caveats this finding. The criticism is addressed.
 
-- **Strength Finder: "TVJ framing provides established theoretical grounding"** — While the analogy to language acquisition research is interesting, the framing is fairly lightweight and doesn't substantially constrain the methodology. Removed as a generic strength.
-
-- **Strength Finder: "No-prem probes exhibit premise sensitivity indicating non-orthogonal representation"** — This is a real finding (Figure 2a), but it's a supporting observation, not a core contribution. Retained in the body as minor supporting evidence but removed as a standalone top-level strength.
+- **Generic "no E3/E4 optimal tradeoff" complaint:** The paper acknowledges that E3 and E4 are opposing and cannot both be zero simultaneously (Section 3.3). Requiring a formal optimality criterion for this tradeoff is outside the paper's scope and not standard in probing literature.
 
 ---
 
 ## Novel Insights
 
-The paper's most interesting methodological insight — largely underemphasized — is that the mutual exclusivity of E3 and E4 is not merely a limitation but a diagnostic: any model doing *contextual* truth-value judgment at all must score positively on at least one, and the *ratio* of E3 to E4 (log-ratio in Figure 3) tells you which belief regime the model is approximating. The finding that instruction tuning pushes later layers toward E4-dominance implies that instruction tuning systematically shifts models toward prior-over-contextual-truth belief, which has implications for how instruction-following training interacts with factual consistency. This is a more focused, testable claim than the broad "context-sensitive belief" framing, and the paper would benefit from foregrounding it.
+The E1/E2 ≈ 1 finding — that corrupted and unrelated premises shift belief probe outputs with magnitudes comparable to genuinely relevant premises — is the paper's most surprising and underexplored result. It suggests that, at least in no-prem training regimes, what probes capture may be sensitive to the *presence* of assertive framing in context rather than its *semantic content*. The connection between this finding and whether probes represent "belief" in any principled sense is not resolved, but it motivates a deeper investigation into what surface features of context drive probe activation. The instruction-tuning result (OLMo-Instruct leaning toward E4 errors) is also a concrete, novel empirical finding: instruction tuning measurably increases a model's tendency to treat stated premises as true regardless of their actual truth, which aligns with the instruction-tuning objective and has implications for hallucination behavior in deployed LLMs.
 
 ---
 
-## Calibration
+## Suggestions
 
-**Anchor papers consulted:**
-
-| Path | Avg score | How it compares |
-|---|---|---|
-| `/home/wg25r/review_agent/human_reviews/rwqShzb9li.md` | 7.5 (Oral) | Linear political representations with causal steering and cross-dataset transfer; stronger causal evidence and broader scope than this paper |
-| `/home/wg25r/review_agent/human_reviews/zb3b6oKO77.md` | 5.25 (Accept, poster) | Binding ID vectors via causal experiments on context-entity binding; similar scope and similar causal intervention without null control |
-| `/home/wg25r/review_agent/human_reviews/w7LU2s14kE.md` | 7.33 (Spotlight) | Linearity of relation decoding in transformers; higher novelty, stronger experimental evidence |
-| `/home/wg25r/review_agent/human_reviews/fSbPwHjdDG.md` | 3.0 (Reject) | Causal intervention on latent language; limited to one model and one task, methodologically simpler than this paper |
-| `/home/wg25r/review_agent/human_reviews/WxqWuG431g.md` | 2.6 (Reject) | SAE geometry paper with unclear contributions and sparse writing; well below the paper under review |
-
-**Calibration reasoning**: The paper is substantially better than the low anchors (avg 2.6–3.0), which were rejected for sparse contributions and limited experiments. The paper has genuine methodological contributions (E1–E4 error framework, CCR), runs four models, and provides a reasonably coherent analysis. Compared to the medium anchor zb3b6oKO77 (5.25, poster accept), this paper is of similar quality — both feature causal intervention experiments, both have missing controls, both offer a novel evaluation perspective. The high anchors (7.33–7.5) had substantially stronger causal evidence and broader empirical coverage. This paper sits in the 5.0 range — a borderline poster-level contribution with real framework value but underpowered causal experiments.
+1. Add a random-direction control to the causal intervention experiment (same magnitude, same model and layers) — this is a low-cost experiment that would substantiate or qualify the causal mediation claim.
+2. Include E1/E2 mechanism analysis (vary corrupted premise length/position) to determine what surface properties drive context sensitivity.
+3. Report CCR vs. CCS convergence statistics (seed variance of final directions, frequency of degenerate solutions).
+4. Reframe the second contribution headline to reflect the hedged claim: "belief directions participate in causal mediation of NLI" rather than "causally mediate."
 
 ---
 
 ## Score and Decision
 
-**Originality**: Moderate — the error score framework and TVJ adaptation are genuinely novel, CCR is a minor technical contribution, and the causal mediation question is well-posed. Not a conceptual breakthrough.
+**Calibration anchors:**
 
-**Importance of research question**: Meaningful — understanding how LLM belief representations incorporate context is relevant to hallucination and consistency research.
+| Paper | Path | Avg Score | Comparison |
+|---|---|---|---|
+| Low: CALM Framework | `InWaCoIMMN.md` | 3.0 | Probing/interpretability paper rejected for weak empirical results. This paper is substantially better — it yields genuine, novel findings. |
+| Low: Llamas Think in English | `fSbPwHjdDG.md` | 3.0 | Causal intervention in LLM latent space, limited experiments, similar missing controls. This paper has a more comprehensive experimental setup and a principled evaluation framework. |
+| Medium: Attention Satisfies | `gfFVATffPd.md` | 6.0 | Accepted poster, probing LLM internals for factual errors with novel methodology. Similar scope and significance profile. |
+| High: Language Models Represent Space/Time | `jE8xbmvFin.md` | 6.75 | Accepted poster, LLM representation analysis. Cleaner execution but somewhat similar contribution type. |
+| High: Linear Representations of Political Perspective | `rwqShzb9li.md` | 7.5 | Accepted oral, linear probing + causal intervention. More conclusive interventions and broader impact. |
 
-**Claims vs. support**: The descriptive findings (context-sensitivity patterns, instruction tuning shift) are well-supported. The causal mediation claim is underpowered due to the missing null control.
+**Assessment relative to anchors:** This paper is stronger than the 3.0-range papers in empirical depth and framework novelty. It shares characteristics with the 6.0 "Attention Satisfies" paper — accepted poster with an interesting finding and solid methodology, but with some limitations in the main claim and scope. The causal claim overreach is a real issue that places this below the "Language Models Represent Space/Time" (6.75) and "Political Perspective" (7.5) papers, which have cleaner causal arguments or more impactful findings. The principled E1-E4 framework and the instruction-tuning finding are genuine contributions, but the missing direction-specificity control for the causal experiment — one of the two headline contributions — keeps this paper at the lower end of the accept range. I settle on **5.0**.
 
-**Soundness of experiments**: Mostly sound; the E1/E2 OOD issue and the missing null-direction control are the primary gaps.
+**Originality:** Moderate-good. The E1–E4 framework is original; CCR is incremental.  
+**Importance of research question:** Good — context sensitivity of belief probes bears directly on hallucination.  
+**Claim support:** Moderate — main empirical findings are well-supported; causal claim is overstated.  
+**Soundness of experiments:** Moderate — E1-E4 analysis is solid; causal experiment lacks the key control.  
+**Clarity:** Good — well-organized and clearly written.  
+**Value to research community:** Moderate — useful diagnostic framework, but contributions are incremental relative to prior work (Burns 2023, Marks & Tegmark 2023, Li 2023).
 
-**Clarity of writing**: Clear and well-structured; the methodology section is logically organized.
-
-**Value to the research community**: The E1–E4 error score framework is a reusable evaluation tool; CCR is a useful drop-in replacement for CCS. Moderate practical value.
-
-**Final score: 5.0** — Positioned between the medium anchors (5.25) and the rejected causal intervention paper (3.0), closer to the former. The paper merits borderline acceptance as a poster: it contributes a useful evaluation framework and genuine empirical findings, but the headline causal claim needs a null-direction control before it can be fully credited.
-
-MY FINAL SCORE: <pineapple>5</pineapple>
-MY FINAL DECISION: <orange>Accept</orange>
+MY FINAL SCORE: <pineapple>5.0</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>

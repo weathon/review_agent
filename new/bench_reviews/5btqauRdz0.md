@@ -1,23 +1,24 @@
-Now let me look at calibration papers to properly score this work.Now I have enough information to write the consolidated review.
+Now let me search for calibration papers.Now I have enough information to write the final review. Let me synthesize.
 
 ---
 
 ## Summary
-STAGE (Statistical Transfer for Attributed Graph Embeddings) addresses zero-shot generalization of GNNs to graphs with entirely different node attribute domains. The core idea is to replace raw feature values with STAGE-edge-graphs that encode empirical conditional and marginal probability distributions between features, making representations transferable across unrelated feature spaces. The method is grounded in the theory of maximal invariants and statistical dependence tests, and is evaluated on link prediction across E-Commerce/H&M datasets and node classification on Friendster→Pokec transfer.
+
+STAGE introduces a method for zero-shot generalization of GNNs across graphs with entirely distinct node attribute domains. The core idea is to transform raw node features into pairwise statistical dependency representations—via conditional/marginal CDFs forming a STAGE-edge-graph—which are then processed by an intra-edge GNN to produce domain-invariant edge embeddings. These embeddings feed into a second GNN for task-specific reasoning. Theoretically, the approach is grounded in the connection between maximal invariants and rank-based statistical tests. Empirically, STAGE achieves 41–103% Hits@1 improvement in zero-shot link prediction and ~10% improvement in node classification over state-of-the-art baselines.
 
 ---
 
 ## Strengths
 
-- **Strong and consistent empirical gains on link prediction (Table 1, Figure 3):** NBFNet-STAGE achieves 41% relative improvement in Hits@1 over the strongest baseline on held-out E-Commerce stores (0.4606 vs. 0.3269) and 102–103% improvement on H&M (0.4666 vs. 0.2302). These are not marginal gains. Notably, STAGE also surpasses a *supervised* structural model trained directly on H&M (0.4666 vs. 0.1546), which is a strong indicator of genuine transfer quality.
+- **Elegant and principled core mechanism** (Section 2, Equations 2–3): Transforming features into pairwise conditional/marginal probability representations leverages the classic link between order statistics and rank-based hypothesis tests (Bell 1964; Berk & Bickel 1968), providing a non-trivial statistical foundation for domain-invariant feature encoding.
 
-- **Multi-domain scaling is the sharpest empirical finding (Figure 4):** STAGE is the only method whose zero-shot Hits@1 and MRR consistently improve monotonically as the number of training domains increases from 1 to 4. Baselines either plateau or fluctuate. This directly validates the paper's core claim that STAGE learns generalizable statistical structure rather than domain-specific memorization.
+- **COGG invariance framework** (Theorem 3.4): Formalizing the three types of required invariances—order-preserving feature-value transforms, feature-dimension permutations, node permutations—and showing STAGE satisfies them by construction is a useful theoretical contribution independent of the fixed-dimensional scope of the formal proofs.
 
-- **Robustness across seeds:** STAGE exhibits substantially lower variance than all baselines (e.g., ±0.0123 vs. ±0.0213 on E-Commerce Hits@1; ±0.0042 vs. ±0.0083 on Pokec accuracy), suggesting stable optimization — a practical advantage often overlooked in empirical comparisons.
+- **Robustly strong link prediction results** (Table 1, Figure 3): STAGE outperforms all baselines across all five held-out E-Commerce store categories and on the H&M dataset from a completely different retailer. Crucially, zero-shot H&M performance (0.4666 Hits@1) nearly equals held-out E-Commerce performance (0.4606), confirming genuine transferability rather than in-distribution overfitting. STAGE consistently shows lower variance across seeds (e.g., ±0.0020 vs. ±0.0015 for the next-best H&M method).
 
-- **Principled, unified treatment of mixed feature types (Equations 2–3):** The conditional probability construction natively handles both totally-ordered (continuous) and unordered (categorical) features via different CDF-like semantics, without discretization or projection. This is a genuine methodological contribution that avoids the information loss of normalization-based or LLM-textification baselines.
+- **Unique multi-domain scaling behavior** (Figure 4): STAGE is the only method whose zero-shot performance improves monotonically with more training domains, directly validating that it learns generalizable cross-domain patterns rather than single-domain features.
 
-- **Transparent theory motivating the design:** Theorems 3.2–3.4 introduce the feature hypergraph concept, establish that any statistical dependence test can be represented via a GNN on STAGE-edge-graphs (with identifiers), and prove COGG invariance for the practical (identifier-free) version. The paper explicitly acknowledges the expressivity-invariance tradeoff, making the theoretical framing honest even if incomplete.
+- **Handles mixed feature types natively** (Equations 2–3): The four-case conditional probability definition handles all combinations of totally ordered and unordered features in a unified framework—a meaningful design choice that most competitors ignore and one that the E-Commerce datasets genuinely exercise.
 
 ---
 
@@ -28,85 +29,80 @@ None.
 
 ### Major
 
-- **Theory–practice expressivity gap is real, though acknowledged.** Theorem 3.3 (maximal expressivity for statistical dependency tests) requires unique feature-identifier labels in STAGE-edge-graphs. Theorem 3.4 (COGG invariance) requires dropping those identifiers. The practical STAGE follows Theorem 3.4. The paper's proof sketch for Theorem 3.4 explicitly states: *"This modification sacrifices maximal expressivity (Theorem 3.3), but ensures that STAGE is invariant to permutations of the feature dimensions."* This transparency is commendable, but the gap remains: there is no theorem or formal argument showing that the identifier-free version retains enough expressivity to represent the class of statistical dependency measures claimed in Theorem 3.3. The abstract's claim that STAGE "provably generalizes to unseen feature domains for a family of domain shifts" is justified by Theorem 3.4's invariance guarantee — but the expressivity basis (Theorem 3.3) does not apply to the implemented method. This is a genuine incompleteness in the theoretical contribution, not a fatal error, but it prevents the paper from delivering the dual guarantee it implicitly claims.
+- **Missing comparison to most directly competing methods**: Section 5 explicitly identifies Xia & Huang (2024) and Lachi et al. (2024) as methods that "attempt to directly address domain transferability in the attribute space"—i.e., the exact problem STAGE solves—yet neither appears in any experimental table. The paper provides no explanation for their absence (inapplicability to link prediction, unavailable code, etc.). Without this comparison, the claim of being state-of-the-art for zero-shot attribute-domain transfer remains unconfirmed against the most relevant competitors.
 
-- **Node classification evidence is too thin to support a general claim.** The paper frames STAGE as a method for both link prediction and node classification, and the abstract highlights "10% improvement in node classification against state-of-the-art." In practice, this rests on a *single* transfer pair (Friendster → Pokec) and a *single* surviving task (gender prediction; the paper itself notes that age prediction "seems to not be predictable" in Appendix D). One dataset pair × one task is far too narrow a base for the node classification claim to stand alongside the much more thoroughly validated link prediction results. At a minimum, the reverse direction (Pokec → Friendster) should be reported, and the abstract's claim should be scoped to this single experiment.
+- **Theory-practice gap: Theorems cover a different regime than experiments**: Section 3 explicitly states its results are "restricted to domains with a fixed number of features to simplify the proofs, extending them to variable size spaces is left as future work." However, every experiment in Section 4 involves variable-dimensional feature spaces (E-Commerce stores have different feature counts; Pokec and Friendster differ in feature dimensionality). Additionally, Theorem 3.4 (COGG invariance) is achieved by dropping feature-id labels, which "sacrifices maximal expressivity (Theorem 3.3)"—meaning Theorem 3.3 characterizes a more expressive model that is *not* the deployed system. The paper is transparent about both points but the theoretical foundation of Section 3 formally characterizes a setting distinct from the one actually tested.
 
 ### Minor
 
-- **E-Commerce dataset is constructed by splitting a single-provider dataset.** The five "stores" (shoes, refrigerators, desktops, smartphones, beds) are carved from the same underlying platform (Kechinov, 2020) with the same customers separated by product category. The paper acknowledges this with "simulating five distinct single-category stores," but the shared platform means that purchasing behavior patterns, pricing structures, and user demographics may be more similar across these "stores" than in a true cross-provider experiment. The H&M result provides the most convincing real cross-domain evidence, but that test is on a model pretrained on E-Commerce data. Caveating the E-Commerce experiment more clearly would strengthen the paper's honesty about its setup.
+- **Node classification claim rests on a single transfer pair**: The 10% improvement in node classification (Table 2) is based entirely on one train→test direction (Friendster→Pokec). With one pair, it is impossible to distinguish whether STAGE's advantage is structural (genuinely captures transferable dependencies) or incidental (Friendster's dependency structure happens to generalize to Pokec). The reverse direction (train on Pokec, test on Friendster) or a second social network pair would substantially strengthen this claim.
 
-- **No in-domain supervised baseline for E-Commerce stores.** Table 1 includes a supervised structural baseline only for H&M. Without a model trained and tested on the same E-Commerce store domain, it is impossible to know how far STAGE's 0.46 Hits@1 is from the performance ceiling. This context matters for interpreting whether the zero-shot numbers represent genuine near-ceiling performance or still leave substantial headroom.
-
-- **Claim of being the "only method capable of learning generalizable patterns" overstates Figure 4.** Figure 4 shows STAGE is the only method with *monotonically* improving performance as training domains increase. But several baselines also show improvement with domain count, just less steeply. The paper's framing on page 9 — "the only method capable of learning generalizable patterns across distinct feature domains" — is stronger than what Figure 4 actually demonstrates.
-
-- **GNN-LLM encoder is not named in the main text.** The GNN-LLM baseline is described as "encoder-only language model, akin to PRODIGY" but the specific model is not identified in the main text. LLM encoder quality is highly model-dependent; the comparison's fairness and reproducibility cannot be fully assessed without this information.
+- **LLM baseline performance unexplained**: In Table 1, NBFNet-llm (0.3226 ± 0.019) performs nearly identically to NBFNet-structural (0.3149 ± 0.025) on E-Commerce, despite text encoders having access to semantically meaningful product descriptions. This is counter-intuitive and raises a question about whether the LLM encoding is functioning correctly. A brief analysis of why text encoding fails to help with numerical/tabular product attributes would strengthen the motivation for STAGE's approach and address any concern that the comparison is against an underperforming LLM baseline.
 
 ### Trivial
-
-- **Scalability concern deserves a sentence in the main paper.** The $O(|E|^2 \cdot d^2)$ complexity of naively computing $S^{uv}$ matrices is deferred entirely to Appendix F. Given that the conclusion lists high-dimensional feature spaces as a limitation, a brief acknowledgment of this scaling behavior in the main text would help readers calibrate applicability without visiting the appendix.
+None.
 
 ---
 
 ## Nice-to-Haves
 
-- **Sensitivity analysis to test graph size/edge sparsity.** STAGE's inference depends on empirical probability estimates computed from the test graph's edge set. On small or sparse test graphs, these estimates will be noisy. A brief ablation (varying test graph size) would characterize this practically important regime and strengthen the zero-shot framing.
-
-- **Qualitative case study of learned STAGE-edge-graph dependencies.** A visualization showing which inter-feature dependencies STAGE learns (e.g., income↔price in smartphones) and which analogous ones it finds in test (e.g., height↔size in H&M) would make the method's mechanism concrete and verifiable, reinforcing the paper's motivating narrative from Figure 1.
-
-- **Additional node classification transfer pairs.** Evaluating the reverse direction (Pokec → Friendster) and ideally one additional social network pair would substantially strengthen the node classification claim.
+- **Theoretical extension to variable-dimensional feature spaces**: Since the deployed method actually operates in this regime, even a partial result or proof sketch would substantially strengthen Section 3.
+- **Visualization of STAGE-edge-graph embeddings**: A t-SNE/UMAP of edge embeddings across multiple domains would qualitatively validate the mechanism by showing that analogous dependency patterns (e.g., income→price in E-Commerce; height→size in H&M) map to similar representations.
+- **Ablation on probability estimation quality**: An analysis of how STAGE performs as graph size decreases (fewer samples for empirical CDF estimation) would characterize when the method is safe to apply.
+- **Statistical test for Figure 4 improvements**: A test of per-domain-count performance improvement would firm up the scaling claim.
+- **Evaluation on structurally different graph types** (e.g., biomedical or citation networks) to establish broader generality beyond e-commerce and social networks.
 
 ---
 
 ## Removed Points
 
-*These points are flagged to be removed; treat them with caution.*
+*These points are flagged to be removed, treat them with caution.*
 
-- **"H&M is not a zero-shot test from scratch"** (harsh critic): This conflates "zero-shot" with "no pretraining." STAGE is pretrained on E-Commerce and evaluated zero-shot on H&M — that is precisely the zero-shot setting the paper defines. The concern is not valid.
+- **Harsh Critic: "Theorem 3.3 no longer applies to the deployed method"**: The paper is entirely transparent about this. Section 3.2 states explicitly that dropping feature-id labels "sacrifices maximal expressivity (Theorem 3.3)." This is preserved as a **minor** observation about the theory-practice gap but is not an unacknowledged flaw. The critic's framing of this as a contradiction is slightly overstated.
 
-- **"Inference procedure contradicts the zero-shot framing" because empirical probabilities are computed from the test graph** (harsh critic, raised as structural): Using the test graph's marginal/conditional statistics at inference time is analogous to normalization operations standard in many inductive GNN methods. It does not constitute "test-time adaptation" in the adaptation-loop sense the paper criticizes in Section 1. The concern is overstated as structural; it has merit only as a minor practical robustness question (sparse graphs), which is captured above as a Nice-to-Have.
+- **Harsh Critic: Empirical probability estimation robustness / bipartite edge construction**: These are reasonable engineering questions but rise only to the level of nice-to-haves, not weaknesses. The bipartite augmentation is given to all baselines (fair), and the estimation quality concern is generic for any empirical density method. Moved to nice-to-haves.
 
-- **"The 40% to 103% range mixes different evaluation settings"** (harsh critic): Looking at the paper, 40% refers to the average gain over held-out E-Commerce stores vs. the best baseline (normalized), and 103% refers to the H&M gain vs. the best baseline (LLM). Both are link prediction results. Reporting a range across two closely related settings is standard; this is not a misleading or inflated claim.
+- **Harsh Critic: Gap between "most-expressive hypergraph GNN" in Theorem 3.2 and deployed standard GNN**: The paper says "as long as its GNN encoder is sufficiently expressive"—this is a standard caveat for universal approximation results in GNN theory papers. Not a real weakness.
 
-- **Missing related works** (not raised by reviewers but suppressed by rule): Not evaluated per policy.
+- **Harsh Critic: GraphAny "not applicable to link prediction" without explanation**: The paper compares GraphAny for node classification (its designed setting). Demanding link prediction applicability is scope creep.
 
-- **Generic strength about problem importance** (strength finder): Dropped per policy.
+- **Strength Finder: "Comprehensive baseline comparisons including recent domain-transfer methods"**: Partially removed. The paper does compare GraphAny and LLM baselines, but the most directly competing methods (Xia & Huang 2024; Lachi et al. 2024) are absent. This is a major weakness, so this claimed strength is removed.
 
 ---
 
 ## Novel Insights
 
-The most genuinely novel insight in this paper is that the feature hypergraph / STAGE-edge-graph formalism provides a unified bridge between classical rank-based statistical testing (Bell 1964, Berk & Bickel 1968) and modern GNN representation learning. This connection is non-obvious: by interpreting node feature pairs as samples from an unknown joint distribution and encoding only their order-statistic relationships via empirical CDFs, STAGE recovers an architectural invariance that is exactly what cross-domain transfer requires — without relying on pre-trained encoders or feature alignment. The multi-domain scaling result (Figure 4) is independently novel as empirical evidence: it demonstrates that the proposed representation is compositionally learnable — that is, each new domain contributes to a richer learned dependency vocabulary, a property no baseline shares. This scaling behavior, if robust, suggests a path toward genuinely universal attributed graph models as training data diversity grows.
+The paper's most genuinely novel insight is the *mechanistic connection* between zero-shot cross-domain graph transfer and rank-based statistical testing: if two graphs share analogous dependency structures between features (e.g., income→price in electronics; height→size in apparel), and if those dependencies can be expressed as rank-based measures, then a model trained to compute such dependency functions is invariant to the absolute feature values and thus transferable across domains. This reframes cross-domain generalization as a problem of learning statistical dependency patterns rather than feature representations, a framing that is both theoretically grounded (via Bell 1964/Berk & Bickel 1968) and practically effective. The empirical finding that performance scales with the number of training domains—unique to STAGE—confirms that the method genuinely learns reusable dependency patterns rather than domain-specific encodings.
 
 ---
 
-## Suggestions
+## Evaluation on Key Axes
 
-1. **Add an explicit Theorem or Proposition stating what expressivity the identifier-free STAGE retains.** Even an informal lemma showing that the identifier-free STAGE-edge-graph is still sufficient to distinguish a practically relevant subclass of statistical dependencies would close the theory-practice gap materially.
-
-2. **Report the reverse Pokec → Friendster node classification result** and add a brief discussion of why performance may be asymmetric. This costs little and doubles the evidential base for the node classification claim.
-
-3. **Name the LLM encoder in the main text** (even if "BERT-base" or similar) and add its model size. One sentence suffices.
-
-4. **Add one row to Table 1 with the in-domain supervised performance on E-Commerce** (i.e., trained and tested on the same store domain) to provide a performance ceiling for interpreting the zero-shot numbers.
+- **Originality**: High. The conversion of node features to pairwise statistical dependency graphs is a novel and creative mechanism not previously applied in this setting.
+- **Importance of research question**: High. Zero-shot generalization across attribute domains is a fundamental open problem in graph ML.
+- **Claims well-supported**: Moderate-high. Link prediction evidence is convincing and diverse; node classification evidence is thin; theoretical coverage lags the operational setting.
+- **Soundness of experiments**: Moderate. Strong for link prediction; the missing direct competitors (Xia & Huang, Lachi) leave a gap in the comparison.
+- **Clarity of writing**: Good. The method is clearly described; the honest acknowledgment of theoretical scope limitations is appropriate.
+- **Value to research community**: High. Introduces a principled mechanism for a difficult problem with strong empirical results and a conceptual framework that could benefit future work.
 
 ---
 
 ## Score and Decision
 
-**Calibration anchors reviewed:**
+**Calibration anchors:**
 
-| Paper | Path | Avg Score | Relevance to this paper |
+| Paper | Path | Avg Score | Relevance |
 |---|---|---|---|
-| Attribute-Driven Graph Domain Adaptation | t2TUw5nJsW.md | **6.00** (Accept) | Closest topical match: node attribute alignment for cross-graph transfer; similar empirical scope but no zero-shot setting and no novel architecture for cross-domain feature spaces |
-| Graph Foundation Models via Task-Trees | kSBIEkHzon.md | **5.25** (Reject) | Same goal (universal graph model), weaker empirical results, less principled architecture; STAGE's results are substantially stronger |
-| Explainable Transfer Learning on Graphs (label frequency) | 6mLzCepPo8.md | **3.50** (Reject) | Weakest comparable: similar transfer-learning framing but ad hoc representation and poor experimental validation; STAGE is significantly stronger |
-| Foundation Models for KG Reasoning (ULTRA) | jVEoydFOl9.md | **6.75** (Accept poster) | Strong methodological parallel: relational representations that generalize to unseen entity/relation vocabularies; STAGE's empirical improvements are similarly large |
-| GOFA: Generative One-For-All Graph Model | mIjblC9hfm.md | **6.50** (Accept poster) | Graph foundation model with multi-domain training; STAGE is more principled in its cross-domain feature treatment but narrower in task scope |
+| ULTRA (zero-shot KG foundation model) | `jVEoydFOl9.md` | 6.75 | Closest analogue: zero-shot transfer to new domains in graphs, strong empirical + principled theory |
+| GOFA (graph-LLM foundation model) | `mIjblC9hfm.md` | 6.50 | Similar scope (graph foundation model), accepted |
+| Attribute-driven graph domain adaptation | `t2TUw5nJsW.md` | 6.00 | Similar topic (graph attribute domain shift), accepted |
+| GIT (graph foundation model via task trees) | `kSBIEkHzon.md` | 5.25 | Similar goal, rejected for insufficient novelty differentiation |
+| GNN generalization (spectral bounds) | `UAEmF5O8J3.md` | 5.00 | GNN generalization theory, rejected |
+| GraphFM (multi-graph foundation model) | `zaxyuX8eqw.md` | 3.40 | Graph foundation model, withdrawn for weak evaluation |
 
-**Positioning:** STAGE's empirical results (41–103% Hits@1 improvements, monotone domain-scaling) are distinctly stronger than the task-trees paper (5.25, Reject) and comparable to ULTRA (6.75, Accept). Its theoretical contribution is weaker than ULTRA's (which has clean universal representation theorems), but its empirical demonstration on attributed graphs is arguably more novel and harder to achieve. The node classification thinness and theory-practice gap are real but not paper-breaking — comparable flaws appear in the 6.0 Accept papers in this space. The paper clears the bar for a poster acceptance.
+STAGE is more convincingly empirically validated than GIT (5.25) and the rejected 5.0 papers. It is comparable to ULTRA (6.75) in the zero-shot transfer spirit—ULTRA was criticized for requiring fine-tuning undermining its foundation model claim; STAGE does not have that issue. STAGE is also comparable to the attribute-domain-adaptation paper (6.0) which was accepted with similar note about missing 2024 baselines. The two major weaknesses (missing Xia & Huang/Lachi comparisons; theory-practice gap for variable dimensions) prevent reaching the 6.75–7.0 range. The method's strong link prediction results, principled framework, and scaling property support a score above the 5.0–5.25 boundary. A score of **6.0** is appropriate, positioning it with the accepted papers in this topic area while acknowledging the unresolved comparison gap.
 
-**Final Score: 6.0 — Accept (poster)**
+**Score: 6.0 — Accept (Poster)**
 
 MY FINAL SCORE: <pineapple>6.0</pineapple>
 MY FINAL DECISION: <orange>Accept</orange>

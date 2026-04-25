@@ -1,116 +1,112 @@
-Now let me search for calibration anchors.Now I have enough context to write the final review. Let me compile it.Now I have enough to write the full review.
+Now let me search for calibration papers to help score this work.Now I have sufficient information to write the final review. Let me synthesize everything.
 
 ---
 
 ## Summary
-The paper introduces **Fidelity to Stochastic Process (F2SP)**, a new evaluation criterion measuring whether a DNN has learned the underlying stochastic process (Statistic-GT) rather than merely fitting one observed realization (Observed-GT). It formally argues that Expected Calibration Error (ECE) satisfies the necessary condition for testing F2SP using only the Observed-GT, while AUC-PR and MSE fail to do so. Synthetic experiments across three cellular-automaton systems (forest fire, host-pathogen, stock market) show that ECE uniquely displays diagonal behavior in a cross-S-Level heatmap, and a real-world wildfire dataset illustrates divergent trends between ECE and classification metrics.
+The paper introduces **Fidelity to Stochastic Process (F2SP)**, a new evaluation criterion for DNNs that model stochastic complex systems. It argues that standard metrics (AUC-PR, MSE) measure fidelity to the single observed realization (F2R) and fail to assess whether the DNN learned the underlying stochastic process. The authors formalize a concept called "Statistic-GT" (the ensemble of Bernoulli marginals over all MC simulations), prove that ECE satisfies a necessary condition for testing F2SP, and empirically show via cross-S-Level heatmaps across three synthetic complex systems that ECE uniquely produces diagonal sensitivity to stochastic-process mismatch while AUC-PR and MSE do not.
 
 ---
 
 ## Strengths
 
-- **Novel, practically relevant problem framing.** The distinction between F2R (matching one stochastic realization) and F2SP (learning the underlying process) is genuinely underappreciated in the DNN evaluation literature, and the paper makes it precise with the Statistic-GT formalism.
+- **Clear F2R/F2SP conceptual distinction** (§1–§3): The observation that a DNN can fail to match the observed realization due to inherent randomness—and that existing metrics cannot separate this from genuine model failure—is well-motivated and genuinely useful for applied practitioners. The terminology is introduced consistently throughout.
 
-- **Cross-S-Level heatmap experiment (Figure 3) is compelling.** The diagonal ECE pattern across all three synthetic systems — where ECE is low only when training and test S-Levels match — is a clean, replicable empirical result that directly supports the paper's central claim. AUC-PR shows no such pattern, and MSE only a partial one.
+- **Controlled cross-S-Level experiment across three systems** (Figure 3): Training at one S-Level and testing at another across forest fire, host-pathogen, and stock market models produces a compelling result: only ECE shows clear diagonal structure (best when train and test S-Level match), while AUC-PR shows no pattern and MSE shows only a weak trend. The consistent behavior across three structurally different systems (competitive vs. non-competitive dynamics) strengthens generalizability.
 
-- **Long-horizon stability finding (Figure 4).** ECE remaining near zero over a 50-step prediction horizon for the correctly-trained DNN, while AUC-PR degrades for both models and MSE degrades for the mismatched one, is the paper's strongest single piece of evidence for why F2SP matters practically.
+- **Long-horizon ECE stability** (Figure 4): Two models trained at S-Level 10 vs. 20 and tested on S-Level 20 diverge sharply on ECE over 50 prediction steps, while AUC-PR fails to distinguish them at all and MSE only partially does. This is a concrete, falsifiable empirical finding about the practical utility of ECE for long-horizon monitoring.
 
-- **MSE decomposition provides useful mechanistic insight (§3.4.2).** By decomposing MSE into a Calibration term and a Refinement term that penalizes predictive uncertainty, the paper gives a principled explanation for why MSE shows only partial diagonal behavior and why proper scoring rules are structurally ill-suited to stochastic-process evaluation.
+- **Practical evaluation framework** (Figure 1b): The proposed 2D (ECE vs. AUC-PR) evaluation space with MSE in-between is a useful, actionable tool for practitioners facing metric rank conflicts, grounded in the real-world NDWS model selection scenario in §G.4.
 
-- **Multi-system generalization.** Consistent ECE diagonal behavior across three structurally different systems (non-competitive vs. competitive dynamics, Table 1) strengthens the claim of generality.
+- **Real-world case study** (Table 2): ECE trends inversely to AUC-PR as the Dice Coefficient between successive fire masks decreases, consistent with the hypothesis that ECE captures stochastic-process fidelity orthogonal to prediction sharpness. This cannot be validated directly but is suggestive and qualitatively coherent.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-*None.*
+None.
 
 ### Major
 
-- **Missing comparison against the Calibration component of MSE.** This is the central gap in the paper's uniqueness claim. The paper itself in §3.4.2 decomposes MSE into a Calibration term and a Refinement term, and argues the Refinement term "weakens" the diagonal pattern. This logically implies the Calibration component of MSE *would* show strong diagonal behavior — yet the paper never plots or reports this component as a standalone metric. If the Calibration–MSE term also shows a clean diagonal, ECE is not unique in its ability to test F2SP; it is simply one instance of a calibration-sensitive metric. The uniqueness claim is therefore not established by the existing experiments. Fixing this requires either showing the calibration component of MSE behaves differently from ECE, or reframing the claim from "ECE uniquely captures F2SP" to "calibration-sensitive metrics uniquely capture F2SP, and ECE is the most practical representative."
+- **The main experiment conflates stochastic-process mismatch with generic distributional shift.** Training at S-Level 10 and evaluating at S-Level 20 changes both the stochastic process and the marginal output distribution simultaneously. The diagonal ECE pattern is consistent with ECE being sensitive to *any* covariate or label distribution shift that induces miscalibration—not specifically to F2SP mismatch. No control experiment is run where a model is trained and tested at the *same* S-Level but under materially different initial conditions (e.g., very different forest densities), which would verify that ECE stays low when the stochastic process is matched even though the realization-level distribution differs. Without this control, "ECE detects S-Level mismatches" cannot be cleanly attributed to F2SP measurement as opposed to miscalibration under any distribution shift. This is particularly important given the paper's central empirical claim.
 
-- **The theoretical "necessary condition" is effectively a restatement of calibration.** The formal argument in §3.4.1 establishes: if $\hat{p}_{t,(i,j)} = p_{t,(i,j)}$ for all cells, then $\mathbb{E}[\text{frac}(k)] = \hat{p}_k$, implying ECE = 0. This is nearly the definition of calibration applied to the specific prediction target. The result is true and useful to state, but presenting it as a discovery that "ECE uniquely tests F2SP" overstates what the proof shows. The proof equally applies to the calibration component of the Brier score or any proper scoring rule's calibration term. The paper should temper the claim: what is genuinely novel is the *interpretation* (Statistic-GT as the target) and the *empirical demonstration*, not the theoretical derivation per se.
+- **ECE measures marginal cell-level calibration while F2SP is defined over the joint spatial distribution.** Section 3.2 defines Statistic-GT as the ensemble $P_t = \{p_{t,(i,j)}\}^{H\times W}$ with "spatially and temporally interdependent" grid cells. However, ECE computation explicitly "ignoring dependencies among $p_{t,(i,j)}$" (§3.4.1, quoted exactly) bins cells independently and measures only marginal calibration. A model that outputs correct marginal Bernoulli rates per cell but with entirely wrong spatial correlation structure (independent Bernoullis at the correct marginals) would achieve ECE ≈ 0 while failing to capture the joint stochastic process. The paper acknowledges ECE satisfies only a necessary, not sufficient, condition, but it does not present any experiment testing whether ECE discriminates between a marginally calibrated but spatially incorrect model and a truly process-faithful model. Given that F2SP is claimed to be about the joint distribution, this gap is more than a theoretical limitation—it is a conceptual boundary on what ECE can actually test.
 
 ### Minor
 
-- **Table 2 anomaly is unexplained.** The FMO = 0.9–1.0 bin (n=1 sample) shows Precision = 0.000, Recall = 0.000, AUC-PR = 1.000, and MSE = 0.000 simultaneously. AUC-PR = 1.000 with Precision = Recall = 0 is internally inconsistent regardless of sample size. The paper does not comment on this artifact. With n=1 the row should arguably be excluded or flagged.
+- **The theoretical proof in §3.4.1 is elementary and does not establish "uniqueness."** The proof shows that $\mathbb{E}[\text{frac}(k)] = \hat{p}_k$ for a perfect predictor via linearity of expectation—essentially the definition of calibration. The paper correctly states this proves only a necessary condition. However, the abstract says ECE "satisfies the necessary condition for testing F2SP, *unlike* traditional evaluation methods" (emphasis on uniqueness), and the claim that AUC-PR/MSE *fail* the necessary condition is not established in the same formal register. The MSE Brier Score decomposition (§3.4.2) is used to motivate why MSE includes a refinement term, but the decomposition uses observation-based bins ($B_m$) rather than prediction bins ($I_k$) used in ECE—a standard but unexplained switch. A formal proof that AUC-PR and MSE *cannot* satisfy the necessary condition would significantly strengthen the theoretical contribution.
 
-- **Only a single DNN architecture in the main paper.** The main results rely entirely on ConvLSTM-CA; additional architectures (AR-NCA, multi-layer ConvLSTM) are relegated to appendix §F.3. A brief summary of whether the diagonal ECE pattern is robust across architectures would strengthen confidence in the finding without adding significant length.
+- **Only one DNN architecture (ConvLSTM-CA) appears in the main-paper figures.** While §F.3 in the appendix extends to other architectures, the main empirical argument relies entirely on ConvLSTM-CA. Showing that the ECE diagonal pattern holds across architectures in the main paper (at minimum for one additional model) would strengthen the claim that this is a property of ECE, not of the specific architecture's calibration behavior.
 
-- **Sufficiency gap is acknowledged but not quantified.** The paper correctly states ECE is only a necessary condition (§3.4.1 and §7). However, it does not characterize how much practical headroom this leaves — i.e., are there empirically plausible cases where ECE is low yet the DNN clearly fails to represent the spatial structure of the Statistic-GT? Naming the limitation is good; bounding it empirically would make the framework more trustworthy.
+- **Real-world NDWS interpretation is speculative.** The paper acknowledges that Statistic-GT "cannot be manipulated or quantified" in the NDWS dataset (§5). The claim that ECE's improvement at low DC "confirms F2SP measurement" cannot be verified—the improvement could also reflect that, for small fast-moving fires, the model correctly predicts near the base-rate marginals without capturing spatial structure. The paper is honest about this limitation but does not adequately warn readers against over-interpreting Table 2 as validating the F2SP claim.
 
 ### Trivial
-*None.*
+
+- Minor inconsistency between abstract/intro language ("ECE uniquely captures F2SP") and the more accurate language in §3.4.1 ("necessary condition, not sufficient"). Precision in claims across sections would improve the paper.
 
 ---
 
 ## Nice-to-Haves
 
-- **Calibration reliability diagrams at matched vs. mismatched S-Levels side by side.** Showing how the calibration curve degrades under S-Level mismatch would give an interpretable mechanism illustration to accompany the scalar ECE heatmaps (§F.2 exists but is not prominently referenced in the main argument).
+- **Control experiment:** Train and test on the same S-Level but with substantially different forest configurations or fire-seed distributions to verify ECE stays low under non-stochastic distribution shifts. This would directly address the confound concern.
 
-- **A "constant base-rate predictor" sanity check.** A model that always predicts the spatial marginal fire frequency would be well-calibrated yet has learned nothing. Showing this baseline's ECE in the cross-S-Level heatmap (expected result: uniformly low, not diagonal) would explicitly bound ECE's informativeness and clarify what drives the diagonal pattern.
+- **Spatially-wrong synthetic baseline:** Generate a synthetic predictor that outputs independent Bernoulli predictions with the correct marginal rates per cell but zero spatial correlation. Testing whether ECE ≈ 0 for this predictor would clarify the boundary of what ECE actually measures.
 
-- **Extension to stochastic prediction architectures.** VAE-based or diffusion-based video prediction models are explicitly designed to sample from a learned distribution and would be natural tests of whether F2SP is even higher for architectures that explicitly model the stochastic process.
+- **Comparison with other calibration metrics:** Testing whether other calibration-sensitive metrics (NLL calibration, kernel calibration error) also produce diagonal structure in Figure 3 would either strengthen the claim that ECE is uniquely suited or reveal that the diagonal pattern is a general property of calibration metrics, not specific to ECE.
 
 ---
 
 ## Removed Points
-*These points are flagged to be removed; treat them with caution.*
+*These points are flagged to be removed, treat them with caution.*
 
-- **"BCE training is a confound for Figure 3"** *(Harsh Critic §2 Confound A)*: Removed because this conflates a design choice with a confound. Training with BCE is standard for DNN models that output probability maps. Sensitivity of ECE to training-distribution shift is precisely what the paper is measuring. The comparison between ECE and AUC-PR is not a controlled experiment for "what BCE optimizes" — it asks which metric detects S-Level mismatch, and the asymmetry in how each metric uses probability magnitudes is the authors' explicit analytical point, not a confound.
+- **"Circular proof" critique:** The harsh reviewer calls the §3.4.1 proof "near-tautological." While the proof is indeed elementary, the paper honestly describes it as proving a necessary condition only. The proof does the job it claims to do and is internally consistent with the stated scope.
 
-- **"§E.2 verification is circular"** *(Harsh Critic §2 Confound C)*: Removed. The MC-simulation verification (1000 simulations) is used purely to establish ground truth in the *synthetic* benchmark, not as part of the deployed evaluation. It is normal and correct experimental procedure to use controlled ground-truth access to validate a metric's behavior in a synthetic setting, before claiming it works without that access in deployment.
+- **Criticisms about AUC-PR being "calibration-blind by design":** The reviewer notes this is a known property of ranking metrics, not a novel finding. However, the paper's entire purpose is to show why calibration-sensitive metrics are needed for F2SP—the AUC-PR result is presented as the expected behavior, not a surprising finding.
 
-- **"Independence assumption contradicts spatial interdependence"** *(Harsh Critic §3.2 note)*: Removed as a strawman. The paper says each cell is modeled as an *independent* Bernoulli at the micro level for the purpose of deriving $\mathbb{E}[\text{frac}(k)]$; the Statistic-GT is then their *joint* pattern. The ECE derivation (§3.4.1) only requires $\mathbb{E}[b_{t,(i,j)}] = p_{t,(i,j)}$, which holds regardless of spatial dependence by linearity of expectation. There is no logical contradiction.
+- **MSE decomposition bin inconsistency:** The use of $B_m$ vs. $I_k$ bins is noted as inconsistent, but the paper uses two different decompositions for two different purposes (explaining MSE's properties vs. computing ECE). This is standard practice and not an error.
 
-- **"Real-world case study cannot establish F2SP relevance"** *(Harsh Critic §3)*: Partially removed as overstatement. The paper explicitly acknowledges (§5) that "it is impossible to manipulate or quantify stochasticity" in real wildfires and frames the NDWS analysis as *suggestive* (observing ECE behavior aligning with synthetic findings), not as a definitive proof. The critique is fair as a limitation but not a fatal flaw; the paper is appropriately hedged.
+- **Undisclosed hyperparameters / full training logs:** Removed per hard rules on reproducibility nitpicks.
+
+- **Missing proofs in appendix:** Removed per hard rules (parser strips appendix).
 
 ---
 
 ## Novel Insights
 
-The strongest genuinely novel observation is the paper's reframing of *calibration* in the context of stochastic systems: for a DNN predicting a stochastic spatial process, calibration is not merely a desirable property of probability outputs — it is in fact the correct operationalization of asking whether the DNN has learned the probability distribution underlying the system. This reinterpretation elevates ECE from a secondary quality-of-probabilities check to the primary diagnostic for stochastic process fidelity, a perspective that is largely absent from the forecasting and complex-systems literature. The long-horizon stability result (Figure 4) is a particularly clean instantiation of this insight: because the Statistic-GT is a fixed property of the process rather than one of many possible Observed-GTs, a well-calibrated model should show stable ECE even as temporal uncertainty inflates, whereas F2R metrics inevitably degrade. This is a practically useful observation even if the theoretical support needs strengthening.
+The most genuinely novel observation is the *long-horizon ECE stability* result (Figure 4): a correctly-matched model maintains near-zero ECE across 50 prediction steps while a mismatched model's ECE diverges monotonically, even as both models' AUC-PR degrades due to accumulating stochastic uncertainty. This separates a fundamental property of Statistic-GT (it is a *stable* target compared to Observed-GT) from the usual drift-versus-error ambiguity in long-horizon forecasting. If this finding is confirmed with proper controls, it could change how long-horizon prediction evaluations are designed for stochastic complex systems—shifting emphasis from trajectory matching to stochastic-process calibration monitoring.
 
 ---
 
 ## Suggestions
 
-1. **Add a column for the Calibration component of MSE to Figure 3.** This is the single highest-impact change: it directly tests the uniqueness claim and would either confirm ECE's special role or reframe the paper's contribution more accurately.
-
-2. **Restate the main theorem as "calibration metrics satisfy the necessary condition for F2SP" rather than "ECE uniquely does."** The distinction matters for scientific accuracy and would also allow the paper to acknowledge that ECE is a particularly practical choice (no Refinement term, interpretable) without overclaiming uniqueness.
-
-3. **Report the Brier/MSE calibration component as a standalone metric in §F.3** alongside the additional architectures already reported there.
-
-4. **Explain or exclude the FMO = 0.9–1.0 row** in Table 2 (n=1 sample with inconsistent AUC-PR = 1.000 / Precision = 0).
+1. Add a control experiment at fixed S-Level with varied initial configurations to decouple F2SP detection from generic distribution shift detection.
+2. Add a synthetic marginally-calibrated-but-spatially-wrong baseline to characterize what ECE can and cannot detect.
+3. Revise abstract and introduction to consistently use "necessary condition" language instead of "uniquely captures F2SP."
+4. Move at least one alternative architecture result (from §F.3) into the main paper to show that the diagonal ECE pattern is architecture-agnostic.
+5. Quantify uncertainty on Table 2 strata with very small sample sizes (n=1, n=4) to flag statistically unreliable ECE values.
 
 ---
 
 ## Score and Decision
 
-**Calibration anchors used:**
+**Calibration anchors:**
 
-| Path | Avg Human Score | Comparison to paper under review |
-|------|----------------|----------------------------------|
-| `/human_reviews/TId1SHe8JG.md` | 7.50 | Provable uncertainty decomposition — stronger theoretical guarantees, more rigorous formal contributions; paper under review is weaker theoretically |
-| `/human_reviews/yV6fD7LYkF.md` | 7.50 | Systematic UE validation framework — broader scope and more rigorous ablations; clearly above paper under review |
-| `/human_reviews/X0epAjg0hd.md` | 5.67 | Reassessing calibration metrics — similar topic (ECE, calibration for DL), comparable empirical scope; paper under review has a more novel framing but similar theoretical depth |
-| `/human_reviews/56jIlazr6a.md` | 5.25 | Unified uncertainty calibration — similar flavor of proposing a new framework, comparable validation; roughly similar quality |
-| `/human_reviews/VZVXqiaI4U.md` | 5.33 | Interpretable evaluation metrics for generative models — analogous "new evaluation criterion" paper; comparable, slightly weaker experimental validation |
-| `/human_reviews/d6oUP1tyNx.md` | 3.00 | KNN Score for probabilistic time series — also a metric proposal for stochastic forecasting, but with weaker methodology and less convincing validation; paper under review is clearly better |
-| `/human_reviews/p79lnC36CO.md` | 2.00 | Automatic calibration diagnosis via PIT — also ECE/calibration-related but much weaker; clear floor anchor |
+| Paper | Avg Score | Decision | Comparison |
+|---|---|---|---|
+| cC3LxGZasH (Beyond FVD) | 6.20 | Accept (Poster) | Proposes new evaluation metric with human evaluation validation (34% gain); stronger empirical case than this paper |
+| X0epAjg0hd (Reassessing Calibration) | 5.67 | Accept (Poster) | Calibration decomposition with rigorous Bregman proofs; stronger theoretical contribution than §3.4 |
+| YD0GQBOFFZ (Structured Evaluation Tabular) | 4.67 | Reject | Evaluation framework paper with methodological gaps; comparable scope but this paper has cleaner experiments |
+| p79lnC36CO (PIT histograms) | 2.00 | Reject | Calibration paper with no theoretical justification, minimal experiments; substantially weaker than this paper |
+| gVbPYihQag (Stochastic Diffusion) | 5.00 | Reject | Stochastic forecasting DNN, rejected for methodological concerns; comparable overall tier |
 
-**Reasoning:** The paper clusters with the medium-scoring anchors (5.25–5.67). Its experimental evidence is more convincing than the low anchors and the problem framing is genuinely novel. However, the critical missing comparison (Calibration component of MSE vs. ECE in Figure 3) prevents the paper from delivering on its central uniqueness claim, which is what would distinguish it from anchors in the 5–5.5 range. It falls short of the high anchors (7.5) that have rigorous formal contributions and comprehensive validation. Positioning: just below the X0epAjg0hd / VZVXqiaI4U cluster, at **5.0**.
+**Reasoning:** The paper under review is clearly above p79lnC36CO (2.0): it has coherent theory, three synthetic systems, a real-world case study, and a novel conceptual framing. It is below Beyond FVD (6.2): that paper proposes a concrete implementable replacement metric with rigorous human evaluation validation. It is roughly comparable to X0epAjg0hd (5.67), which was accepted but has substantially stronger formal proofs. The two major weaknesses here—the distribution shift confound in the main experiment and the marginal-vs-joint mismatch—are significant enough to push below the acceptance threshold, but the genuine cross-system empirical finding and practical framework keep it out of the reject-with-major-revisions band. The paper sits just below the borderline at approximately **4.5**: the conceptual contribution is real, the experiments are reasonably designed, but the two methodological gaps would need to be addressed (not just acknowledged) for this to be acceptable.
 
-**Axis summary:**
-- *Originality*: Moderate-high — the F2SP framing and interpretation of calibration as the stochastic-process diagnostic is a fresh perspective.
-- *Importance*: Moderate — the evaluation gap for stochastic systems is real; the proposed solution addresses it partially.
-- *Claims vs. support*: Moderate — the core empirical claim (ECE diagonal behavior) is well-supported; the uniqueness claim is not.
-- *Soundness*: Moderate — main methodology is sound; the missing MSE-calibration-component comparison is a significant gap.
-- *Clarity*: Good — the paper is well-organized and the framework is clearly explained.
-- *Value to community*: Moderate — the F2SP concept and evaluation framework are useful even if the specific metric claim needs revision.
+**Originality:** Moderate. The F2R/F2SP distinction is a useful new framing, though ECE for calibration is not new; the novelty is in applying it to this context.
+**Importance of research question:** High — stochastic complex systems are a significant application domain, and the question of whether a model learned the process vs. a realization is genuinely underappreciated.
+**Claims supported:** Partially — empirical support is decent but the main experiment has a confound; theoretical support is limited to a necessary condition.
+**Experimental soundness:** Moderate — three systems with controlled stochasticity is good design; missing the key control experiment and the multi-architecture main-paper results.
+**Clarity of writing:** Good — terminology is consistent and the framework is clearly presented.
+**Value to research community:** Moderate — the practical framework is actionable even if the theory is incomplete.
 
-**Decision: Reject** — the paper makes a meaningful contribution but the central uniqueness claim is not adequately established due to the missing calibration-component-of-MSE comparison. This is a fixable gap, but one that could alter the paper's framing significantly.
-
-MY FINAL SCORE: <pineapple>5.0</pineapple>
+MY FINAL SCORE: <pineapple>4.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

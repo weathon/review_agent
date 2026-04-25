@@ -1,60 +1,64 @@
-Now let me search for calibration papers.Now I have enough information to write the final review. Let me synthesize everything.
+Now let me run calibration searches to anchor the score.Now I have enough information to write the consolidated review. Let me verify one more detail about Table 5 numbers.Now I have sufficient information for a well-calibrated final review.
 
 ---
 
 ## Summary
-AnyECG is a family of ECG foundation models (254M–1.7B parameters) built on a two-stage self-supervised pre-training pipeline: (1) an ECG Tokenizer with a VQ-based Rhythm Codebook and Multi-View Synergistic Decoder (morphology, frequency, demography supervision) to produce noise-resilient discrete tokens, and (2) a masked pre-training stage over these tokens using a novel Cross-Mask Attention (CMA) mechanism. The system targets four downstream tasks: anomaly detection, arrhythmia detection, corrupted lead generation, and ultra-long ECG recognition.
+
+AnyECG introduces a family of ECG foundation models (254M–1.7B parameters) pre-trained in two stages: (1) an ECG Tokenizer using vector-quantized rhythm codes learned through a Multi-View Synergistic Decoder (morphology, frequency, demography proxy tasks), and (2) a full model trained via masked token prediction using Cross-Mask Attention (CMA) that constrains patch interactions to within-lead or same-time-position across leads. The model is evaluated on four downstream tasks: anomaly detection, arrhythmia detection, corrupted lead generation, and ultra-long ECG recognition, consistently outperforming task-specific baselines and the prior ECG-FM foundation model.
 
 ---
 
 ## Strengths
 
-- **Novel ECG Tokenizer architecture** (Section 2.2, Eq. 2–8): The combination of a VQ Rhythm Codebook using normalized cosine similarity with a Multi-View Synergistic Decoder that simultaneously reconstructs time-domain morphology, DWT-based frequency coefficients, and patient demographics is a principled, domain-informed design not seen in prior ECG foundation models.
+- **Two-stage tokenizer + masked pretraining design (Sections 2.2–2.3):** The first stage establishes a rhythm codebook via VQ and multi-view reconstruction before the second stage learns rhythm-event associations via masked prediction. This decomposition is well-motivated by the four identified ECG challenges and distinguishes the work from standard single-stage pretraining.
 
-- **Physiologically motivated Cross-Mask Attention** (Eq. 1, Figure 1): CMA restricts patch interactions to the same lead or the same temporal position across leads, encoding the physiological reality that ECG leads at the same cardiac cycle instant carry complementary information. The positional tolerance parameter explicitly models conduction delays.
+- **Cross-Mask Attention (Eq. 1, Section 2.1):** Unlike generic full self-attention, CMA restricts each patch to attend only to patches in the same lead or the same temporal position across leads, with a positional tolerance to account for conduction delays. This inductive bias is principled and ECG-specific, going beyond generic transformer variants in prior ECG models.
 
-- **Two-stage discrete-target pre-training** (Eq. 9): Rather than reconstructing raw, noisy signal values, the masked pre-training stage predicts Rhythm Code indices, forcing the backbone to learn high-level rhythm-event associations rather than memorizing noise—an improvement over standard reconstruction-based self-supervised approaches for low-SNR signals.
+- **Multi-View Synergistic Decoder (Section 2.2.2):** The three complementary proxy tasks—time-domain reconstruction (Eq. 3), wavelet-coefficient prediction (Eqs. 4–5), and demographic attribute prediction (Eq. 6)—force the tokenizer to encode clinically relevant information from multiple perspectives, a domain-informed departure from standard VQ-VAE reconstruction.
 
-- **Scale of the model family and reliability of reporting**: Three model sizes (254M, 500M, 1.7B), evaluated across four heterogeneous tasks with five-seed averaging and standard deviations. The 1.7B AnyECG-XL is the largest ECG model reported to date.
+- **Broad evaluation across four qualitatively distinct downstream tasks (Tables 2–5):** Covering anomaly detection, arrhythmia classification, lead imputation, and ultra-long signal recognition provides broader coverage than most ECG foundation model papers.
+
+- **Demonstrated scalability with consistent model size gains (Tables 2–5):** AnyECG-B → L → XL show monotonic or near-monotonic improvement across tasks, supporting the claim that the architecture scales.
+
+- **Five-seed evaluation with standard deviations:** Appropriate empirical practice for the field.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-None.
+*None.* The methodology is coherent and the paper makes a real contribution; the problems below are in the experimental validation, not the core framework.
 
 ### Major
 
-- **In-distribution pre-training advantage over all non-pre-trained baselines**: AnyECG is pre-trained on all seven datasets listed in Table 1, which are the same datasets from which downstream evaluation splits are drawn. The competing baselines (DENS-ECG, ContraWR, XResNet1D, RNN1D, FFCL, InceptionID, ST-Transformer, CNN-Transformer) are trained only on the downstream training split and have never seen the evaluation distribution. The paper inadvertently acknowledges this confound when explaining ECG-FM's underperformance: "its performance may still be hindered by substantial differences between the pre-training data and the downstream task dataset"—the exact opposite of AnyECG's situation. Without a controlled experiment where another pre-trained baseline (e.g., ECG-FM or a standard MAE) is pre-trained on the same seven-dataset corpus, it is impossible to determine whether the observed improvements stem from the proposed architectural innovations (VQ codebook, CMA, multi-view decoder) or simply from in-distribution pre-training data access. This is the most important missing experiment; it undermines the paper's central architectural claims.
+- **Pre-training data overlaps with all downstream evaluation data — unfair comparison (Section 3.1, Tables 2–5).** The paper explicitly states AnyECG is pre-trained on "all available unlabeled data" from the same seven datasets used for downstream evaluation. The 80/20 train/test split for fine-tuning is applied *after* pre-training on the full pool, meaning AnyECG has already processed the signal-level distribution — and possibly exact recordings — of the held-out test set in an unsupervised manner. All other baselines (DENS-ECG, ContraWR, XResNet1D, CNN-Transformer, RNN1D, FFCL, InceptionID, ST-Transformer) are trained from scratch only on the 80% labeled split and have no such advantage. The performance gains in Tables 2–5 therefore conflate representation quality with in-domain data exposure; no control experiment (e.g., pre-training on a disjoint pool) is provided to isolate the contribution of the architecture from the data advantage.
 
-- **Asymmetric comparison in ultra-long ECG recognition (Table 5)**: All AnyECG variants carry a "✓" in the Adaptation column (hierarchical sliding-window method), while all baselines carry "✗"—meaning baselines are evaluated on a task they structurally cannot perform. Processing ultra-long sequences IS the core challenge of this task. The claimed superiority is an artifact of this asymmetry, not a demonstration of representational quality. Providing baselines with a simple windowed inference + pooling scheme would yield a meaningful lower bound; without it, Table 5 does not constitute a valid architecture comparison.
+- **Ultra-long ECG comparison is structurally asymmetric (Section 3.3, Table 5).** AnyECG is equipped with a purpose-built hierarchical sliding-window adaptation (✓ in the Adaptation column), while every baseline is evaluated without such an adaptation (✗). The headline claim that AnyECG excels for ultra-long ECG cannot be attributed to its pre-trained representations when the primary design difference is an architectural mechanism withheld from all baselines. Additionally, three baselines (DENS-ECG, ContraWR, CNN-Transformer) have digit-for-digit identical accuracy, AUC-PR, and other metrics in Table 5 as in Table 3 (arrhythmia detection), raising a concern that these models were not actually run on the ultra-long task — though it is possible these models simply produced similar outputs when failing on ultra-long input. The paper provides no explanation for this coincidence.
 
-- **Severely weak baselines in corrupted lead generation (Table 4)**: The only comparisons are CGAN (Mirza, 2014) and WGAN (Adler & Lunz, 2018)—decade-old general-purpose generative models not designed for ECG lead reconstruction. No contemporary ECG-specific lead imputation methods are included. Claiming state-of-the-art generation performance against only two such baselines is not credible for a 2024–2025 foundation model paper. Furthermore, AnyECG-XL regresses relative to AnyECG-L on both PSNR (32.43 vs. 32.74) and SSIM (0.853 vs. 0.874), a non-monotone scaling behavior that is never discussed—raising questions about stability or evaluation power.
+- **Undisclosed pre-training source raises reproducibility and data integrity concerns (Table 1).** One of the seven pre-training datasets is labeled "Undisclosed Dataset (10,000 recordings)" with the ambiguous note "Geographically distinct *test set*." The paper offers no explanation of whether this dataset is used purely for pre-training, as part of downstream evaluation, or both. A foundation model paper cannot claim reproducibility when 10,000 (~19%) of its pre-training recordings come from an entirely opaque source whose provenance, license, and labels are unknown.
+
+- **Outdated generative baselines for corrupted lead generation (Table 4).** The only comparisons for lead imputation are CGAN (2014) and WGAN (2018) — methods that are 6 and 8 years old. The paper acknowledges ECG-FM cannot be applied but makes no attempt to include any recent waveform imputation, diffusion, or flow-based baseline. Claiming "state-of-the-art" for lead generation based solely on outperforming decade-old GANs is not substantiated.
 
 ### Minor
 
-- **Undisclosed pre-training dataset** (Table 1): 10,000 recordings ("Undisclosed Dataset," ~19% of total recordings) are used in pre-training with no source, geographic origin, clinical annotation schema, or sampling rationale provided. This limits reproducibility and prevents any meaningful assessment of data contamination with evaluation sets.
+- **Low absolute arrhythmia detection performance without explanation (Table 3).** AnyECG-XL achieves 34.5% accuracy and AUC-PR of 0.163 on arrhythmia detection. These are very low absolute numbers. The paper provides no discussion of class distribution, number of target classes, or why the task is inherently difficult. Without this context, readers cannot assess whether a 2 percentage-point gain over the best baseline represents meaningful progress or whether all models — including AnyECG — are essentially near-random on a severely imbalanced fine-grained multi-label problem.
 
-- **Absolute performance in arrhythmia detection is alarmingly low and unexplained** (Table 3): AnyECG-XL achieves 0.345 accuracy and 0.164 AUC-PR, and the paper frames these as evidence of "strong ability to handle arrhythmia detection." While the multi-class nature of the task may explain the low absolute values (high class imbalance, many classes), the paper never provides class-level breakdown, reports the number of classes, or discusses the clinical interpretability of these numbers. A per-class analysis is essential to determine whether these scores reflect a structurally failing model or a difficult label distribution.
+- **Handling of missing demographic labels in Demography Decoder is unspecified (Section 2.2.2).** The Demography Decoder (Eq. 6) requires ground-truth age, weight, and sex for all pre-training samples. Several pre-training datasets (notably INCART with only 74 recordings) are known to have incomplete or absent demographic records. The paper does not state whether samples with missing demographics are skipped, masked, or pseudo-labeled during pre-training, which affects both the reproducibility and interpretation of the demography branch.
 
-- **Train/test split procedure does not mention patient-level separation**: The paper states an "80/20 split" for all downstream tasks but does not clarify whether splits are stratified by patient ID. For datasets like PTB-XL and INCART where multiple recordings per patient exist, recording-level splits can cause patient-level leakage and inflate downstream results.
-
-- **"Minimal pre-processing" claim is misleading**: Section 2.1 uses this phrase, yet 1000 Hz signals (e.g., PTB) are downsampled 3.3× to 300 Hz. Diagnostic waveform morphology features (QRS rise time, P-wave fine structure) depend on temporal resolution. While the Nyquist justification for 300 Hz is provided, this should not be characterized as "minimal."
-
-- **Demography decoder treats heterogeneous attributes uniformly** (Eq. 6): A single MSE loss over a vector `a` conflates continuous attributes (age, weight) with binary ones (sex). No normalization, loss weighting, or handling of missing demographic labels across the heterogeneous datasets is described. Datasets like INCART (74 recordings) may lack these attributes entirely.
+- **Codebook utilization not reported.** With a discrete rhythm codebook, codebook collapse (few active codes) is a known failure mode in VQ-VAE-style architectures. The paper does not report per-code assignment frequency, utilization entropy, or the effective number of active codes. This is particularly important for validating the claim that the codebook captures "clinically meaningful local rhythm codes."
 
 ### Trivial
-- The positional tolerance (mask width) hyperparameter in CMA is mentioned as important "for certain diseases" but no guidance or ablation is provided in the main text for how to set it.
+
+- The masking ratio and masking granularity (patch-level vs. lead-level) for the masked pre-training phase are not stated in the main text, though ablations are presumably in the appendix. A brief mention of the default value in the main text would help readability.
 
 ---
 
 ## Nice-to-Haves
 
-- **Pre-train a controlled baseline on the same seven-dataset corpus**: This is the single most impactful experiment the authors could add—pre-train ECG-FM or a standard MAE on the identical data and compare. Without this, the architectural contributions cannot be isolated.
-- **Codebook utilization analysis**: VQ training is susceptible to collapse (most entries unused). An analysis of per-code usage distribution, along with qualitative alignment of codebook entries to clinical ECG features (P-wave, QRS, T-wave), would significantly strengthen the interpretability claims.
-- **Ablation studies in the main paper**: The paper defers all ablations to appendices 7.3/7.4. Bringing the core ablation (removing VQ, removing demographic supervision, removing CMA) into the main text would allow readers to directly evaluate each contribution.
-- **Evaluation on a fully held-out dataset**: A geographically distinct or device-distinct ECG dataset not included in pre-training would provide a genuine test of cross-distribution generalization for a claimed "foundational" model.
+- A pre-training isolation experiment (pre-train on datasets disjoint from all downstream evaluation tasks, then fine-tune) would directly isolate the quality of learned representations from data distribution advantage.
+- Applying an equivalent sliding-window or hierarchical aggregation to at least RNN1D and XResNet1D in Table 5 would enable a fairer ultra-long ECG comparison.
+- Analysis of which rhythm codebook entries correspond to known morphological features (P-wave, QRS, T-wave, artifact) would validate the "clinically meaningful" claim concretely.
+- Statistical significance tests across seeds for primary comparisons (optional in this field, but would strengthen the modest margins in Tables 2–3).
 
 ---
 
@@ -62,45 +66,61 @@ None.
 
 *These points are flagged to be removed; treat them with caution.*
 
-- **Mask ratio and block size missing from main text** (Harsh critic, Section 2.3): The appendix is stripped by the parser; these details may be specified there. Removed per the rule against reproducibility nitpicks that could be in the appendix.
-- **Claims about model availability/existence**: No reviewer raised concerns of this type; nothing to remove here.
-- **Generic "problem is important" strength**: Removed the generic framing that ECG analysis is medically important as a standalone strength; this is not specific to the paper.
+- **"300 Hz resampling unjustified"** (Harsh Critic): The paper explicitly justifies this choice: "300 Hz is considered sufficient for diagnosing most cardiac conditions based on the Nyquist-Shannon sampling theorem." This is standard clinical ECG practice. The specific concern about epsilon waves in ARVC is a niche edge case outside the paper's stated scope. Removed.
+
+- **"Significant outperformance" wording is vague** (Harsh Critic): The word "significantly" in the abstract is hyperbolic for some tasks (e.g., arrhythmia detection, ~2 pp improvement), but this is a presentation nitpick, not a substantive flaw. Removed as trivial.
+
+- **"Masking ratio undisclosed — method underspecified"** (Harsh Critic): The main text says ablation results are in the appendix. Per rules, appendix sections are stripped from all parsed papers; this concern would be resolved by the full submission. Removed.
+
+- **"Demography Decoder loss (Eq. 6) requires complete demographics for all samples"** promoted to Minor above (partially kept as a valid concern), but the further claim that INCART's lack of demographics specifically invalidates the results is speculative. Severity kept at Minor.
+
+- **Strength: "Consistent outperformance of ECG-FM" as an independent strength**: While factually accurate from the tables, this strength is clouded by the data-overlap flaw (ECG-FM is pre-trained on different data than the evaluation sets, while AnyECG is pre-trained on the same data). Left in Strengths with the caveat that the advantage is partially confounded.
+
+- **"Abstract claim of 'significant outperformance' is never backed by statistical tests"** (Harsh Critic): Five-seed std reporting is the norm in this community; demanding formal significance tests across seeds is not standard for this type of systems paper. Moved to Nice-to-Haves.
 
 ---
 
 ## Novel Insights
 
-The most incisive observation from the reviews—not explicitly foregrounded in the paper itself—is the structural tension between AnyECG's "foundational model" framing and its evaluation design: a true foundation model should be evaluated on domains it has **not** seen during pre-training, yet all evaluation datasets overlap with pre-training data, and the only comparison to another pre-trained model (ECG-FM) is deliberately disadvantaged by a domain mismatch in the opposite direction. The paper has inadvertently constructed an experiment that can only show that in-distribution pre-training beats no pre-training, which is unsurprising. The non-monotone scaling (XL < L) on lead generation further hints that performance gains at scale may be fragile. The paper would be substantially stronger if it reframed its evaluation to include at least one held-out distribution.
+The most genuinely novel observation from this review is the *structural* nature of the two major experimental confounds: (1) The pre-training data overlap is not incidental — it is a design choice to pre-train on "all available" data to maximize representation quality. This conflates the model's representational strength with its in-domain knowledge advantage, making it impossible from the results alone to determine which factor drives the gains. (2) The ultra-long ECG experiment exposes a common but underappreciated pitfall in foundation model papers: a task where the proposed model is *architecturally equipped* while baselines are not should be presented as an architectural contribution rather than a representation learning benchmark. Together, these confounds suggest that future ECG foundation model evaluations should distinguish (a) representation transfer to distribution-shifted tasks, (b) architecture-level task adaptation, and (c) in-domain fine-tuning — and report each separately.
 
 ---
 
 ## Suggestions
 
-1. Add a controlled comparison: pre-train any existing ECG SSL method on the same seven-dataset corpus and compare on all four downstream tasks.
-2. Equip all baselines in Table 5 with the same sliding-window adaptation before claiming ultra-long superiority.
-3. Include at least two post-2020 ECG lead imputation or reconstruction baselines in Table 4.
-4. Disclose the source of the undisclosed dataset or exclude it from pre-training in the evaluation version of the paper.
-5. Add per-class breakdown for arrhythmia detection; report the number of classes and label frequencies.
-6. Clarify whether train/test splits are patient-stratified.
+1. Add a "pre-training disjoint" ablation: pre-train AnyECG using only INCART + PTB (not used for the main downstream tasks) and evaluate on CPSC/PTB-XL/G12EC. This cleanly isolates representation quality from distribution exposure.
+2. Either disclose the "Undisclosed Dataset" (license permitting) or exclude it from pre-training entirely, and report results with and without it.
+3. Provide a clear statement of the temporal ordering of data splits vs. pre-training (i.e., whether test-set recordings were ever seen by the pre-training pipeline).
+4. Add at least one post-2020 baseline for corrupted lead generation, or acknowledge explicitly that this is a lower-bound comparison.
+5. Report codebook utilization statistics (active code count, assignment entropy) to validate the VQ component.
+6. In the ultra-long ECG section, either add the sliding-window adaptation to baseline models or frame the hierarchical adaptation as a separate contribution rather than a benchmark comparison.
 
 ---
 
 ## Score and Decision
 
-**Calibration anchors:**
+**Calibration anchors used:**
 
-| Paper | Path | Avg Score | Comparison |
+| Paper | Path | Avg score | Comparison |
 |---|---|---|---|
-| LaBraM (EEG VQ + masked pre-training) | QzTpTRVtrP.md | **7.33** (spotlight) | Most similar approach; stronger: ablations, OOD eval, code release, no undisclosed data |
-| NeuroLM (EEG VQ + LLM instruction tuning) | Io9yFt7XH7.md | **6.25** (poster) | Similar architecture philosophy; weaker OOD eval but cleaner comparison structure |
-| PaPaGei (PPG foundation model) | kYwTmlq6Vn.md | **6.25** (poster) | Same paradigm; stronger: 20 tasks, 10 diverse datasets, open data, bias eval |
-| TA-PCLR (ECG contrastive pretraining) | 7zJDTnogdG.md | **3.33** (reject) | Similar domain; rejected for weak analysis, no OOD validation—less severe flaws than AnyECG's evaluation design |
-| CuPID (single-lead ECG masked modeling) | QjrC77Nyu6.md | **2.50** (reject) | ECG SSL, rejected for narrow scope and missing baselines |
-| DASFormer (signal SSL for earthquake) | 7ipjMIHVJt.md | **5.25** (reject) | Physiological signal SSL with anomaly detection—comparable scope |
+| TA-PCLR (ECG foundation model, contrastive) | `7zJDTnogdG.md` | 3.33 (Reject) | Less comprehensive than AnyECG; single-task focus; but similar data-fairness concerns |
+| CuPID (single-lead ECG masked modeling) | `QjrC77Nyu6.md` | 2.50 (Reject/Withdrawn) | Much narrower scope; weaker baselines; simpler architecture |
+| PaPaGei (PPG foundation model) | `kYwTmlq6Vn.md` | 6.25 (Accept) | Similar physiological FM framing; stronger because data is fully public, 20 evaluation tasks, cleaner protocol |
+| NeuroLM (EEG VQ + autoregressive FM) | `Io9yFt7XH7.md` | 6.25 (Accept) | Most similar architecture (VQ tokenizer, masked/autoregressive pretraining, multi-task) and similar scale (1.7B); less severe data-fairness concerns |
+| V-JEPA (latent video SSL) | `WFYbBOEOtv.md` | 4.40 (Reject) | Masked modeling FM with structural comparison issues; provides a medium-low anchor |
+| MOTOR (medical EHR FM) | `NialiwI2V6.md` | 7.50 (Accept spotlight) | Strong medical FM with truly clean evaluation protocol; shows what top-tier medical FM papers look like |
 
-**Reasoning:** AnyECG has a genuinely novel architecture and addresses a real problem with scale (1.7B parameters, 7 datasets, 4 tasks). This places it well above CuPID/TA-PCLR in scope and ambition. However, its three major evaluation design issues (in-distribution pre-training advantage, asymmetric ultra-long comparison, archaic generation baselines) are more severe than the issues that caused NeuroLM/PaPaGei to land at 6.25. LaBraM at 7.33 had clean comparisons and released code. AnyECG's comparison structure is fundamentally weaker: the core architectural claims cannot be validated with the current evaluation design. This places the paper below NeuroLM and PaPaGei, closer to the DASFormer range (~5) but pulled down by the more systemic evaluation concerns. I settle on **4.5**: the approach is worth publishing in some form, but the evaluation design must be substantially revised before the architectural claims can be trusted.
+**Reasoning:** AnyECG is architecturally similar to NeuroLM (avg 6.25), which was accepted. However, AnyECG has two more serious experimental problems: (1) the pre-training data overlap with all downstream evaluation data, which NeuroLM does not have to the same degree; and (2) an entirely undisclosed pre-training source. These concerns put AnyECG closer to V-JEPA's 4.4 than NeuroLM's 6.25. The methodology is creative and the scope is broad, which keeps it well above the truly weak ECG papers (TA-PCLR at 3.33, CuPID at 2.5). Given the cluster of medium papers at 4.5–5.5 and the specific severity of the data-overlap issue (which goes to the heart of every empirical claim), a score of **4.5** is appropriate.
 
-**Final Score: 4.5 — Reject (major revision required)**
+**Axis-by-axis:**
+- *Originality:* Moderate-to-good. Two-stage VQ + masked ECG modeling with CMA is a thoughtful combination, though each individual piece has precedents.
+- *Importance of research question:* High. Unified ECG representation learning across heterogeneous real-world settings is clinically important.
+- *Whether claims are well supported:* Poor. The central empirical claims are compromised by the data-overlap issue, asymmetric ultra-long comparison, and undisclosed training data.
+- *Soundness of experiments:* Poor-to-moderate. Five-seed evaluation is good; but the comparison protocol has structural flaws throughout.
+- *Clarity of writing:* Moderate. The methodology is clearly described; limitations are understated.
+- *Value to research community:* Moderate. The architectural ideas (CMA, multi-view decoder) are genuinely useful; but the experimental issues limit direct adoption of the results.
+
+**Decision: Reject.** The paper presents a promising architecture, but its three major experimental flaws — pre-training data overlap with all evaluation benchmarks, asymmetric ultra-long ECG evaluation, and an entirely undisclosed training source — collectively prevent the core performance claims from being taken at face value. Acceptance would require either (a) a cleanly disjoint pre-training/evaluation protocol demonstrating that the architecture itself drives the gains, or (b) explicit acknowledgment and quantification of these confounds.
 
 MY FINAL SCORE: <pineapple>4.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

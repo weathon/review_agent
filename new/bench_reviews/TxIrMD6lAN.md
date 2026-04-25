@@ -1,19 +1,20 @@
-Now I have a thorough understanding of the paper. Let me search for calibration anchors before writing the final review.Now I have sufficient calibration data. Let me synthesize the final review.
+Now let me search for calibration anchors.Now I have enough information to write the final review. Let me compile it.
 
 ---
 
 ## Summary
 
-The paper proposes integrating per-task bottleneck adapter modules with existing incremental learning algorithms (EWC, MAS, PathInt, LwF, LwM) and co-training both the backbone and adapters jointly, as opposed to the conventional approach of keeping the backbone frozen. The core argument is that task-specific adapters capture inter-task differences while the backbone learns shared invariant features, thereby alleviating the stability-plasticity dilemma. Experiments are conducted primarily on CIFAR-100 under the task-IL protocol across various task orderings and scales, with an additional evaluation on ImageNet-Subset.
+This paper proposes augmenting classical regularization-based incremental learning (IL) methods with task-specific bottleneck adapter modules co-trained alongside the backbone. The core idea is to decompose representation learning into invariant features (backbone) and task-specific features (adapters), and to integrate this design with both weight-regularized methods (EWC, MAS, PathInt — by excluding adapter parameters from penalties) and prediction-regularized methods (LwF, LwM — by adding an auxiliary backbone distillation loss). Experiments on CIFAR-100 task-IL across five base methods and multiple task orderings show consistent ~3–5% improvements; ImageNet results are mixed.
 
 ---
 
 ## Strengths
 
-- **Novel co-training paradigm**: The key differentiator from prior adapter-based IL work is co-training the backbone with adapters rather than keeping the backbone frozen. Table 2 validates this: LwF-A (co-trained) achieves 74.0% vs. LwF-A-FrB (frozen backbone) at 72.9%, a meaningful margin that supports the design choice.
-- **Broad compatibility**: The method is adapted to five methods spanning two regularization paradigms (weight-regularized: EWC, MAS, PathInt; prediction-regularized: LwF, LwM), with additional integration into DualNet and iTAML (Table 2). This breadth is more comprehensive than typical adapter-based IL papers.
-- **Consistent CIFAR-100 task-IL improvement**: Figure 3 shows consistent ~3% and ~5% average-accuracy gains for weight- and prediction-regularized methods respectively across the full 10-task learning trajectory, a result replicated across two additional task orderings in Figure 5.
-- **Task-ordering analysis**: Figure 5 reveals a genuine and underexplored interaction between inter-task diversity and adapter benefits across coarse-grained and iCaRL orderings, providing useful diagnostic insight beyond just the main results.
+- **Broad empirical compatibility across two families of regularization methods (§3.2.1)**: The paper genuinely distinguishes the integration strategies for weight-regularized (excluding adapter params from Fisher penalties) vs. prediction-regularized (adding backbone-level KD loss $R_\varphi^t$, Eq. 1) methods. This is a concrete, method-aware design, not a one-size-fits-all hack. Gains of ~3% (weight-regularized) and ~5% (prediction-regularized) across all five baselines on CIFAR-100 (Figure 3) are consistently shown over all 10 tasks.
+
+- **Robust evaluation across task orderings and scales**: Figure 5 shows the adapter advantage holds under the harder coarse-grained ordering (higher inter-task diversity) and the iCaRL random ordering. Figure 4 confirms advantages at 5, 10, and 20 classes per task. Running 10 random seeds and reporting full learning curves (not just final accuracy) is good practice.
+
+- **Ablation of co-training vs. frozen backbone (Table 2)**: The comparison between co-trained LwF-A (74.0%) and frozen-backbone LwF-A-FrB (72.9%) directly validates the co-training design choice over prior frozen-backbone adapter approaches.
 
 ---
 
@@ -24,28 +25,32 @@ None.
 
 ### Major
 
-- **ImageNet results directly contradict the main claim for prediction-regularized methods.** Table 1 shows that for the two methods where the paper's most distinct algorithmic contribution (backbone regularizer $R_\varphi^t$, Eq. 1) applies, adapters *hurt*: LwF-A (67.2%) < LwF (68.2%) and LwM-A (56.9%) < LwM (58.0%) at task 10. The paper simultaneously claims "methods with adapters yield the best performance across all incremental tasks" (Section 4.2, "On ImageNet"), which is factually false per the paper's own Table 1. The authors acknowledge hyperparameter mismatch as a cause but do not investigate it further, and the paper's conclusion does not qualify the ImageNet claim. This undermines the generalization narrative for the most algorithmically novel variant.
+- **Headline claim of "consistent outperformance" is directly contradicted by Table 1**: Verified against Table 1: at task 10, LwF-A (67.2%) < LwF (68.2%), and LwM-A (56.9%) < LwM (58.0%). Two of the five methods — specifically the prediction-regularized ones, for which the most elaborate integration (Eq. 1 with $R_\varphi^t$) was designed — actually *regress* on ImageNet. The paper states "methods with adapters yield the best performance across all incremental tasks" (§4.2) — this is factually incorrect by the paper's own table. The paper acknowledges hyperparameters were not re-tuned for ImageNet, but this makes the situation worse: it shows the proposed benefit is brittle to hyperparameter transfer precisely for the methods requiring the most specialized design effort. This does not invalidate the CIFAR-100 contribution, but it does undermine the broader generalizability claim.
 
-- **Primary evaluation is task-IL with oracle task ID; class-IL is entirely appendix-deferred.** The paper itself notes (Section 4.1, Evaluation metrics): "In this section, we focus on task-IL with task-ID information at the inference time, while results for class-IL are included in Appendix B." In task-IL, the task-ID oracle routes test inputs to the correct adapter automatically. The practically more important and harder class-IL setting — where no task identity is available at test time and the method must somehow select the right adapter — is never discussed in the main body. The paper does not even describe how adapter selection is handled in class-IL inference. Since the entire claim of "improving both plasticity and stability" is argued in the task-IL context, its applicability to the standard class-IL benchmark remains undemonstrated within the paper itself.
+- **The claim to "eliminate the stability-plasticity dilemma" is not supported by results**: The abstract, §3.2, and conclusion all claim the method "eliminates" the dilemma. However, Figure 3 shows all adapter variants still exhibit monotonically declining accuracy curves over tasks — significant forgetting remains in all cases. The paper demonstrates meaningful *mitigation* (~3–5%), not elimination. Overclaiming a qualitative resolution of a fundamental open problem without any supporting evidence is a substantive error that will undermine credibility with readers.
+
+- **Core mechanistic claim — backbone learns invariant features, adapters learn task-specific features — is never empirically verified**: The entire theoretical justification for the design (§3.2, §3.2.1, Conclusion) rests on this decomposition. Yet there is no analysis of backbone feature similarity across tasks (e.g., CKA, t-SNE), no measurement of how much task-identifying information resides in adapters vs. the backbone, and no diagnostic experiment demonstrating the claimed specialization. Without such evidence, the approach could simply be adding model capacity and an output regularization term, with the functional decomposition as a post-hoc narrative.
 
 ### Minor
 
-- **Missing ablation for the backbone regularizer $R_\varphi^t$ in LwF.** For prediction-regularized methods, two changes are introduced simultaneously: (i) adapter modules and (ii) an additional backbone distillation loss ($R_\varphi^t$, Eq. 1). For weight-regularized methods, the change is simply excluding adapter parameters from the Fisher penalty. The ablation in Table 2 tests co-training vs. frozen backbone but never isolates "LwF + adapters only, without $R_\varphi^t$." It is therefore unknown whether the LwF improvement comes from adapters, from backbone regularization, or both. This weakens the mechanistic claim.
+- **Main evaluation confined to task-IL with oracle task-ID**: The paper correctly notes class-IL is "more practical yet challenging" but places all class-IL results in the appendix, focusing the entire main body on the easier task-IL setting where task identity is provided at inference. For adapter methods, this sidesteps a fundamental question: how would adapters be selected/combined at inference without a task oracle? This scoping decision weakens practical relevance.
 
-- **Overclaimed language throughout.** Phrases like "effectively eliminating the stability-plasticity dilemma" (Abstract, Introduction, Conclusion) are unsubstantiated. A 3–5% improvement on CIFAR-100 task-IL does not constitute elimination of the dilemma, and the advantage shrinks substantially (to ~1%) under certain orderings (Figure 5) and reverses on ImageNet for prediction-regularized methods. The contribution would read more credibly if framed as "improving the stability-plasticity trade-off."
+- **Bottleneck width inconsistency**: Figure 6 shows width 256 consistently performs best among widths tested (16–256) for both EWC and LwF. However, Table 1's caption states width 128 was used for ImageNet, with no justification for the deviation. This inconsistency affects the reported ImageNet results.
 
-- **No parameter-budget accounting.** The paper describes adapters as having "negligible" additional parameters (Section 3.2) without any quantification. At bottleneck width 256 with ResNet-34 (feature dim 512), each adapter adds 2×512×256 ≈ 262K parameters; for 10 tasks this is ~2.6M extra on top of a ~21M backbone (≈12%). While the scale is unlikely to fully explain observed gains, the paper should at least report total parameter counts per-task to let readers assess.
+- **Diminishing returns with larger task granularity unexplained**: §4.2 notes that "the benefits of utilizing adapters diminish as the number of classes increases within each task" and dismisses this as "understandable." However, the regime of fewer tasks with more classes per task is arguably more practical, and the paper offers no analysis of why the method's advantage degrades under this condition.
 
 ### Trivial
-None that are not already covered above.
+
+- **TAMiL comparison uses the authors' cherry-picked best configuration** (Table 2 footnote: "the best method-adapter pair we yielded"): while this is disclosed, it means the comparison is not head-to-head under matched conditions. The margin (74.7 vs. 71.4) should be interpreted cautiously.
 
 ---
 
 ## Nice-to-Haves
 
-- A mechanism and evaluation for adapter selection at class-IL inference time (e.g., entropy-based routing, prototype similarity) would make the method practically deployable.
-- A representation-level analysis (e.g., CKA similarity of backbone features before/after adapter training) to verify that the backbone actually learns more task-invariant features with adapters would solidify the mechanistic story.
-- Per-task backward transfer plots, in addition to aggregate average accuracy, would distinguish whether adapters primarily help stability, plasticity, or both.
+- Verification of the backbone/adapter functional decomposition using feature-space analysis (e.g., CKA between task representations before and after training), which would either substantiate or refute the core conceptual claim.
+- A controlled parameter-count baseline to disentangle capacity effects from the structural design: at bottleneck width 256 on ResNet-34, 10 tasks add ~2.6M parameters (≈12% overhead), which is not negligible.
+- Per-task accuracy matrices rather than only the aggregate $A_t$ metric, to cleanly separate the stability and plasticity contributions claimed to both improve.
+- Adapter selection strategy for class-IL deployment, even if only discussed as future work.
 
 ---
 
@@ -53,41 +58,55 @@ None that are not already covered above.
 
 *These points are flagged to be removed; treat them with caution.*
 
-- **Harsh Critic Issue 1 (parameter comparison invalidates results, framed as "STRUCTURAL")**: While the missing parameter count is a legitimate minor concern, the characterization that "every accuracy improvement is confounded with added capacity" is too strong. The bottleneck adapters are genuinely small relative to the backbone, and the improvements are consistent across five different methods, which would be an unlikely coincidence if purely capacity-driven. The underlying concern (no parameter-controlled baseline) is preserved as a minor weakness above.
+- **Harsh Critic's claim about adapter placement being "significantly different from Houlsby et al."**: The paper is transparent about where adapters are placed (after the backbone feature extractor, before the label predictor, §3.2). This is a design choice that is clearly described and motivated; it is not a weakness.
 
-- **Harsh Critic's claim that task-IL makes adapter routing "trivially beneficial"**: Even with a task-ID oracle, the adapter must still learn useful task-specific features. The oracle is standard in task-IL evaluations and does not make the method trivially correct. The more substantive concern — that class-IL is relegated to the appendix — is kept as a major weakness.
+- **Harsh Critic's claim that co-training showing only 1.1% advantage implies gains come from capacity not mechanism**: The 74.0% vs. 72.9% comparison does support the design choice. The inference that this "reveals" the gains are from capacity alone is speculative and unfair — both components may contribute.
 
-- **Harsh Critic's Section 3.2.1 note (two qualitatively different modifications)**: The design difference between prediction-regularized and weight-regularized integration is intentional and described in the paper. This is not a flaw but a feature of the framework.
+- **Strength Finder's claim that Figure 1 "provides direct evidence that inter-task diversity causes more forgetting"**: Figure 1 shows correlation between task ordering (coarse-grained vs. alphabetical) and forgetting, not causation. This is a reasonable motivation but overstated as "direct evidence." Removed as a generic/overstated strength.
 
-- **Strength Finder: "effectively addressing the stability-plasticity dilemma" as a standalone strength** — removed because the ImageNet results for prediction-regularized methods directly contradict an unconditional version of this claim.
-
-- **Strength Finder: "parameter-efficient design" as a practical strength** — weakened because the paper provides no actual parameter counts, so this claim is asserted rather than demonstrated.
+- **Strength Finder's claim about "lightweight parameter overhead" as a strength**: The paper does not report actual parameter counts in the main text, and as noted above the overhead is not trivially negligible at larger widths. Removed as unverified.
 
 ---
 
 ## Novel Insights
 
-The task-ordering analysis in Figure 5 is the most underappreciated contribution: it shows that inter-task diversity (coarse-grained vs. alphabetical orderings) modulates the degree to which adapters help, suggesting that the benefit scales with the degree of task heterogeneity. This offers a principled regime characterization — adapters matter most when tasks are highly distinct — which has implications beyond this paper for understanding when architectural separation of task-specific and shared features is worthwhile. The observation that adapter benefits diminish as classes-per-task increases (Figure 4) is consistent with this view and worth developing further.
+The paper's most transferable insight — that adapter integration into weight-regularized vs. prediction-regularized methods requires qualitatively different strategies (excluding adapter params from penalty vs. adding a backbone-specific distillation term) — is concrete and practically useful for anyone extending these classical baselines. However, the mechanistic claim about invariant vs. task-specific feature decomposition remains an open empirical question that future work should verify directly. The observation that adapter gains shrink as the number of classes per task grows is also worth further investigation, as it may point to a regime-dependence of the method's benefits.
 
 ---
 
-## Calibration Anchors
+## Suggestions
 
-| Paper | Avg Human Score | Comparison |
-|-------|----------------|------------|
-| SD-LoRA (5U1rlpX68A) | 7.50 | Similar topic (adapter + continual learning), but stronger: class-IL focus, theoretical analysis, rehearsal-free, cleaner claims. Paper under review is clearly below this. |
-| Prediction Error CIL (DJZDgMOLXQ) | 6.50 | Accepted poster for CIL, novel mechanism, class-IL evaluation. Paper under review is weaker due to task-IL primary evaluation and inconsistent ImageNet results. |
-| MetaAdapter FSCIL (88hh5GtLBJ) | 5.40 | Topically close (adapter + IL), rejected; issues of missing ablations and weak motivation. Somewhat similar to paper under review. |
-| DLCPA (v5Bb7F1Wkf) | 4.00 | Rejected; stability-plasticity dilemma framing, dual-learner, CIFAR-100 experiments, but weaker empirically and theoretically. Paper under review is moderately stronger (more methods, explicit ablation). |
-| Online Weight Approx (HCCkCjClO0) | 3.00 | Rejected; weak method, limited analysis. Paper under review is clearly stronger. |
-
-The paper under review is above the 3–4 band (it has consistent results across 5 methods and two datasets, clear ablation, and a genuine design contribution) but below the 6.5+ band (class-IL is appendix-only, ImageNet results contradict the key claim, overclaimed language). The MetaAdapter paper at 5.4 is the closest anchor, and this paper is roughly comparable but has a more fundamental inconsistency in the ImageNet results for the flagship method variant. I place it at **4.5**.
+1. Replace all instances of "eliminate the stability-plasticity dilemma" with "mitigate" or "substantially reduce" — this is more accurate and no less impactful.
+2. Restate the abstract's claim of "consistently outperform non-adapter counterparts" to acknowledge the ImageNet caveat for prediction-regularized methods.
+3. Add at least one diagnostic experiment (e.g., CKA between backbone representations for different tasks) to provide direct evidence for the invariant/task-specific decomposition.
+4. Move a condensed class-IL result (or at minimum, a discussion of adapter selection without task-ID) into the main paper.
+5. Clarify the bottleneck width choice for ImageNet (why 128 rather than 256?).
 
 ---
 
 ## Score and Decision
 
-The paper makes a genuine but modest contribution — repurposing adapters as co-trained task-specific feature modifiers and demonstrating consistent CIFAR-100 task-IL improvements across multiple baseline algorithms. However, two major issues hold it back: (1) the ImageNet results in Table 1 flatly contradict the paper's own summary claim for the methods most algorithmically novel to this paper, and (2) the practical class-IL evaluation (without task-ID oracle) is entirely deferred to an appendix with no in-text analysis. These are not presentation issues; they either represent an inconsistency in how the authors characterize their own results or a fundamental gap in demonstrating practical applicability. The CIFAR-100 task-IL results are real and consistent, but the contribution's scope and strength is narrower than the paper claims.
+**Calibration anchors used:**
+
+| Path | Avg Score | Comparison to paper under review |
+|---|---|---|
+| `/human_reviews/HCCkCjClO0.md` | 3.0 (Reject) | Weak continual learning paper with unclear motivation, weak baselines, and poor writing. The paper under review is substantially better in clarity and experimental scope. |
+| `/human_reviews/gV0Moskp7k.md` | 4.4 (Reject) | Parameter-efficient CL for LLMs; stronger motivation than this paper but also rejected for overclaiming and limited baselines. Roughly comparable in quality. |
+| `/human_reviews/1nHQRsb3Ze.md` | 5.0 (Reject) | "Auxiliary Classifiers Improve Stability in CL" — very close comparator: adds a module to multiple CL baselines, shows consistent improvements, no strong theoretical grounding, class-IL performance is limited. Borderline rejected for limited novelty and empirical contribution — a near-identical profile to this paper. |
+| `/human_reviews/sSyytcewxe.md` | 7.0 (Accept) | "Divide and not forget" — accepted, MoE approach to class-IL with stronger novel design. Cleaner and more novel contribution than this paper. |
+| `/human_reviews/5U1rlpX68A.md` | 7.5 (Oral) | SD-LoRA for class-IL — accepted Oral, with theoretical grounding, novel mathematical decomposition, addresses harder class-IL setting. This paper is clearly below that bar. |
+
+**Reasoning**: The paper under review maps most closely to the avg-5.0 "Auxiliary Classifiers" anchor in terms of contribution profile: a modular add-on to multiple existing CL baselines with consistent empirical improvements but limited theoretical depth, no class-IL in the main paper, and some overclaiming. The additional problems (ImageNet regression for the primary new integration strategy, unverified core mechanistic claim) push it slightly below that anchor. The paper is not as weak as the avg-3.0 to 4.4 papers, which have fundamental methodology or writing problems. I place it at **4.5**, consistent with the borderline-reject cluster.
+
+**Axis evaluation:**
+- *Originality*: Low-to-moderate. Adapters for CL exist; the co-training twist and compatibility across two regularization families is the novelty.
+- *Importance of research question*: Moderate. IL is an important problem.
+- *Claims well-supported*: Weak. Core mechanistic claim unverified; headline claim falsified by Table 1 for ImageNet; "eliminate" framing not supported.
+- *Soundness of experiments*: Moderate. CIFAR-100 experiments are thorough; ImageNet is incomplete.
+- *Clarity of writing*: Good.
+- *Value to community*: Limited. Adding adapters to old IL methods without class-IL support and without deeper analysis is a modest contribution.
+
+**Decision: Reject**
 
 MY FINAL SCORE: <pineapple>4.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

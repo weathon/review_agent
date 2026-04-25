@@ -1,18 +1,19 @@
-Now I have a clear picture of the paper. Let me do calibration searches before writing the final review.Now I have sufficient calibration data. Let me write the final review.
+Now let me search for calibration anchors.Now I have enough information to write the final consolidated review.
 
 ---
 
 ## Summary
 
-This paper investigates six data augmentation (DA) techniques — synonym replacement (SR), random insertion (RI), random swap (RS), random deletion (RD), back translation (BT), and LLM-based paraphrasing — for fine-tuning LLaMA3-8B with LoRA to create character-personalized Chinese dialogue models. The study uses two datasets (Paimon from *Genshin Impact* and Zhen Huan from *Empresses in the Palace*), evaluating performance via training/validation loss curves and BLEU/ROUGE scores. The main finding is that meaning-preserving methods (BT and SR) outperform meaning-distorting ones (RD, RI) and LLM paraphrasing.
+This paper investigates the impact of six data augmentation (DA) techniques—Synonym Replacement (SR), Random Insertion (RI), Random Swap (RS), Random Deletion (RD), Back Translation (BT), and LLM-based Paraphrasing (PG)—on personalized AI model training using LLaMA3-8B with LoRA fine-tuning. Experiments are conducted on two Chinese-language character-dialogue datasets (Paimon from Genshin Impact and Zhen Huan from Empresses in the Palace). The paper finds that BT and SR consistently outperform other methods, while LLM-based paraphrasing leads to overfitting on domain-specific data.
 
 ---
 
 ## Strengths
 
-- **Dataset-characteristic-aware explanation of DA effectiveness (Section 4.1.2):** The paper goes beyond surface reporting by connecting RD's poor performance on the Zhenhuan dataset to the fragility of classical Chinese idiomatic expressions (where removing a single word alters meaning), and explaining the failure of LLM paraphrasing on Paimon through SparkDeskV4's inability to handle game-specific world-building terminology. This contextual reasoning is the paper's most substantive contribution.
-
-- **Dual evaluation perspectives (Figure 3 and Figure 4):** Analyzing both training/validation loss dynamics and text generation quality (BLEU/ROUGE) provides complementary evidence. The observation that Paraphrasing achieves relatively higher BLEU/ROUGE than RD despite overfitting in loss curves — explained by semantic preservation without diversity — is a non-trivial nuance that adds depth to the analysis.
+- **Practical problem identification (§1):** The paper correctly identifies a genuine challenge—data scarcity for fine-tuning LLMs on niche, character-specific dialogue data—and frames it clearly.
+- **Dataset-characteristic analysis (§4.1.2):** The paper does not just rank methods but offers principled, dataset-specific explanations for why certain methods fail—e.g., RD is disproportionately harmful for classical Chinese idioms, PG fails on game-specific terminology due to SparkDesk's domain-knowledge gaps.
+- **Overfitting observation for LLM-based paraphrasing (Figure 3 / §4.1.1):** The validation-loss analysis showing that LLM paraphrasing induces overfitting due to near-identical outputs is a concrete and interpretable finding, corroborated by both loss curves and the final BLEU/ROUGE scores.
+- **Honest limitation disclosure (§5):** The authors explicitly acknowledge two-dataset scope and the 2000-step training cap, including the caveat that paraphrasing overfitting "might diminish with additional training."
 
 ---
 
@@ -20,39 +21,37 @@ This paper investigates six data augmentation (DA) techniques — synonym replac
 
 ### Fatal
 
-- **No no-augmentation baseline.** The paper's stated goal is to show that DA improves personalized model training, yet every comparison in Figure 4 is *among* DA methods. A model trained on original, unaugmented data is never evaluated. Without this control, it is impossible to determine whether any DA method helps, hurts, or has no effect relative to the unaugmented setting. The paper's central premise — that DA is beneficial — is experimentally untested. This is not an optional ablation; it is the foundational comparison the study requires.
+- **Missing no-augmentation baseline — the paper's stated central comparison is absent.** Section 1 explicitly promises to "compare models enhanced with DA to the original models." This comparison never appears: Figure 3 contains loss curves only for the six DA conditions, and Figure 4 reports BLEU/ROUGE only among those six. Without a no-DA control, it is impossible to determine whether any augmentation method actually helps, whether all methods hurt, or what the magnitude of any improvement is. Every conclusion in §4—that BT and SR are "the best methods," that PG leads to overfitting—is a comparison *between* augmentation variants, not against the baseline the paper promises. This is not a minor gap; it invalidates the paper's framing.
 
-- **Abstract claims three datasets; paper uses two.** The abstract (line 17) explicitly states "we apply these techniques across three distinct datasets." The paper evaluates exactly two (Paimon and Zhenhuan). Section 5.1 itself acknowledges "only two datasets available." This is not a minor discrepancy — the generalization claims built on "three distinct datasets" in the abstract collapse in the body of the paper, and it raises questions about the paper's accuracy more broadly.
+- **Implausible evaluation scores with no methodological justification.** Table in Figure 4 reports BLEU = 0.40–0.65 and ROUGE-1 = 0.50–0.70 for Chinese open-domain character dialogue generation. State-of-the-art neural dialogue systems typically achieve BLEU in the low single digits on held-out benchmarks; BLEU was designed for translation, not open-ended dialogue. The paper never specifies: (a) how Chinese text was tokenized for BLEU computation (character-level vs. word-level vs. subword, which has a dramatic effect), (b) what reference texts were used, (c) whether the test set was drawn from the original unaugmented data or from the same augmented pool (circular evaluation), or (d) how many references per test instance were used. Without these details, the central quantitative results cannot be interpreted or trusted.
+
+- **Abstract promises three datasets; paper delivers two.** The abstract states: "we apply these techniques across three distinct datasets, each representing different dialogue styles and contexts." The paper presents only two (Paimon and Zhen Huan), and the Limitations section itself confirms: "With only two datasets available." This is not a scoping decision made transparently—the abstract makes an empirical claim that the paper contradicts.
 
 ### Major
 
-- **BLEU/ROUGE scores are implausibly high with no evaluation protocol described.** Figure 4 reports BLEU scores of 0.40–0.60 and ROUGE-1 of 0.50–0.70 for open-ended character dialogue generation. These values are extraordinary — state-of-the-art systems on open-ended dialogue benchmarks rarely exceed BLEU 0.10–0.15 in standard evaluation. The paper never describes: how the test set was constructed (size, overlap with training data), whether scoring is character-level or word-level (critical for Chinese), or what the reference responses are. Numbers this high without any methodological justification could indicate test-train overlap, incorrect metric application, or character-level tokenization that inflates scores. Without explanation, the quantitative results cannot be interpreted or trusted.
+- **Inappropriate evaluation metrics for the paper's stated task.** The paper claims its goal is training models that "capture a character's tone and linguistic habits" and "generate reasonable dialogues in various contexts." BLEU and ROUGE measure n-gram overlap with references and are insensitive to stylistic, tonal, and character-fidelity properties. There is no human evaluation, no character-consistency metric, and no qualitative comparison of generated outputs. The chosen metrics do not measure what the paper claims to care about.
 
-- **The core finding is already well-established in the literature the paper cites.** The conclusion — that meaning-preserving augmentations (BT, SR) outperform meaning-distorting ones (RD, RI) — is precisely what Wei & Zou (2019) established in the EDA paper, which the authors themselves cite. The paper presents no new method, no new theoretical framework, and no finding that extends or contradicts prior work. Reproducing a known result on two small, proprietary, single-language datasets does not constitute a novel research contribution at the level expected for ICLR.
-
-- **Table 1 contains apparently incorrect benchmark numbers (Section 3.3).** Table 1 reports LLaMA3-70B at MATH=89.1 and LLaMA3-8B at MATH=85.6, and LLaMA2-8B at MATH=81.2. Published LLaMA3 evaluations place the 70B model at approximately 50 on MATH (pass@1). These numbers appear either fabricated or sourced from an unreliable origin. While this table is used only as background motivation for the hardware choice, incorrect baseline numbers undermine confidence in the paper's factual accuracy throughout.
-
-- **Dataset sizes and splits are never reported.** The total number of dialogue turns, train/validation/test splits, and the ratio of augmented to original data are absent from the paper. This makes it impossible to interpret the loss curves (what is "convergence" without knowing dataset size?), the BLEU/ROUGE scores, or to assess whether the study has sufficient statistical power for any conclusion.
+- **Key experimental parameters unreported, making replication impossible.** The augmentation parameter *p* (controlling the proportion of words modified in RI, RS, RD) is described in §3.1 but its value is never given. LoRA hyperparameters (rank, alpha, dropout, learning rate, batch size) are absent. Dataset sizes—number of raw dialogue pairs per character, number of augmented examples per method—are nowhere stated. Without these, it is impossible to evaluate or replicate the experiments, and comparing methods is uninterpretable since a method that generates 10× more training samples will behave differently from one generating 2×.
 
 ### Minor
 
-- **LoRA hyperparameters not reported.** Rank, alpha, dropout, which weight matrices are adapted — none are specified. Given that the paper's analysis depends on LoRA-based fine-tuning, the training setup is insufficiently described for even qualitative interpretation.
+- **Placeholder citation left in paper.** Section 2.2 cites "Author et al. (2021)"—an obvious incomplete anonymization artifact. This undermines the credibility of the background section.
 
-- **Overfitting claims are based on visual inspection only.** The claim that RI "leads to overfitting" while RS "does not" rests entirely on visual comparison of loss curves (Figure 3) with no quantitative criterion (e.g., gap between training and validation loss at convergence, or early stopping epoch). Validation loss is also a weak proxy for dialogue quality.
+- **Table 1 (§3.3) is irrelevant to the paper's experiments.** The table compares LLaMA3-8B and 70B on GLUE, SQuAD, APPS, and MATH. None of these benchmarks relate to character-dialogue generation; the table serves only to justify choosing 8B over 70B but does so with benchmark results entirely disconnected from the paper's actual task.
 
-- **Logical incoherence in Section 4.3.** The paper recommends against LLM-based paraphrasing partly on the grounds that "training a paraphrasing model requires a substantial amount of data." However, SparkDeskV4 is an off-the-shelf LLM that requires no training by the authors. The correct criticism — that generic off-the-shelf LLMs fail on domain-specific content — is present in the text but partially obscured by this confused framing.
+- **Qualitative explanations for DA method behavior are asserted without evidence.** Section 4.1.2 explains *why* each DA method performs as it does (e.g., "RI introduces words at inappropriate positions"), but no examples of augmented text are shown and no statistics on augmented data quality are provided. These are reasonable intuitions but remain completely unsubstantiated.
 
 ### Trivial
 
-- None beyond the issues noted above.
+- None beyond those already folded into the above.
 
 ---
 
 ## Nice-to-Haves
 
-- **Augmentation ratio ablation.** Whether and how much DA helps may depend critically on the ratio of augmented to original data, but this is never varied. Even a simple 2–3 point ablation would clarify the conditions under which any DA method is beneficial.
-- **Human evaluation for character fidelity.** BLEU/ROUGE do not measure whether a model sounds like Paimon or Zhen Huan. A small human preference study would directly address the stated goal of replicating a character's tone and linguistic habits.
-- **Qualitative output examples per DA method.** Side-by-side model responses under each DA condition would allow readers to judge whether metric differences reflect genuine character fidelity differences.
+- A side-by-side display of augmented text examples for each DA method on the same source sentence would substantiate the narrative claims in §4.1.2.
+- Reporting results as a function of augmentation ratio (1×, 2×, 5×) would disentangle method type from the amount of new data introduced.
+- A small human evaluation (does the output sound like the character?) would be more aligned with the paper's actual claims than BLEU/ROUGE.
 
 ---
 
@@ -60,32 +59,26 @@ This paper investigates six data augmentation (DA) techniques — synonym replac
 
 *These points are flagged to be removed; treat them with caution.*
 
-- **Harsh Critic: Table 1 numbers are "fabricated."** While the numbers are suspicious, labeling them fabricated is too strong without certainty about the evaluation protocol used. Kept as a major concern about factual accuracy, not fabrication.
-
-- **Strength Finder: "Systematic comparison of six DA methods across two linguistically distinct datasets as a core strength."** The comparison is incomplete (no no-augmentation baseline) and the datasets are only two despite the abstract's claim of three. This cannot stand as a genuine strength when it conflicts with a verified major weakness.
-
-- **Strength Finder: "Focus on Chinese character-personalization for localized LLMs" as a standalone strength.** Generic motivation; does not distinguish this paper from any other Chinese-language LoRA fine-tuning paper. Removed.
-
-- **Strength Finder: "Honest discussion of limitations."** Generic. The limitations section acknowledges only two datasets while the abstract still claims three — the acknowledgement is incomplete. Removed.
-
-- **Strength Finder: "Multiple evaluation perspectives combining loss dynamics with generation quality."** This would be a strength if the evaluation protocol for BLEU/ROUGE were described. Given the unexplained and implausibly high scores, this structural choice cannot be credited as a genuine strength without verification.
+- **"DA is rare in NLP" framing is outdated (Harsh Critic, §1):** This is a contextual/scope point and not a factual error material to the paper's evaluation; removed.
+- **Strength Finder: "complete quantitative results table"** — dropped as generic: every paper has a results table; this is not a meaningful distinguishing strength.
+- **Strength Finder: "practical focus on resource-constrained personalized AI"** — dropped as generic; the value of the application does not speak to the quality of the scientific contribution.
+- **Missing related works (implicitly raised):** Per hard rules, any missing-related-works criticism is not included since external sources cannot be confirmed.
 
 ---
 
 ## Novel Insights
 
-None beyond the paper's own contributions. The dataset-characteristic explanation (classical Chinese idiom fragility under RD; game-specific terminology failure under LLM paraphrasing) is the most interesting observation in the paper, but it is qualitative and unverified by any augmentation-quality analysis.
+None beyond the paper's own contributions. The finding that meaning-preserving DA methods (BT, SR) outperform meaning-disrupting ones (RD, RI) is a predictable result that replicates intuitions from Wei & Zou (2019). The observation that LLM-based paraphrasing fails on domain-specific corpora with specialized terminology (classical Chinese idioms, game-specific names) is the most interesting result, but it is supported only by loss curves and implausible BLEU/ROUGE values with no methodological transparency—leaving the insight interesting but unverifiable.
 
 ---
 
 ## Suggestions
 
-1. **Add a no-augmentation baseline as the first priority.** Without it, the paper cannot answer its stated research question.
-2. **Describe the evaluation protocol completely**: test set size, construction method, whether it was drawn from the augmented pool or held-out from original data, and whether BLEU/ROUGE are character-level or word-level for Chinese text.
-3. **Correct or remove Table 1.** The MATH scores do not match published LLaMA3 benchmarks and the table is used only to justify the hardware choice, which could be stated in one sentence.
-4. **Correct the abstract** to reflect that two datasets were used, not three.
-5. **Report dataset statistics**: total turns per dataset, train/val/test splits, and augmented:original data ratio.
-6. **Report LoRA hyperparameters**: rank, alpha, dropout, adapted matrices.
+1. **Add a no-augmentation baseline.** This is non-negotiable for the paper's central claim. Train one model on the raw dataset and add it to Figure 3 and Figure 4.
+2. **Fully describe evaluation methodology.** Specify Chinese tokenization strategy, number and source of references, test set construction, and whether the test set overlaps with augmented training data.
+3. **Report all experimental parameters.** Include LoRA rank, alpha, learning rate, batch size, *p* for random methods, and dataset sizes before and after augmentation.
+4. **Replace or augment BLEU/ROUGE.** Add a character-fidelity or style-consistency evaluation (even a simple human study asking "does this sound like the character?") or at minimum show side-by-side generated outputs to give qualitative evidence for the claimed differences.
+5. **Remove or deliver the third dataset.** Either fix the abstract or add a third experimental condition.
 
 ---
 
@@ -93,26 +86,24 @@ None beyond the paper's own contributions. The dataset-characteristic explanatio
 
 **Calibration anchors:**
 
-| Paper | Path | Avg Score | Comparison |
+| Paper | Path | Avg Human Score | Comparison |
 |---|---|---|---|
-| Regulating text augmentation level (NLP DA, proposed new method) | TkP2RtR4hr | **3.0** | Most topically similar. Proposed a novel method but was rejected for unclear scope, missing reproducibility, weak baselines. This paper is weaker: no novel method, missing control baseline, 3-vs-2 dataset mismatch. |
-| FreeLM (NLP fine-tuning, overclaimed, weak) | qgLyKwXVDs | **2.0** | Rejected for unsupported overclaims. Similar pattern of weak evidence for strong claims. |
-| LongLoRA (LoRA fine-tuning, strong accepted) | 6PmJoRfdaK | **7.0** | High-quality LoRA work with clear novel contribution and strong experiments. Incomparable — this paper has none of those properties. |
-| Fine-tuning with Reserved Majority (LoRA variant) | ZV7CLf0RHK | **7.5** | Spotlight paper with rigorous ablations and novel method. Far above this paper's quality. |
-| PingPong role-playing benchmark | 996aKQIom0 | **3.83** | Role-playing evaluation with methodological gaps. This paper's core structural flaws (missing baseline, suspicious metrics) are more severe. |
+| Advancing Cross-Lingual Capabilities for Humanoid Robots (Chinese NLP) | gwZ90hFSL2.md | 1.0 | No experimental results whatsoever; purely conceptual. Paper under review is slightly better—has experiments, even if deeply flawed. |
+| Parrot (spoken dialogue LLM) | 73EDGbG6mB.md | 3.0 | Has experiments, strange/suspicious results, poor methodology, rejected. Paper under review has comparable or worse methodological validity but even more fundamental issues (missing baseline, missing dataset). |
+| Cross-Cultural Recipe Transformation | ZxQD6oYIOm.md | 3.0 | Applied NLP with limited novelty but complete experiments and honest scope. Paper under review is structurally more incomplete. |
+| RoleLLM (role-playing LLMs) | i4ULDEeBss.md | 5.0 | Complete experimental framework, proper evaluation for character role-playing, much stronger contribution. Paper under review is far below this level. |
+| Personalized Representation from Generation | jw7P4MHLWw.md | 5.8 | Rigorous empirical study with proper baselines and evaluation—an order of magnitude stronger than paper under review. |
 
-The paper under review shares the profile of TkP2RtR4hr (avg 3.0) but is arguably weaker: it proposes no novel method (TkP2RtR4hr at least introduced a technique), has a verifiable discrepancy between the abstract and the body, is missing the fundamental no-augmentation control, and reports BLEU/ROUGE values that cannot be interpreted without an evaluation protocol. The finding it reports is already established. I place this paper **below** the TkP2RtR4hr anchor.
+The paper under review is incomplete (missing one of three promised datasets, missing the central no-augmentation baseline), has implausible and methodologically unspecified evaluation scores, contributes no technical novelty, and contains a live placeholder citation. It sits between the 1.0-anchor (no experiments at all) and the 3.0-anchors (flawed but complete experiments). The combination of an absent central baseline and suspicious unverifiable scores places it at the lower end of the 3.0-anchor cluster, roughly at **2.0**.
 
-**Overall assessment:** The paper reads as a preliminary technical report, not a research contribution suitable for ICLR. The two fatal structural flaws (missing control baseline, abstract mismatch) and the implausible evaluation metrics are not addressable in a rebuttal — they reflect fundamental methodological gaps. The substantive finding is already known. Even if all issues were corrected, the two-character, single-language, small-scale setup would be insufficient to support generalizable conclusions.
+**Originality:** Very low — applies standard EDA methods (Wei & Zou 2019) to two niche datasets with no methodological innovation.
+**Importance of research question:** Moderate — personalized character dialogue modeling is a real problem.
+**Claims well-supported:** No — the central comparison promised is absent; evaluation scores are unverifiable.
+**Soundness of experiments:** Poor — missing baseline, suspect metrics, no hyperparameter reporting.
+**Clarity of writing:** Adequate in places, but abstract makes claims the paper cannot deliver.
+**Value to research community:** Very low in current form.
 
-*Originality:* Very low — no new method, no new theory, rediscovering an established result.
-*Importance of research question:* Moderate in principle (personalized DA for low-resource character dialogue), low in practice (scope too narrow to generalize).
-*Claims well supported:* No — the core claim is untested (no unaugmented baseline) and the quantitative metrics are uninterpretable without a described evaluation protocol.
-*Soundness of experiments:* Poor — missing critical control, suspicious metric values, no dataset size information.
-*Clarity of writing:* Below average — abstract contradicts paper body, Section 4.3 reasoning is partially confused.
-*Value to the research community:* Very low in current form.
+**Final Score: 2.0 — Reject**
 
-**Score: 2.0 / 10 — Reject**
-
-MY FINAL SCORE: <pineapple>2.0</pineapple>
+MY FINAL SCORE: <pineapple>2</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

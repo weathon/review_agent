@@ -1,56 +1,52 @@
-Now let me search for calibration papers.Now I have enough information to write the final review. Let me synthesize everything.
+Now let me run calibration searches for scoring.Now I have enough to write the consolidated review. Let me synthesize everything.
 
 ---
 
 ## Summary
 
-REVEAL-IT proposes a framework for explaining the learning process of RL agents in complex environments. It works in two steps: (1) visualizing policy weight changes as a node-link graph, and (2) training a GNN-based explainer to highlight important weight updates and a GNN predictor to dynamically reorder subtask curricula based on predicted learning progress. The framework is evaluated on ALFWorld (embodied household tasks) and six OpenAI Gym continuous control environments, claiming both interpretability gains and improved RL efficiency.
+REVEAL-IT proposes a framework for explaining the learning process of RL agents in complex environments. It visualizes policy weight updates as node-link diagrams, trains a GNN-based predictor to forecast per-task learning progress (used to schedule training subtasks), and trains a GNN-based explainer to highlight the most important weight updates. The paper demonstrates strong task performance on ALFWorld (0.80 success rate vs. 0.04 for plain PPO) and shows that the curriculum scheduling mechanism produces an interpretable, human-intuitive ordering of subtasks over training.
 
 ---
 
 ## Strengths
 
-- **Novel GNN-on-policy-update formulation (§4.1–4.2):** Treating policy weight deltas (|X_{T+1}^i − X_T^i|) as graph edge features and applying a GNN explainer to them is a mechanistically clean and original idea. The mapping from neural network weight changes to a graph structure that a GNN can reason over is well-motivated.
-
-- **Algorithm-agnostic design (§5.1, Table 2):** The framework imposes no constraint on the RL algorithm; the paper demonstrates it working with PPO, A2C, and Policy Gradient, which adds real practical flexibility compared to most curriculum RL methods that are architecture-specific.
-
-- **Curriculum evolution visualization (Figure 3):** The four-panel figure showing how the verb distribution of training subtasks shifts from "put/look/pick" early in training toward "clean/heat/examine" later provides a plausible and interpretable signal that the GNN predictor is learning something meaningful about task difficulty progression. This is the most compelling qualitative result in the paper.
-
-- **Ablation on GNN explainer design (Table 3):** Replacing the proposed explainer with GNNExplainer (0.64 avg) or MixupExplainer (0.52 avg) causes substantial drops relative to REVEAL-IT (0.80 avg), showing that the specific explainer architecture — not just the presence of any GNN — matters.
+- **Strong curriculum-driven performance on ALFWorld (Table 1):** REVEAL-IT achieves 0.80 average success rate vs. 0.04 for PPO alone, a 20× improvement on a long-horizon, multi-step embodied benchmark. This is the most concrete evidence that the GNN-based task scheduling produces genuine gains.
+- **Ablation on explainer choice (Table 3):** Replacing the paper's GNN explainer with GNNExplainer degrades performance from 0.80 to 0.64, and MixupExplainer further to 0.52, directly demonstrating that the specific explainer design matters and is not interchangeable.
+- **Interpretable curriculum evolution (Figure 3):** The task-verb frequency plots show the optimizer first increasing "look" and "pick" tasks (foundational skills), then shifting to "clean," "heat," and "examine" as the agent matures — an order that aligns with human intuition about learning, providing concrete qualitative evidence that the framework learns meaningful task sequences.
+- **Shared policy structure analysis (Figure 2):** The GNN explainer visually identifies shared policy nodes across subtasks with similar semantic content (e.g., "open microwave 1" and "take apple 1 from microwave 1" sharing nodes tied to microwave localization), grounding the explanation in a concrete example of the framework's operation.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-
-- **The interpretability claim is asserted, not evaluated.** The paper's primary stated contribution is *explaining* the agent's learning process, yet no evaluation of explanation quality is ever performed. The GNN explainer is trained using activated nodes during evaluation as ground truth (§4.2, Step 1), which conflates *activation* with *causal importance* — a node being active during evaluation does not establish that its associated weight updates caused task success. Table 3 compares GNN explainer variants solely by *downstream RL performance*, not by any interpretability-appropriate criterion (fidelity, faithfulness, user comprehension). The paper has effectively replaced "explain the agent's learning process" with "optimize the training task sequence and measure RL performance," which is curriculum learning, not interpretability. These are distinct objectives, and the substitution is never justified. Without any human study, fidelity score, or causal intervention validating whether the highlighted subgraph captures genuinely important structure, the interpretability framing is an unverified claim.
+None that invalidate the *performance* claims. However, the framing mismatch below is severe enough to qualify as a major structural problem.
 
 ### Major
 
-- **No curriculum RL baseline anywhere in the paper.** REVEAL-IT's performance gains are compared only against vanilla RL (PPO without subtask structure) and zero-shot VLMs. There is no comparison against any curriculum RL method — not even a simple baseline that trains on the same subtask set with random ordering or a uniform distribution. This makes it impossible to attribute the improvement to the GNN mechanism rather than to the mere use of a subtask decomposition. The claim in the abstract that "explanations derived from this framework can effectively help optimize the training tasks" cannot be substantiated without isolating what REVEAL-IT adds over simply doing curriculum RL. This is the most critical missing component.
+- **The paper's central interpretability claim is never quantitatively evaluated.** The paper's title, abstract, and introduction consistently frame REVEAL-IT as an *interpretability* framework whose purpose is to explain "why an agent succeeds or fails." Yet no metric of explanation quality appears anywhere in the experimental section — no fidelity score (does the highlighted subgraph G_X^m preserve prediction accuracy when the remainder is masked?), no stability/consistency measure across seeds, no comparison against explanation quality benchmarks from the GNN explainability literature the paper itself reviews (GNNExplainer, MixupExplainer). Section 5.3 provides qualitative narration of Figure 2 but this is author interpretation of a figure, not an evaluation. The paper effectively evaluates a *curriculum RL* system but markets it as an interpretability framework; the two objectives are substantially different and the stated primary one is left entirely unmeasured.
 
-- **ALFWorld comparison is structurally asymmetric in a way that inflates REVEAL-IT's apparent advantage.** REVEAL-IT is a trained RL agent running a full curriculum over many environment interactions, while MiniGPT-4, BLIP-2, LLaMA-Adapter, and InstructBLIP are large VLMs evaluated zero-shot (or near zero-shot) on ALFWorld. These models were not designed or fine-tuned for this task. Even if all agents interact with the visual engine (as the paper notes), the comparison between a purpose-trained RL specialist and zero-shot generalists does not demonstrate what the paper claims — it demonstrates that curriculum RL training beats zero-shot VLM inference on a specific benchmark, which is expected and uninformative. The more informative comparison — trained RL baselines on ALFWorld — is entirely absent.
+- **No curriculum RL baselines.** The performance gain over PPO (0.04 → 0.80) could come entirely from the task-scheduling component, which is a form of automatic curriculum learning (ACL). Standard ACL methods (self-paced RL, ALP-GMM, Teacher-Student curricula, SPDL) are absent from all comparisons. Table 3 shows that swapping the GNN *explainer* variant hurts performance, but it does not test whether a curriculum built without any policy visualization would perform similarly. Without this, the paper cannot attribute performance gains specifically to the interpretability-driven mechanism vs. the curriculum itself.
 
-- **Subtask definitions for OpenAI Gym environments are never specified.** Algorithm 1 requires "a set of N training tasks D_task" as a precondition, but the paper never describes what subtasks were defined for HalfCheetah, Hopper, InvertedPendulum, Reacher, Swimmer, or Walker. These are standard single-reward environments with no natural subtask decomposition. Without knowing how these subtasks were constructed, the OpenAI Gym experiments are non-reproducible and the performance improvement claims are unverifiable. The quality of the subtask decomposition likely drives most of the results; its absence is a fundamental gap.
+- **Subtask definition for continuous control environments is never explained.** Section 5.1 introduces six MuJoCo environments (HalfCheetah, Hopper, Walker, etc.) but never defines what "subtasks" mean in these settings. These environments have no natural task decomposition — there are no multi-step objectives to sequence. Without knowing how subtasks are defined, the entire OpenAI Gym experiment in Table 2 is uninterpretable and cannot be replicated.
 
 ### Minor
 
-- **Table 2 contains multiple cases where REVEAL-IT underperforms its baseline, and no statistical significance is reported.** At least 5–7 out of 18 comparisons show REVEAL-IT performing worse than the baseline (e.g., PPO+REVEAL-IT < PPO on Hopper: 2104.88 vs. 2250.46; A2C+REVEAL-IT < A2C on InvertedPendulum: 966.20 vs. 1002.48, and on Swimmer: 17.63 vs. 25.28; PG+REVEAL-IT < PG on Hopper: 2253.70 vs. 2489.07). No variance, standard deviation, or confidence interval is reported for any number in either table, making it impossible to distinguish real improvements from noise. The paper bolds only cases where REVEAL-IT wins without acknowledging the losses.
+- **Inconsistent OpenAI Gym results not discussed.** Looking directly at Table 2: PPO+REVEAL-IT underperforms plain PPO on Hopper (2104.88 vs. 2250.46) and Reacher (−11.27 vs. −10.34); A2C+REVEAL-IT underperforms on InvertedPendulum (966.20 vs. 1002.48), Reacher, and Swimmer; PG+REVEAL-IT underperforms on Hopper and InvertedPendulum. These are 7 of 18 cells where the baseline wins. The paper does not acknowledge or analyze these failures. Understanding when REVEAL-IT hurts performance would significantly clarify the method's scope.
 
-- **The training step asymmetry in Table 2 is unexplained.** REVEAL-IT variants use 0.80–0.90M steps versus 1.00M for baselines, with the fraction varying per algorithm. The paper gives no justification for these specific fractions and does not provide learning curves to confirm that REVEAL-IT reaches comparable performance faster. An equal-step comparison or training curves are needed to validate the efficiency claim.
+- **No variance reporting or statistical testing.** All results across Tables 1–3 are single-run point estimates with no error bars, seeds, or significance tests. For Gym environments where differences are often small (e.g., PPO+REVEAL-IT: 1921.08 vs. PPO: 1846.25 on HalfCheetah), this makes it impossible to assess whether improvements are meaningful.
 
 ### Trivial
 
-- The paper's conclusion acknowledges "multi-modal challenges" as a limitation (§6) but raises the natural language conversion question without connecting it to any experimental finding.
+- The paper labels the GNN predictor as "GNN explainer" in several places (Section 4.2, Algorithm 1), creating notational confusion between the predictor (used for curriculum optimization) and the explainer (used for visualization). The distinction is made in text but the variable naming in equations is inconsistent.
 
 ---
 
 ## Nice-to-Haves
 
-- A minimal ablation comparing REVEAL-IT against random subtask ordering (uniform sampling from the same D_task) would be a straightforward way to demonstrate that the GNN predictor's curriculum optimization is doing real work.
-- Learning curves over training steps (not just final performance) would clarify whether REVEAL-IT genuinely reaches equivalent performance faster or simply trains less and ends up at a different final level.
-- A fidelity analysis — checking whether the GNN explainer's highlighted subgraph actually preserves downstream task performance when used as the sole input — would move the interpretability claim from assertion to evidence.
+- **Failure case analysis in Figure 2.** Showing the policy visualization for a task the agent *fails* and comparing it to a success would validate the core claim that the visualization explains causes of failure — the stated motivation of the framework.
+- **Human evaluation of explanation utility.** A small study asking practitioners to diagnose agent failure modes with vs. without REVEAL-IT's visualizations would transform the qualitative interpretability narrative into a measurable claim.
+- **Fidelity metric for GNN explainer.** Reporting whether the highlighted subgraph G_X^m preserves the predictor's output when G_X^m is used as sole input (per standard GNN explainability evaluation) would address the most glaring gap without requiring a human study.
 
 ---
 
@@ -58,47 +54,47 @@ REVEAL-IT proposes a framework for explaining the learning process of RL agents 
 
 *These points are flagged to be removed; treat them with caution.*
 
-- **"PPO (0.04) is a misleading baseline in Table 1"**: The paper is explicit that it includes PPO as a visual-engine RL baseline within its scoped comparison. Including it is not misleading — it correctly shows that vanilla RL without curriculum fails on this task.
-- **"BUTLER / DAGGER baseline omitted"**: BUTLER uses expert demonstrations and the text mode of ALFWorld, which the paper explicitly scopes out (the paper commits to the visual engine only). This criticism amounts to demanding a comparison outside the paper's stated scope.
-- **"The structured visualization module is under-specified (reference to Harley 2015)"**: While the description is brief, this is a standard visualization tool adapted for RL. The level of detail is consistent with a paragraph-level description of an existing technique rather than a novel contribution.
-- **"Activation-based ground truth (ReLU activated nodes) conflates activation with importance"**: While a legitimate theoretical concern, the paper does acknowledge the POMDP framing (§4.2, Step 1) and the empirical results in Table 3 and Figure 3 provide at least indirect evidence that the approach functions as intended. This concern belongs in Minor, not Fatal, by itself, but it is subsumed in the broader interpretability evaluation gap already listed under Fatal.
-- **Requests for confidence intervals, user studies, and failure case analysis**: While these would genuinely strengthen the paper, the primary field (RL) does not universally require user studies or CIs on single-benchmark results. These are Nice-to-Haves. The *absence of any interpretability metric*, however, remains a Fatal issue since interpretability is the paper's stated purpose.
+- **"Table 1 comparison is structurally invalid"** (Harsh Critic): Partially incorrect. PPO (0.04) is a fully trained RL baseline included in Table 1 — the 20× improvement over PPO is the primary meaningful comparison. The claim that the paper "only compares against zero-shot VLMs" is a misreading. The VLM comparison is additional context. The absence of *curriculum RL* baselines is a genuine concern, retained above. The claim that the VLM comparison "invalidates the central empirical claim" is too strong.
+
+- **"G_X^m optimality claim is circular"** (Harsh Critic): The definition — "G_X^m is optimal as removing features from it would result in a different prediction" — is the standard mutual-information-based definition used across the GNN explainability literature the paper reviews. Flagging it as a novel claim or a logical flaw misunderstands the field's convention.
+
+- **"Visualization module is borrowed from Harley (2015)"** (Harsh Critic): The paper explicitly states it builds on Harley (2015) and presents the GNN predictor/explainer as its novel contribution. Criticizing re-use of a prior visualization tool is not a substantive weakness.
+
+- **Strength: "Achieves strong performance without relying on pretrained LLMs"** (Strength Finder, Supporting): Generic framing not tied to a specific section/experiment that wouldn't already be captured by the Table 1 strength.
+
+- **Strength: "Operates in high-dimensional, long-horizon settings where prior methods are limited"** (Strength Finder): Generic importance claim about the research domain, not specific enough to this paper.
 
 ---
 
 ## Novel Insights
 
-The idea of treating RL policy weight updates as a graph and training a GNN on top of this structure to predict learning progress is a genuinely novel architectural decision. If validated with proper curriculum baselines and interpretability metrics, this approach could offer a principled, algorithm-agnostic way to do adaptive curriculum scheduling that is grounded in the policy's internal structure rather than external heuristics. The key unresolved question — whether the "activated nodes as ground truth" signal is a valid proxy for causally important policy components — is worth investigating seriously, as it sits at the intersection of mechanistic interpretability and curriculum learning.
+The most genuinely novel aspect of REVEAL-IT is the idea of treating policy weight-update graphs as training-time explanandum — not explaining individual decisions post-hoc, but using structural changes in the policy during training as signals for both curriculum optimization and interpretability. The simultaneous training of a GNN explainer alongside the RL agent (rather than applying explainability post-hoc) is an interesting design choice. However, the paper conflates two separable contributions — an automatic curriculum system and a visualization framework — and the experimental evaluation addresses only the former, leaving the latter's value undemonstrated.
 
 ---
 
 ## Suggestions
 
-1. Add a curriculum RL baseline using the same subtask decomposition but with random or uniform ordering — this single addition would dramatically clarify whether the GNN mechanism is doing real work.
-2. Define and publish the subtask decompositions for all MuJoCo environments used in Table 2.
-3. Include at least one interpretability-appropriate evaluation: either a fidelity score (does the highlighted subgraph preserve prediction), an intervention experiment (does masking non-highlighted weights degrade performance more than masking highlighted ones?), or even a simple qualitative study showing that the explanations are diagnostic across different training runs.
-4. Report means and standard deviations across at least 3 random seeds for all Table 2 results, and acknowledge the cases where REVEAL-IT underperforms.
-5. Consider repositioning the paper as a **GNN-based adaptive curriculum learning** paper and treating the visualization as a supporting tool rather than the primary claim. This would align the stated contribution with what is actually evaluated.
+1. **Add ACL baselines** (e.g., ALP-GMM, self-paced RL) with the same subtask pool but without the GNN visualization component — this would isolate the contribution of the interpretability-driven mechanism from pure curriculum scheduling.
+2. **Define subtasks for MuJoCo environments explicitly** — even a one-paragraph description (e.g., decomposing locomotion into balance, forward-motion, and speed phases) would make Table 2 interpretable.
+3. **Report fidelity of the GNN explainer** — mask out the non-highlighted subgraph, run the predictor, and report whether the prediction is preserved. This is a standard and cheap-to-compute metric in GNN explainability.
+4. **Acknowledge and analyze the 7 cells in Table 2 where REVEAL-IT underperforms** — this would strengthen rather than weaken the paper by showing principled understanding of the method's failure modes.
+5. **Report variance across seeds** — even 3 seeds and reporting mean ± std would substantially increase confidence in Table 2 results where margins are small.
 
 ---
 
 ## Score and Decision
 
 **Calibration anchors:**
+- `/home/wg25r/review_agent/human_reviews/vNkUeTUbSQ.md` — avg 3.67, Reject. RL policy visualization paper with weak evaluation and narrow scope. REVEAL-IT has broader scope and stronger empirical results but a similar gap between stated claims (interpretability) and actual evaluation.
+- `/home/wg25r/review_agent/human_reviews/4lqA5EuieJ.md` — avg 4.75, Reject. GNN interpretability framework with reasonable but inconsistent experiments and unclear scope; fairly comparable to REVEAL-IT in ambition and execution quality.
+- `/home/wg25r/review_agent/human_reviews/bVzLZr0S8s.md` — avg 3.0, Reject. RL training selection metric with weak evaluation; weaker than REVEAL-IT overall.
+- `/home/wg25r/review_agent/human_reviews/pFOoOdaiue.md` — avg 6.5, Accept. Curriculum RL paper with rigorous baselines and theoretical grounding; clearly stronger than REVEAL-IT in experimental rigor.
+- `/home/wg25r/review_agent/human_reviews/KAIqwkB3dT.md` — avg 7.0, Accept. Continual RL paper with comprehensive evaluation; clearly stronger than REVEAL-IT.
+- `/home/wg25r/review_agent/human_reviews/pwKokorglv.md` — avg 4.0, Reject. Embodied instruction following paper with similar domain (ALFWorld-adjacent), rejected for weak baseline comparisons.
 
-| Path | Avg Human Score | Comparison to REVEAL-IT |
-|---|---|---|
-| `/human_reviews/Tk1VQDadfL.md` | 7.00 (Accept) | Explainable RL improving RL via IRL with theoretical guarantees and proper MuJoCo baselines — substantially stronger: valid evaluation, sound theory, no missing baselines |
-| `/human_reviews/kT0vIJA8CT.md` | 5.00 (Reject) | Interpretable reward learning (DDTs) — similar space, cleaner evaluation of interpretability but weaker performance; slightly better than REVEAL-IT in terms of interpretability evaluation coherence |
-| `/human_reviews/pjJIimQdfU.md` | 4.75 (Reject) | Curriculum learning with weak experimental design — comparable pattern to REVEAL-IT |
-| `/human_reviews/v5BouOktUP.md` | 3.50 (Reject) | Weak experimental design, conflated objectives, missing ablations — very similar failure mode to REVEAL-IT's core problem |
-| `/human_reviews/hXJrQWIoR3.md` | 5.75 (Reject) | GNN explainability paper — better evaluated than REVEAL-IT but rejected for similar reasons |
+**Positioning:** REVEAL-IT has a genuinely interesting idea and produces real performance gains on a challenging benchmark (0.80 vs. 0.04 on ALFWorld). However, its core framing as an interpretability framework is never evaluated — this is the defining weakness distinguishing it from accepted curriculum RL papers (which score 6.5–7.0) that do rigorously evaluate their stated claims. The missing curriculum baselines and undefined subtask setup in OpenAI Gym further weaken the contribution. The paper sits close to `pwKokorglv` (4.0) and `4lqA5EuieJ` (4.75) in overall quality — interesting direction, real gains, but insufficient rigor for acceptance. I place it at **4.0**, reflecting genuine contributions that fall well short of the rigor needed for acceptance given the mismatch between the stated interpretability contribution and the actual evaluation.
 
-REVEAL-IT sits between the 3.5 anchor (v5BouOktUP — same pattern of conflating objectives and weak baselines) and the 4.75–5.00 anchors (pjJIimQdfU and kT0vIJA8CT — weak but more internally consistent). The fatal issue here — the paper claims to be an interpretability framework but provides no interpretability evaluation — is the same structural problem that drove v5BouOktUP to 3.5. However, REVEAL-IT does produce genuinely working code with some interesting results (Figure 3, Table 3 ablations), which places it slightly above that floor. The missing curriculum baseline is a structural problem that cannot be resolved by a rebuttal; it requires reconceptualizing the evaluation.
-
-**Score: 4.0 — Reject**
-
-The paper has a novel kernel of an idea (GNN over policy weight updates for curriculum scheduling) but the central interpretability claim is never evaluated by any interpretability criterion, and no curriculum RL baseline appears anywhere, making it impossible to attribute performance gains to the proposed mechanism. These structural gaps prevent acceptance.
+**Decision: Reject**
 
 MY FINAL SCORE: <pineapple>4.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

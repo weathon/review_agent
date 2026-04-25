@@ -3,8 +3,8 @@ export HARSH_MODEL="deepseek-v4-flash"
 export MERGER_MODEL="deepseek-v4-flash"
 export NEUTRAL_MODEL="deepseek-v4-flash"
 export CALIBRATION_SET="2025"
-export OUTPUT_CSV="results/bench_scores_deepseek_2025.csv"
-export MERGE_LOG="results/pipeline_whole_deepseek_2025.log"
+export OUTPUT_CSV="results/bench_scores_2025.csv"
+export MERGE_LOG="results/pipeline_whole_2025.log"
 export SUBAGENT_MODEL="deepseek-v4-flash"
 export CONCURRENCY=20
 # rm bench_scores_qwen.log

@@ -1,20 +1,20 @@
-Now let me run calibration searches to anchor the score.Now I have sufficient calibration data. Let me write the final review.
+Now let me search for calibration papers.Now I have enough information to write the final review. Let me compile it.
 
 ---
 
 ## Summary
 
-This paper conducts a correlation analysis of 7 morphological and 4 "semantic" MT evaluation metrics across 40 bidirectional NMT models spanning 20 language pairs (Chinese ↔ 20 foreign languages), using Pearson, Kendall, and Spearman correlation coefficients. The central claim is that morphological metrics and "semantic" metrics are strongly correlated with each other, and that this demonstrates "semantics" under the Turing computing paradigm is just high-level morphology. A secondary finding is that cross-category correlations differ by language script type (Latin > Arabic/Cyrillic > non-universal-alphabet languages).
+This paper performs a large-scale correlation analysis comparing 7 morphological MT evaluation metrics (BLEU, TER, CHRF, Levenshtein, Jaccard, Dice, Cosine token-frequency similarity) and 4 SentenceBERT-based "semantic" metrics (Distil, MiniLM, Mpnet, Roberta) across 40 NMT models covering bidirectional translation between 20 languages and Chinese. The main findings are that (1) morphological metrics are strongly mutually correlated, (2) the four SentenceBERT-based metrics are also mutually correlated, (3) there is a strong cross-group correlation between morphological and semantic metrics, and (4) this cross-group correlation is stratified by target-language script type. The paper concludes from these findings that "deep semantics is just another high-level morphology."
 
 ---
 
 ## Strengths
 
-- **Large-scale experimental breadth**: 20 language pairs × 200K sentence pairs each, 40 bidirectional NMT models, and three distinct correlation measures (Pearson, Kendall, Spearman) provide quantitative scope rarely seen in MT evaluation studies (Tables 3–5, Figures 3–6).
+- **Scale of empirical coverage**: 40 NMT models, 20 language pairs, 200,000 sentence pairs per language, reported under all three correlation coefficients (Pearson, Kendall, Spearman). The consistency of results across all three coefficients (Tables 3–5) is at least a positive signal for robustness of the descriptive statistics.
 
-- **Concrete metric redundancy quantification**: Near-perfect correlations between specific metric pairs (CHRF–BLEU ≈ 0.99 in Table 5; Jaccard–Dice = 1.000 in Table 4) are practically useful findings for practitioners deciding which metrics to compute.
+- **Practical finding on morphological metric redundancy**: Tables 3–5 concretely show that commonly used morphological metrics are near-interchangeable (CHRF–BLEU Pearson = 0.9858, Jaccard–Dice = 0.9876). This is a practically actionable result for MT researchers who routinely report multiple morphological metrics.
 
-- **Heatmap visualization across 20 languages**: Figures 3–6 make cross-language and cross-category correlation structure visually accessible for all three correlation measures simultaneously.
+- **Language-script stratification observation**: Section 4.3 finds a gradient in morphological–semantic metric correlation across language script families (Latin > Arabic/Cyrillic > non-universal alphabets), an observation with practical implications for metric selection across languages, regardless of whether the interpretation is fully correct.
 
 ---
 
@@ -22,85 +22,91 @@ This paper conducts a correlation analysis of 7 morphological and 4 "semantic" M
 
 ### Fatal
 
-- **Both metric families are computed against the same single reference sentence, making the cross-category correlation near-trivial.** All 7 morphological and all 4 "semantic" metrics compare the MT output to an *identical* human reference sentence (verified from Sections 2.1–2.2). Any metric that measures closeness to the same fixed target — whether by n-gram overlap, edit distance, or cosine similarity in embedding space — will naturally co-vary across the output distribution of an MT system, because the shared reference is a common attractor. The high inter-category correlations are therefore largely a mathematical consequence of the shared evaluation protocol, not a discovery about the relationship between morphology and semantics. The paper presents no alternative explanation, does not acknowledge this confound, and does not attempt to rule it out.
+- **The "semantic" metrics are English-trained models applied to non-English target languages.** The four SentenceBERT models in Table 1 (all-distilroberta-v1, all-MiniLM-L6-v2, all-mpnet-base-v2, all-roberta-large-v1) are all English-trained general-purpose encoders. Yet the paper applies them monolingually to Chinese target sentences (Section 4.2), and to Arabic, Thai, Khmer, Lao, Myanmar, and all other 20 target languages (Section 4.3) via Formula 5: `SS(m, y', y) = (CosSim(Embed(m,y'), Embed(m,y)) + 1) / 2`. These models are not trained on these languages and may produce degenerate or arbitrary embeddings for Chinese, Arabic, Khmer, Lao, Myanmar, and Thai text. The paper provides no discussion of the multilingual applicability of these models, no validation that the embeddings are meaningful for non-Latin-script languages, and no citation to multilingual SentenceBERT variants that would be appropriate. This invalidates the semantic analysis for all target languages that are not English — which is the majority of the paper's experiments.
 
-- **The "semantic" metrics are not semantically meaningful MT evaluation metrics.** Section 2.2 confirms that the four semantic metrics (Distil, MiniLM, Mpnet, Roberta) compute cosine similarity between SBERT embeddings of the MT *output* and the *reference*, both in the target language only — the source sentence is never consulted. These are reference-based target-language similarity measures, functionally analogous to morphological metrics but in embedding space. Genuine semantic MT evaluation (e.g., COMET-DA, quality estimation approaches) grounds fidelity in the source meaning. The entire framing of the paper — pitting "morphological" against "semantic" evaluation — rests on a miscategorization: both groups are reference-based target-language metrics. The observation that they correlate is then entirely expected and uninformative about the morphology–semantics distinction.
+- **The central philosophical conclusion ("semantics is just morphology") is not supported by the experimental design.** The paper measures corpus-level correlations on 200,000 sentence pairs of variable translation quality. Any two metrics that both track translation quality (good → high score, bad → low score) will produce strong corpus-level correlations regardless of what they individually measure. The experiment does not control for this confound, does not analyze sentence-level disagreement cases between the metric families, and does not include any human evaluation as a ground truth. Without human judgment, there is no way to determine whether cases where morphological and semantic metrics disagree are resolved correctly by either family, or whether either family captures information that humans care about. The design cannot in principle support the claim that the two metric families are equivalent.
 
 ### Major
 
-- **The central philosophical conclusion does not follow from the experimental evidence.** The paper's most ambitious claim — "the deep 'semantics' of various commercial hypes at present is just another high-level 'morphology'" (Abstract, Section 4.2, Conclusion), culminating in the speculation that "semantics of language do not exist at all" (Section 5) — is not logically entailed by the correlation coefficients. Even if one granted the correlations, they would only show that *these particular reference-based metrics* produce similar rankings of MT outputs. Metric correlation under shared-reference evaluation is not construct equivalence, and it says nothing about the cognitive or computational nature of linguistic semantics. The philosophical overreach is severe and inappropriate for a research paper.
+- **No human evaluation as anchor.** The entire paper's interpretive thrust is about which type of metric better or more redundantly captures translation quality. Without human adequacy or fluency ratings (as used in WMT MT evaluation shared tasks), none of the claims about what the metrics "measure" can be substantiated. Human evaluation data at sentence level would reveal whether the cross-group correlation is driven by semantic equivalence or purely by the quality-tracking confound.
 
-- **The language-tier finding is confounded by embedding model coverage, not language morphology.** Section 4.3 reports that non-universal-alphabet languages (Khmer, Lao, Myanmar, Thai) show the lowest cross-category correlation and attributes this to "morphological processing ability." However, the four SentenceBERT models used are primarily trained on English and closely related languages; their embedding quality for these low-resource, non-Latin-script languages is almost certainly much weaker. Lower embedding quality would naturally suppress cosine similarity scores and reduce their correlation with morphological metrics — entirely independent of the languages' morphological complexity or the MT system's processing ability. The paper does not consider or control for this confound.
+- **The MIB pseudo-corpus filtering uses Levenshtein similarity (Steps 6–7, Section 4.1), which is also one of the evaluation metrics.** The training data for all 40 NMT models is selected by truncating to the Top-N sentence pairs with the highest Levenshtein similarity. This means all 40 models' outputs are evaluated on a corpus biased toward high Levenshtein similarity between MT output and reference. This circularity could systematically inflate Leven's observed correlation with other metrics and distort the correlation structure the paper claims to study.
+
+- **The four SentenceBERT models are monolingual target-side similarity metrics, not MT semantic evaluation metrics.** As Formula 5 shows, they compute cosine similarity between the MT output `y'` and the human reference `y`, both in the same target language. This is different from established semantic MT evaluation metrics such as COMET or BERTScore (which condition on the source or exploit cross-lingual representations). The finding that these embeddings correlate with morphological metrics is not surprising: they are applying continuous representations to the same language-pair comparison task, and any two functions that jointly respond to translation quality on 200,000 pairs will correlate.
 
 ### Minor
 
-- **No human evaluation baseline.** The entire motivation for studying MT evaluation metrics is their relationship to human judgments. Without reporting how any of the 11 metrics correlates with WMT-style direct assessment or other human quality scores, the paper cannot establish whether high inter-metric correlation is desirable or whether any subset of metrics is more informative. This limits the practical import of the metric redundancy findings.
+- **Jaccard–Dice Kendall correlation = 1.0000 is a mathematical identity, not an empirical finding.** Table 4 reports Jaccard–Dice Kendall = 1.0000 identically. Since Dice = 2J/(1+J) is a strictly monotone function of Jaccard (J), their rank ordering is identical by construction, so Kendall's τ = 1 is guaranteed algebraically. The paper presents this as a data-driven result without acknowledging the analytic relationship.
 
-- **Jaccard–Dice rank correlation is 1.0000 by mathematical construction.** Dice = 2·Jaccard/(1+Jaccard) is a strictly monotonic transformation, guaranteeing that Kendall and Spearman correlations are always exactly 1.0 (confirmed in Tables 4 and 5). Including both as separate independent metrics in the analysis inflates the apparent coverage of morphological evaluation without adding independent information. The paper does not acknowledge this.
+- **The language-script correlation gradient is confounded with MT system quality.** Section 4.3 attributes the lower morphological–semantic correlation in non-Latin-script languages to "morphological processing ability," but BLEU scores in Table 2 are also systematically lower for these languages (ZhoLao = 23.08, ZhoKhm = 27.62 vs. EngZho = 48.54). Worse MT systems produce noisier output distributions that may themselves reduce metric correlation stability, independently of any language property.
 
-- **Potential circular dependency in corpus construction.** The MIB framework (Steps ⑥–⑦, Section 4.1) uses Levenshtein similarity as the quality signal for pseudo-corpus filtering, which is the same family of metrics used to evaluate the resulting translations (Leven in evaluation). The training data filter is thus morphological, which may bias the trained MT outputs toward morphological fidelity and could artificially inflate correlations between Leven and the semantic metrics.
+- **The NMT architecture is a 4-layer LSTM encoder-decoder (tensorflow/nmt).** Modern MT uses Transformer-based models. It is unclear whether the correlation findings hold for state-of-the-art Transformer systems, or whether they are artifacts of the specific model family and quality range studied.
+
+- **Selection of VieZho as "representative without loss of generality" (Section 4.2) is unjustified.** No statistical argument is given for this choice; the paper does not show the variance across the 20 per-dataset heatmaps or report confidence intervals on the averaged correlations in Tables 3–5.
 
 ### Trivial
 
-- The claim that "experimental results of Kendall and Spearman correlation analysis are consistent with those of Pearson correlation analysis" (Section 4.2) is stated without any analysis. Since Pearson measures linear correlation of raw scores while Spearman/Kendall measure rank correlation, their agreement is non-trivial and at least warrants a brief note.
+- The philosophical ending of Section 5 ("The semantics of language do not exist at all?") is unsupported speculation that the experimental results cannot address. This should be either removed or clearly framed as a hypothetical future question beyond the paper's scope.
 
 ---
 
 ## Nice-to-Haves
 
-- Including at least one source-grounded quality estimation metric (e.g., COMET-QE) that consults the source sentence would allow a genuine test of whether the correlation findings hold for truly semantic evaluation.
-- Using multilingual embedding models with strong non-Latin-script coverage (e.g., LaBSE, multilingual-E5) for Section 4.3 would allow the language-tier finding to be tested with the embedding quality confound controlled.
-- Per-language correlation variance (not just averages in Tables 3–5) would clarify whether the averages are representative or mask large within-category variation.
+- Adding COMET or multilingual BERTScore as semantic metrics (which condition on the source sentence or use multilingual representations) would substantially strengthen the claim that cross-group correlation generalizes beyond the specific metric choices made here.
+- Stratifying the corpus by BLEU quintile and re-measuring metric correlations within strata would help isolate whether the correlations are driven by quality variation or by intrinsic metric agreement.
+- Sentence-level analysis of cases where morphological and semantic metrics disagree would be more informative than corpus-level correlation coefficients.
 
 ---
 
 ## Removed Points
 
-*These points are flagged to be removed, treat them with caution.*
+*These points are flagged to be removed; treat them with caution.*
 
-- **Outdated LSTM MT backbone** (Harsh Critic, Section 4.1): The paper uses TensorFlow NMT (LSTM, 2017). While this architecture is outdated, the paper's contribution is metric correlation analysis, not state-of-the-art MT performance. The specific MT model is a vehicle for generating translations; the correlation findings are likely robust across MT architectures. REMOVED as a weakness — the MT quality is reported in Table 2 (BLEU 32–48) and is adequate for correlation analysis.
-
-- **Reproducibility concern about NMT model hyperparameters**: The paper discloses key hyperparameters (num_units=512, layers=4, batch_size=512, beam_width=10). Removed as nitpick per hard rules.
-
-- **Speculation about "equivalence of human cognition"**: While philosophically unsupported, this phrasing in the abstract is one sentence of loose framing. The Fatal weakness (overclaimed conclusion) already captures the more severe version of this complaint. Not listed separately.
+- **Harsh critic's weakness on generic string similarity metrics not validated for MT**: The paper is explicitly studying whether these function as valid evaluation metrics — that is the research question. Dismissing the metrics as "not validated" begs the question.
+- **Harsh critic's claim that the paper should use Transformer-based MT as a prerequisite for publication**: This is a scope extension. The paper studies a specific MT system and should be judged on whether it does so correctly, not on whether it should have studied a different system. Downgraded to Minor.
+- **Strength Finder's claim that MIB "lends ecological validity"**: Given the LSTM architecture and the Levenshtein circularity, this strength is not well-supported. Removed.
+- **Strength Finder's generic strength about problem importance**: Removed per rules.
 
 ---
 
 ## Novel Insights
 
-The most genuine (if underexplored) insight from the paper is the language-tier observation in Section 4.3: cross-category metric correlations vary systematically across script types, with non-universal-alphabet languages showing markedly weaker morphology–semantics alignment. If the embedding quality confound can be ruled out, this would be a genuinely interesting finding — implying that the similarity of morphological and semantic evaluation is not universal but depends on how well the evaluation tools model the target language. This points toward the practical need for language-specific metric selection, which the paper acknowledges in finding (4) of the abstract. However, the confound must be addressed before this can be treated as a firm conclusion.
+The most genuinely interesting observation this paper surfaces — though it cannot prove its interpretation — is the script-type gradient in morphological–semantic metric correlation (Latin > Arabic/Cyrillic > non-universal alphabet scripts). If validated with appropriate multilingual semantic models and human judgment anchors, this could be a real, language-intrinsic phenomenon. The core descriptive finding that standard morphological metrics (BLEU, CHRF, Jaccard, Dice) are essentially interchangeable at the corpus level is also practically useful, even if it is not theoretically surprising.
 
 ---
 
-## Calibration and Score
+## Suggestions
 
-**Anchors examined:**
-
-| Path | Avg Human Score | Comparison to this paper |
-|------|----------------|--------------------------|
-| `jvRCirB0Oq.md` — "Standardizing the Measurement of Text Diversity" | 3.40 | Most similar conceptually: also a correlation analysis of text metrics. Rejected for limited theoretical foundation and unclear contribution beyond correlation tables. This paper has *stronger* scale but *weaker* validity (the Fatal confound is more severe). |
-| `kDakBhOaBV.md` — "Beyond Scale: The Diversity Coefficient" | 4.00 | Correlation-based metric study, rejected for nebulous framing; shares the pattern of overclaiming from correlations. Comparable quality tier. |
-| `Rry1SeSOQL.md` — "MT-Ranker: Reference-free MT evaluation" | 6.75 | Accepted spotlight. Proposes a real, novel MT evaluation method with proper baselines. Far stronger than this paper. |
-| `ZxQD6oYIOm.md` — "Cross-Cultural Recipe Transformation" | 3.00 | Weak paper with superficial experiments and no real insight; comparable weakness severity. |
-| `tKFZ53nerQ.md` — "Topic and Description Reasoning Generation" | 2.00 | Very weak paper with essentially no contribution. This paper has more experimental effort, so should be above this floor. |
-
-**Reasoning:** The Fatal flaws here — shared reference confound making cross-category correlations near-trivial; "semantic" metrics mischaracterized as actually measuring semantics; philosophical conclusion not logically entailed — collectively undermine the paper's core claims. The experimental scale is genuine but it is deployed in service of a fundamentally flawed framing. The closest anchor is `jvRCirB0Oq.md` (avg 3.40), which is a cleaner paper with less severe methodological problems. This paper's issues are more fundamental (the main finding is confounded by design), placing it at or below that anchor. I score this **2.5**.
+1. Replace the four English-only SentenceBERT models with multilingual sentence encoders (e.g., LaBSE, multilingual-e5, or paraphrase-multilingual-mpnet-base-v2) that support the actual target languages in the study.
+2. Add a small-scale human evaluation (even for one language pair) to anchor what the metrics measure against human adequacy judgments.
+3. Acknowledge the mathematical identity between Jaccard and Dice's rank orderings and remove the Kendall = 1.0000 entry from the list of empirical findings.
+4. Conduct a stratified correlation analysis (within BLEU-quality strata) to disentangle the quality-tracking confound from intrinsic metric agreement.
+5. Reframe the philosophical conclusion to be more cautious: the paper shows that these specific embedding-based metrics correlate with morphological metrics on this specific corpus, not that "semantics does not exist."
 
 ---
 
 ## Score and Decision
 
-**Originality:** Low — computing correlations between existing metrics is not novel, and the theoretical framing (semantics = morphology) is unsupported speculation rather than original insight.
+**Calibration anchors consulted:**
 
-**Importance of research question:** Moderate — understanding metric redundancy in MT evaluation is genuinely useful for the community, but the question has been studied before and is addressed here without proper grounding.
+| Path | Avg Human Score | Comparison to this paper |
+|---|---|---|
+| `/human_reviews/Rry1SeSOQL.md` (MT-Ranker) | 6.75 | Novel reference-free MT evaluation with human judgment correlation; much stronger design than this paper |
+| `/human_reviews/63Pq7q7ybl.md` (Domain MT w/EBMs) | 4.50 | MT paper with methodological issues and missing baselines; this paper's methodology is more fundamentally flawed on its core question |
+| `/human_reviews/lAkke7Yj1T.md` (Paramanu) | 3.00 | LM paper with weak evaluation methodology and inadequate validation; comparable depth of design problems to this paper |
+| `/human_reviews/204sPiwBbB.md` (TWA MT finetuning) | 5.25 | MT paper with moderate issues but a clearer technical contribution |
+| `/human_reviews/pL8ws91RW2.md` (graph contrastive) | 2.60 | Very weak paper with essentially no novel contribution; this paper at least shows large-scale descriptive statistics |
 
-**Whether claims are well supported:** Poor — the central claim is built on metrics that don't actually measure what is claimed, evaluated under a setup (shared reference) that structurally guarantees the observed correlations.
+The paper under review sits below the 4.50-scored MT paper (which had genuine technical novelty despite its flaws) and is close to the 3.00 scored Paramanu paper in terms of methodological rigor on its core claims. The fatal combination of (a) English-only SentenceBERT models applied to non-English languages undermining the "semantic" analysis, (b) no human judgment anchor, and (c) translation-quality confound making the central philosophical conclusion unsupported places this squarely in the 3.0 range. The descriptive statistic on morphological metric redundancy has some value but is not sufficient to overcome the structural problems.
 
-**Soundness of experiments:** Poor — the experimental design has an unfixed fundamental confound (shared reference); the "semantic" metrics are reference-based target-language metrics, not semantic ones.
+**Originality:** Low — the question is interesting but existing work on MT evaluation has addressed metric correlation; the specific combination here is narrow and the setup is flawed.
+**Importance of research question:** Moderate — understanding metric equivalence has practical value.
+**Claims well-supported:** No — the central claims are structurally unsupported.
+**Soundness of experiments:** Low — English-only models on non-English languages, quality confound, circularity in MIB filter.
+**Clarity of writing:** Moderate — the paper is readable but the conclusions significantly outrun the evidence.
+**Value to research community:** Low — the descriptive statistics are of mild practical interest, but the philosophical conclusions are unsupported and potentially misleading.
 
-**Clarity of writing:** Adequate for the descriptive sections; poor for the theoretical claims.
+**Final Score: 3.0 | Reject**
 
-**Value to research community:** Minimal in current form — the metric redundancy observation (BLEU≈CHRF, Jaccard≈Dice) is useful but trivial; the deeper claims are invalid.
-
-MY FINAL SCORE: <pineapple>2.5</pineapple>
+MY FINAL SCORE: <pineapple>3.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>
