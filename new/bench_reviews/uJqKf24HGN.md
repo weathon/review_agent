@@ -1,26 +1,24 @@
-Now let me run calibration searches to properly score this paper.Now I have sufficient context to write the final review. Let me synthesize everything.
+Now let me search for calibration papers to calibrate my score.Now I have enough information to write the final review. Let me verify one more specific item before writing.Now I have all the information needed to write the final review.
 
 ---
 
 ## Summary
 
-UniCon proposes a unidirectional information-flow paradigm for training control adapters for large-scale diffusion models. Instead of the bidirectional interplay used in ControlNet (where gradients must flow through the frozen backbone), UniCon routes features one-way from the frozen diffusion model into a fully trainable adapter that directly outputs the denoised result. This eliminates the need to compute and store diffusion-model gradients, reducing VRAM and training time roughly by half. The design is validated on both DiT (transformer) and SD U-Net architectures across five conditional generation tasks.
+UniCon introduces a unidirectional information flow paradigm for training control adapters on large-scale diffusion models. Rather than injecting residuals back into a frozen diffusion model's intermediate layers (as ControlNet does), the UniCon adapter reads features from the frozen model's layers and directly produces the final denoised output — eliminating the need to compute or store gradients for the frozen backbone. This yields measurable efficiency gains (approximately half the VRAM, 2.3× training speed on DiT) while also enabling the training of larger adapters within the same resource budget. The method is validated on five conditional generation tasks across both U-Net (SD-2.1) and transformer (PixArt-α/DiT) architectures.
 
 ---
 
 ## Strengths
 
-- **Clean efficiency gains with detailed accounting (Figure 6):** VRAM breakdown into weight/activation/gradient/optimizer components and separate FP/BP timing is unusually thorough. For DiT Full adapters, UniCon reduces peak VRAM from ~34 GB to ~23 GB (dropping below the 24 GB single-GPU limit) and cuts training time roughly in half, explained transparently by eliminating backbone gradient computation.
+- **Principled efficiency gain with transparent accounting (Figure 6, Section 4.2):** Severing backpropagation through the frozen model is a clean architectural insight, not a trick. The per-component VRAM breakdown in Figure 6 shows gradients are the dominant cost, and UniCon's design eliminates them from the frozen model. The reported ~2× VRAM reduction and 2.3× speedup on DiT are consistent with this analysis.
 
-- **Architecture-agnostic and genuinely novel design (Sections 1, 3, Figure 2):** The unidirectional paradigm cleanly generalises to both transformer (DiT) and U-Net diffusion models. This is a principled and concrete departure from prior work, not an incremental tweak.
+- **Same-parameter comparison validates the architectural advantage (Figure 1c, Table 2 DiT-SR):** Figure 1c explicitly shows that at equal trainable parameter counts, UniCon still outperforms ControlNet on SR (FID 22.07 vs. 26.43), demonstrating the gain is not solely from having more parameters. The inclusion of UniCon-Half in Table 2 for DiT-SR further supports this: even with half the full UniCon parameters, performance exceeds the encoder-only ControlNet baseline (PSNR 35.64 vs 34.82, FID 22.07 vs 26.43).
 
-- **Controlled ablation isolating the contribution of unidirectionality (Table 1c):** The paper compares Full-adapter bidirectional vs. unidirectional at identical parameter counts on DiT, showing PSNR improvement from 36.53 → 37.34 and FID from 23.04 → 20.34 for SR, and SSIM improvement on Canny. This is the cleanest evidence that the design principle itself — not just having more parameters — is responsible for gains.
+- **Architecture-agnostic applicability (Table 2, Figure 2):** UniCon is validated on both U-Net and transformer-based DiT, overcoming ControlNet's structural assumption of an encoder–decoder split. Table 1a confirms that for DiT, using all network layers (Full/Skip-Layer) outperforms encoder-only control, motivating the Full-copy UniCon design.
 
-- **Encoder-vs-decoder ablation reveals a useful empirical finding (Table 1a):** For DiT, encoder-focused control yields better image quality while decoder-focused control yields better controllability. The "full" design dominates, and skip-layer fails in the unidirectional setting. This is a practically valuable insight for the community.
+- **Well-structured ablation study (Tables 1a–1c):** The five-variant ablation comparing encoder/decoder/skip-layer/full copying strategies, connector types (ZeroMLP, ShareAttn, ZeroFT), and bidirectional vs. unidirectional flow is systematic and informative. Figure 4's ablation showing that discarding the frozen model's decoder causes quality degradation meaningfully supports the design rationale.
 
-- **ZeroFT connector validated against alternatives (Table 1b):** The new connector (element-wise multiplication + skip connection on top of ZeroMLP) consistently outperforms ZeroMLP and ShareAttn, with the superiority corroborated numerically.
-
-- **DiT comparison is parameter-matched and consistent (Table 2, DiT section):** For DiT, ControlNet-Full and UniCon-Full are the same size. UniCon wins on all five tasks and all metrics except one Clip-Score tie, providing credible cross-architecture validation.
+- **Broad task coverage (Table 2):** Testing five condition types spanning high-level semantic control (Canny, Depth, Pose) and pixel-accurate low-level control (4× SR, deblur+SR) provides a wider empirical picture than most prior adapter work.
 
 ---
 
@@ -31,29 +29,33 @@ UniCon proposes a unidirectional information-flow paradigm for training control 
 
 ### Major
 
-- **Parameter-count confound in the SD U-Net Canny and Depth comparisons (Table 2, SD section):** ControlNet for SD copies only the U-Net encoder, while UniCon copies the entire U-Net (encoder + decoder), giving UniCon roughly twice the trainable parameters. The paper includes UniCon-Half for SR (where it still beats ControlNet), but SD Canny and SD Depth show only the full-parameter UniCon against the half-parameter ControlNet. A reader cannot determine from Table 2 whether UniCon-Half would also outperform ControlNet on Canny and Depth — which would be required to fairly attribute the gains to the unidirectional design rather than to a larger model. The paper should have included UniCon-Half for all SD U-Net tasks, not just SR.
+- **Missing same-parameter comparison for high-level DiT tasks (Canny, Depth, Pose) in Table 2.** For these tasks, the table compares UniCon-Full (a full copy of the DiT model, ~2× the parameters of ControlNet-Encoder) against the encoder-only ControlNet. While the paper's efficiency framing argues that UniCon-Full is cost-equivalent to ControlNet at training time, the reader cannot separate the architectural advantage from the parameter advantage without a UniCon-Half (or equivalent) row for Canny, Depth, and Pose. UniCon-Half is provided for SR only. This gap is acknowledged conceptually in Figure 1(c)/(d), but is not filled in the primary comparison table for the three high-level tasks, making the performance claims for those tasks inconclusive on an equal-parameter basis.
 
-  *Why it matters:* this leaves the SD U-Net headline result partially unsupported. The claim "UniCon outperforms ControlNet" is fully supported for DiT (equal parameters) and for SD SR (UniCon-Half also wins), but is only weakly supported for SD Canny and SD Depth.
-
-- **SUPIR-UniCon evaluation is qualitative only (Figure 8):** The paper's strongest scalability motivation is the ability to train adapters for 8-billion-parameter SD3 where ControlNet is impractical. Yet the SUPIR-UniCon results are limited to three example images (Figure 8) with no quantitative evaluation on any standard image restoration benchmark (e.g., RealSR, DRealSR). Given that SUPIR-UniCon is presented as the most compelling real-world application, the absence of any quantitative comparison with original SUPIR leaves the central scalability claim anecdotal.
+- **SUPIR-UniCon (SD3) result is purely qualitative (Section 4.3, Figure 8).** This is presented as UniCon's most compelling scaling demonstration — a next-generation 8B-parameter backbone (SD3), architecturally distinct from the DiT used in all quantitative experiments. Yet Figure 8 contains only cherry-picked image triples with no PSNR, LPIPS, MUSIQ, or FID scores and no comparison against the ControlNet-based SUPIR baseline at any parameter budget. Given that SD3 is both larger and structurally different, the qualitative examples cannot substitute for quantitative evaluation here.
 
 ### Minor
 
-- **Efficiency claim wording is inconsistent across the paper:** The abstract states "reduces GPU memory usage by one-third," while Figure 1(c) states "ControlNet 2X, UniCon 1X" (implying a 50% reduction), and the main text (Section 4.2) says "saving nearly half the storage required for gradients." These three formulations cannot all be simultaneously correct. The discrepancy appears to arise from comparing different quantities (total VRAM vs. gradient-only VRAM vs. the overhead ratio), but it is never clarified. The paper should either be consistent or explicitly state which quantity each figure refers to.
+- **FID computed on only 1,000 test images (Section 4.1).** The standard practice for FID estimation is ≥10,000 images; variance at 1,000 samples is substantial. Several key comparisons in Table 2 show FID differences of 2–5 points (e.g., SD Depth: 54.30 vs 53.45), which may well be within sampling noise. No confidence intervals or bootstrap estimates are reported. This weakens the FID-based claims, though the directional trend is supported by the non-FID metrics.
 
-- **The unidirectional paradigm fails for Skip-Layer adapters (Table 1c), and this constraint on applicability is understated:** Table 1c shows that applying unidirectional flow to the Skip-Layer design actually hurts FID (49.78 → 55.22 for Canny). This finding — that unidirectionality requires sufficient adapter capacity to generate output independently — is explained in one sentence and then dropped. This is a genuine scope limitation that deserves a short dedicated discussion.
+- **Inconsistent memory-savings claim between Abstract and Introduction.** The Abstract states "reduces GPU memory usage by one-third" while the Introduction states "saves half the video memory (VRAM)." Figure 6 and Section 4.2 describe approximately halved gradient-related VRAM for DiT. These should be reconciled with a single precise statement tied to a specific configuration.
+
+- **Canny FID trade-off not prominently acknowledged.** Table 1b/1c shows that for Canny, UniCon with ZeroFT achieves FID=52.31, which is slightly worse than bidirectional Skip-Layer ControlNet (FID=49.78), even though UniCon's SSIM is better (0.5426 vs 0.4983). The paper's text states that "employing the unidirectional information flow substantially enhances performance" without noting that this improvement is on controllability, and that FID is slightly lower for Canny specifically.
+
+- **SD Depth comparison with T2I-Adapter not adequately analyzed (Table 2).** T2I-Adapter outperforms UniCon on Clip-IQA, MAN-IQA, and MUSIQ for SD Depth, while UniCon's MSE advantage is small (85.00 vs 87.72, ~3%). The paper briefly acknowledges this but offers no quantitative analysis of the quality–controllability trade-off.
 
 ### Trivial
 
-*None that are not parser artifacts.*
+- The training cost analysis (Figure 6) is conducted without gradient checkpointing on ControlNet. In practice, gradient checkpointing substantially reduces ControlNet's memory footprint. Noting this condition explicitly would make the efficiency comparison more precise.
 
 ---
 
 ## Nice-to-Haves
 
-- **Quantitative comparison with memory-optimised ControlNet** (e.g., gradient checkpointing, ZeRO), to establish whether UniCon's efficiency advantage persists against a best-effort optimised baseline, not just the naive implementation.
-- **Inference-time cost comparison.** UniCon runs the full diffusion backbone plus the full adapter at inference, doubling inference compute versus a plain diffusion model. A table of inference VRAM and latency (UniCon vs. ControlNet) would help practitioners assess deployment cost.
-- **Failure case analysis.** Showing representative failure cases, especially for the unidirectional setting where the adapter must generate output without direct backbone fine-tuning, would strengthen the empirical characterisation.
+- Adding UniCon-Half to Table 2 for Canny, Depth, and Pose (DiT) would provide a definitive same-parameter comparison and substantially strengthen the core performance claim.
+- Adding quantitative evaluation for SUPIR-UniCon on SD3 (even a small set: PSNR, LPIPS, MUSIQ vs. SUPIR-ControlNet) would transform Section 4.3 from illustrative into evidence.
+- Recomputing FID on ≥5,000 or 10,000 test images would substantially improve confidence in the perceptual quality claims.
+- A wall-clock convergence plot (training loss / validation metric vs. time) would reveal whether UniCon's 2.3× per-step speedup translates to fewer total hours to reach equivalent quality.
+- A failure-case analysis for UniCon would be informative, particularly for cases where the frozen model's features conflict with the adapter's control signal.
 
 ---
 
@@ -61,32 +63,30 @@ UniCon proposes a unidirectional information-flow paradigm for training control 
 
 *These points are flagged to be removed; treat them with caution.*
 
-1. **Harsh Critic — "Table 2 contains a block of rows with identical results for ControlNet and UniCon" (lines 212–213):** This is a PDF parser artifact. The hard rules explicitly prohibit flagging formatting artifacts as paper errors; the submitted table does not have this issue.
+- **Harsh Critic: "ControlNet-Full should be the primary baseline in Table 2."** The paper includes ControlNet-Full as an ablation in Table 1a, and the standard convention in the field is to compare against the canonical baseline (ControlNet with encoder copy). Using encoder-only ControlNet as the main baseline is the established norm, and the paper does compare against it consistently. This is standard practice, not an omission. Removed.
 
-2. **Harsh Critic — "ControlNet's memory cost assumes naive training; gradient checkpointing would close the gap":** This is a hypothetical baseline not present in the literature as a standard comparison point. Criticising the paper for not testing a non-standard optimised configuration falls under "requesting practices not standard in the field." Moved to Nice-to-Haves.
+- **Harsh Critic: "Table 2, odd entry for DiT SR with identical values for ControlNet and UniCon."** The extracted line 213 (showing apparently identical metrics for both) is a parser artifact from the PDF extraction — the original table does not duplicate rows. Per the hard rules, parser errors are not paper errors. Removed.
 
-3. **Harsh Critic — "The ZeroFT connector improvement is marginal and should not be listed as a distinct contribution":** Table 1b does show consistent improvements (SSIM 0.5343 → 0.5426, FID 55.22 → 52.31). Whether these margins warrant being called a "contribution" is a matter of framing, not a falsifiable weakness. The connector is described as one component of UniCon, not a standalone contribution.
+- **Harsh Critic: "ZeroFT is overstated as a major contribution."** Table 1b shows ZeroFT improving Canny FID by ~3 points and SSIM by ~0.008 over ZeroMLP. The paper describes this as "superior" but does not claim it as the central contribution. The ZeroFT connector is presented as one component of the design. The criticism that its mechanistic explanation is absent is minor but not a meaningful weakness. Removed as a weakness; could be a trivial nitpick.
 
-4. **Harsh Critic — "Why does unidirectionality help for full-network adapters but not skip-layer adapters? The skip-layer issue could be resolved.":** The paper provides a clear and intuitive explanation. Demanding a follow-up investigation of how to fix the skip-layer case is out-of-scope for the current submission.
-
-5. **Harsh Critic — "Evaluation on 1,000 LAION images limits generalization claim":** All methods are evaluated identically on the same held-out split; relative comparisons are valid. The "broad application prospects" claim is illustrated by SUPIR-UniCon, not solely by this benchmark. This is a very generic concern that does not target a specific overclaim.
-
-6. **Strength Finder — "SUPIR-UniCon produces visually compelling results":** Removed as a strength because the corresponding major weakness (no quantitative evaluation) undermines this strength — when a strength and weakness disagree, the weakness wins.
+- **Strength Finder: "Practical demonstration on large-scale restoration (SUPIR-UniCon / Figure 8)."** This is listed as a strength, but as noted under Major Weaknesses, Figure 8 is purely qualitative. A qualitative demonstration without metrics cannot function as a genuine strength. Removed per the rule that strengths conflicting with verified weaknesses are dropped.
 
 ---
 
 ## Novel Insights
 
-UniCon's key insight — that the frozen backbone need not receive gradients at all if the adapter itself serves as the final decoder, consuming backbone features as read-only feature maps — is both simple and underexplored relative to its payoff. The ablation in Table 1c demonstrates that this unidirectional constraint is not just an efficiency trick: it also improves generation quality when the adapter has sufficient capacity, possibly because the trainable decoder can adapt to condition signals without being bottlenecked by the frozen backbone's fixed processing pipeline. The finding that this benefit disappears for skip-layer adapters (insufficient capacity to generate independently) sharpens the principle: unidirectionality is beneficial if and only if the adapter can function as a self-sufficient decoder. This capacity threshold, while not deeply explored in the paper, is a practically actionable design criterion.
+The central insight — that the computational cost asymmetry in bidirectional adapters (where the frozen backbone requires gradient storage proportional to its own size) can be eliminated by inverting the information flow direction so the adapter becomes a trainable decoder rather than a residual injector — is both simple and architecturally principled. The ablation showing that discarding the frozen decoder while letting the adapter produce the output (Figure 4, variant e) significantly degrades quality establishes that the frozen model's forward computation is informationally necessary even when its gradients are not, which is a non-obvious and practically important finding. This insight also explains why the method scales better to transformer architectures where encoder/decoder boundaries are artificial.
 
 ---
 
-## Suggestions
+## Evaluation on Key Axes
 
-1. Add UniCon-Half rows to SD U-Net Canny and Depth in Table 2, so every SD comparison has a parameter-matched reference point.
-2. Resolve the one-third vs. one-half efficiency claim across abstract, Figure 1, and Section 4.2 — define precisely which quantity is being measured in each case.
-3. Add a short quantitative evaluation of SUPIR-UniCon on one standard benchmark (e.g., RealSR) comparing PSNR/LPIPS against original SUPIR, even if preliminary.
-4. Devote a short paragraph to when unidirectionality fails (skip-layer case) and what the minimum capacity requirement is for the adapter to function correctly.
+- **Originality:** Moderate-to-high. The unidirectional flow framing is a clear departure from ControlNet's paradigm; the idea itself is simple but the execution (zero-initialized connectors, full-model copy, DiT compatibility) is well-thought-out.
+- **Importance of research question:** High. Efficient adapter training for large diffusion models is directly relevant to the community scaling toward 8B+ parameter backbones.
+- **Claims vs. support:** Moderate. Core efficiency claims are well-supported; performance claims for DiT high-level tasks lack same-parameter comparison, and SD3 scaling is unsupported quantitatively.
+- **Soundness of experiments:** Moderate. Five tasks, two architectures, solid ablations. Weakened by small FID sample size and asymmetric parameter comparison for Table 2 headline tasks.
+- **Clarity of writing:** Good overall, with one internal inconsistency (memory savings claim).
+- **Value to research community:** Meaningful. The efficiency mechanism is replicable and the architecture-agnostic framing is practically valuable.
 
 ---
 
@@ -94,24 +94,16 @@ UniCon's key insight — that the frozen backbone need not receive gradients at 
 
 **Calibration anchors:**
 
-| Path | Avg score | Relation to this paper |
-|---|---|---|
-| `wGVOxplEbf.md` (SaRA) | 6.20, Accept | Closest topically — efficient diffusion fine-tuning; comparable scope and thoroughness |
-| `svp1EBA6hA.md` | 6.50, Accept | Conditional control for diffusion; similar validation depth |
-| `kZvor5aaz7.md` | 6.25, Accept | Diffusion adapter for slot-based conditioning; similar contribution scale |
-| `az5WtGe48n.md` | 5.20, Reject | Dense vision diffusion adaptation; medium quality; weaker ablations than UniCon |
-| `bFMpmb8p3D.md` | 4.75, Withdrawn | Multi-task diffusion adapter; weaker baseline comparisons |
-| `RFJGFrMvYj.md` | 1.50, Reject | Controlled generation — two-stage method; much weaker methodology |
-| `yPxhj1FKhG.md` | 3.67, Withdrawn | Conditional control diffusion; limited evaluation |
+| Paper | Path | Avg Score | Comparison to UniCon |
+|---|---|---|---|
+| ELR-Diffusion (low anchor) | `edx7LTufJF.md` | 2.5 | Fundamentally weaker: duplicated sentences, missing baselines, flawed efficiency claim. UniCon is clearly above this. |
+| DiffBody (low) | `R8t9Q3jmCQ.md` | 4.0 | Domain-restricted, narrow contribution, weaker ablations. UniCon is stronger. |
+| 3D-Adapter (medium) | `C0HDYvGwol.md` | 5.6 | Rejected despite 5-6 range scores. Adapter for diffusion models, similar scope. Missing baselines and references were concerns. UniCon has cleaner experimental setup but similar scope. |
+| SaRA (medium-high) | `wGVOxplEbf.md` | 6.2 | Accepted poster. Efficient diffusion fine-tuning with progressive sparse low-rank adaptation. Comparable ablation depth. UniCon's core insight is slightly cleaner; SaRA's core assumption has empirical weaknesses reviewers flagged. |
+| Adding Conditional Control with RL (medium-high) | `svp1EBA6hA.md` | 6.5 | Accepted poster. Adds conditional control to diffusion, limited experimental breadth. UniCon has more thorough experiments. |
+| Würstchen (high) | `gU58d5QeGv.md` | 8.0 | Oral. Highly novel compression-based diffusion architecture. Substantially more fundamental architectural innovation than UniCon. UniCon is below this level. |
 
-UniCon's core contribution — unidirectional paradigm validated cleanly for DiT with parameter-matched ablations, concrete efficiency gains with detailed accounting, and multi-task evaluation — is clearly above the medium-band papers (5.0–5.33) and broadly comparable to the accept cluster (6.2–6.5). The principal drag is the parameter-count confound for SD U-Net Canny/Depth and the purely qualitative SUPIR-UniCon evaluation. These do not invalidate the core claim (the DiT results are clean and the efficiency is well-characterised) but do weaken some of the headline comparisons. Positioning the paper slightly below the accept cluster centre at **5.5** is appropriate.
+**Positioning:** UniCon sits between the 3D-Adapter (5.6, rejected) and SaRA (6.2, accepted poster). The 3D-Adapter was rejected partly for missing baselines and citations (not applicable here); UniCon's comparable weaknesses (parameter asymmetry, qualitative SD3 only) are less severe than those that sank 3D-Adapter. The efficiency contribution and cross-architecture validation push it above the 3D-Adapter level. However, the lack of same-parameter comparisons for three out of five main DiT tasks and the purely qualitative SD3 result are genuine gaps that keep it below SaRA's cleanness. I place it at **5.5**, leaning toward a weak accept at the poster level contingent on the authors providing same-parameter comparisons for Canny/Depth/Pose in Table 2.
 
-**Originality:** Moderate-high. The unidirectional paradigm is a clean conceptual contribution, not merely an engineering optimisation.  
-**Importance:** High. Efficient training of large-scale adapters is a pressing practical problem.  
-**Claims vs. support:** Mostly well-supported for DiT; partially unsupported for SD (Canny/Depth comparisons).  
-**Soundness:** Good; ablations are structured, metrics are appropriate, efficiency analysis is transparent.  
-**Clarity:** Good overall; minor inconsistencies in efficiency wording.  
-**Value to community:** Moderate-high, particularly for practitioners targeting transformer-based diffusion models.
-
-MY FINAL SCORE: <pineapple>5.5</pineapple>
-MY FINAL DECISION: <orange>Reject</orange>
+**MY FINAL SCORE: <pineapple>5.5</pineapple>**
+**MY FINAL DECISION: <orange>Accept</orange>**

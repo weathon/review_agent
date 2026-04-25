@@ -1,26 +1,24 @@
-Now I have enough information to write the final consolidated review. Let me proceed.
+Now let me search for calibration anchors.Now I have enough information for calibration. Let me write the final review.
 
 ---
 
 ## Summary
 
-This paper constructs computationally sound interactive argument systems for verifying distribution properties. The main result (Theorem 1.1) shows that for any distribution property that can be approximately decided in polynomial time, there exists a 4-message argument system in which the verifier uses only Õ(√N/ρ²) samples and communication — a quadratic speedup over standalone (no-prover) testing for many natural properties — assuming collision-resistant hash functions. The technical approach combines a novel Merkle-tree distribution-commitment scheme with local openings, an identity-testing protocol, a "grain" representation reducing distributions to strings, and interactive arguments of proximity (IAPs).
+The paper presents computationally sound interactive argument systems for verifying any distribution property that can be approximately decided in polynomial time, assuming the existence of collision-resistant hash functions. The core contribution is a 4-message protocol where the verifier's sample complexity, communication, and runtime are all Õ(√N/ρ²)—achieving a quadratic speedup over standalone testing for natural distribution properties that require quasi-linear sample complexity. A key sub-contribution is a novel hash-tree-based distribution commitment scheme supporting probability, CDF, quantile, and sampling queries in polylog overhead per query.
 
 ---
 
 ## Strengths
 
-- **Tight sample complexity (Theorem 1.1, Section 1.1):** The verifier's Õ(√N/ρ²) sample complexity is nearly optimal: the Ω(√N/ρ²) lower bound applies to *any* protocol, regardless of communication, extending prior lower bounds of Chiesa & Gur (2018) and Herman & Rothblum (2022) to the computationally sound setting. This is a genuinely tight result.
+- **Generality of Theorem 1.1** (Section 1.1): The result covers any property ρ-approximately decidable in polynomial time—a strictly richer class than prior unconditionally sound protocols, which were limited to label-invariant, bounded-depth, or bounded-space properties. The comparison with prior work (Herman & Rothblum 2022/2023/2024, Chiesa & Gur 2018) is precise and honest about the tradeoffs.
 
-- **Generality of the property class (Theorem 1.1, Section 1.1):** The framework covers *any* distribution property that can be ρ-approximately decided in polynomial time — strictly richer than the label-invariant class (Herman & Rothblum 2022, 2023) and richer than the bounded-depth/bounded-space class (Herman & Rothblum 2024). The comparison in Section 1.1 is honest and precise.
+- **Near-optimal sample complexity** (Section 1.1, "On the complexities"): The Õ(√N/ρ²) verifier complexity matches the Ω(√N/ρ²) information-theoretic lower bound (extended to the computational soundness setting) up to polylog factors. This completeness—the result is tight—substantially strengthens the contribution.
 
-- **Novel distribution-commitment construction (Section 2.1):** The Merkle-tree construction augmented with internal probability sums ensures that the committed digest binds the prover to a *valid* probability distribution (probabilities summing to 1), with polylog(N) local openings. This goes beyond standard Merkle-tree commitments in a non-trivial way, and the extraction-based security argument is clean.
+- **Novel succinct distribution-commitment scheme** (Section 2.1): The hash-tree construction over distributions, which extends Merkle commitments to enforce probability summing-to-1 and to support CDF/quantile queries, is a technically clean and nontrivial innovation. This goes beyond standard accumulators (which commit to sets, not probability distributions).
 
-- **Verified distribution-oracle as an independent sub-result (Section 1.3, 2.2):** The lightweight protocol — committing to Q with Õ(√N/ε²) samples, then supporting local PMF, CDF, quantile, and sampling queries in polylog(N) communication each — is independently useful and does not require PCP machinery, making it more deployment-realistic than the full Theorem 1.1 protocol.
+- **Verified distribution-oracle as modular abstraction** (Section 1.3): The lightweight sub-protocol—committing to Q with polylog communication per query for probability/CDF/quantile/sampling—is a reusable module of independent interest, enabling argument systems for label-invariant properties without PCP machinery. The contrast with the PCP-heavy general protocol is well-articulated.
 
-- **Concrete applications with quantified speedups (Section 1.2):** The paper enumerates specific properties (monotone distributions, k-juntas, log-concavity, convexity, unimodality, entropy) where standalone tolerant testing requires quasi-linear Ω(N/log N) samples but the protocol achieves Õ(√N). The speedup is not only asymptotic but references concrete impossibility results in prior work.
-
-- **String representation bridging statistical and Hamming distance (Section 2.3):** The grain representation mapping distributions to sorted strings so that TV distance corresponds to Hamming distance is a technically elegant reduction enabling the use of IAPs in the distribution setting.
+- **Concrete applications with demonstrated gaps** (Section 1.2): For monotone distributions, k-juntas, log-concavity, convexity, and other shape-restricted properties, the paper identifies specific settings where standalone tolerant testing needs quasi-linear samples O(N/(log N · ε²)) while the protocol needs only Õ(√N/ε²), a genuine and significant quadratic gap.
 
 ---
 
@@ -31,79 +29,83 @@ None.
 
 ### Major
 
-- **Weak ML relevance for an ML venue.** The paper's primary area is listed as "alignment, fairness, safety, privacy, and societal considerations," but the paper makes almost no contact with concrete ML systems, fairness metrics, or contemporary safety concerns. The ERM-verification application (Section 1.2) is explicitly described as extending Herman & Rothblum (2024) to remove a bounded-space/bounded-depth restriction — a genuine but minor corollary — and is presented in less than one paragraph. There are no experiments demonstrating even a synthetic instance of the quadratic sample-complexity advantage. The accepted papers at ICLR in theoretical CS typically have either (a) direct implications for ML architectures, (b) experimental validation of the theoretical claims, or (c) both. This paper has neither. The contribution is real and solid, but its natural home is at STOC, FOCS, CCC, or TCC, where the IAP/distribution-testing community can properly evaluate it against the relevant prior work. This mismatch is not a criterion for dismissal in principle, but it means the expected ICLR reader will struggle to situate the work and that the impact on the ML community — the primary metric for ICLR acceptance — is limited.
+- **Thin ML/learning connection weakens the primary area framing**: The paper is submitted under "alignment, fairness, safety, privacy, and societal considerations," but the core result is a theoretical cryptography/TCS contribution. The ERM verification application (Section 1.2) is one short paragraph and requires the dataset size N to be roughly the VC dimension for the gain to be sublinear—an assumption never verified by example. The terms "fairness" and "alignment" do not appear in the technical content. This is not disqualifying (ICLR accepts theory papers with ML-adjacent relevance), but the paper would benefit from a more substantive bridge to practical learning scenarios; as written, the ML motivation reads as rhetorical scaffolding rather than a genuine contribution.
+
+- **No empirical component whatsoever**: For a paper motivated by real data science verification needs, there is no implementation or empirical evaluation—not even a toy experiment for a simple property (e.g., uniformity or monotonicity over a small domain). Given the PCP-based prover, an honest reckoning with whether the honest prover's polynomial-time guarantee translates to any feasible runtime for even modest N would substantially strengthen the claims of practical relevance. Theory-only papers can be accepted at ICLR, but the repeated invocation of practical data science motivation without any evidence raises the bar for this.
 
 ### Minor
 
-- **Practical efficiency of the full Theorem 1.1 protocol is unaddressed.** The protocol for general polynomial-time properties relies on the PCP theorem (via IAPs, Section 2.3), which introduces constants that are enormous relative to the asymptotic complexity. The paper acknowledges that "recent advances" (Reingold et al. 2016; Ron-Zewi & Rothblum 2022) may help, but gives no estimate of concrete complexity even for a representative property. The poly(κ) overhead in the verifier runtime (where κ is the security parameter) can dominate the Õ(√N) dependence for moderate N. This is a standard caveat for PCP-based constructions at theory venues, but it limits the paper's practical relevance claims and is worth making explicit. By contrast, the verified distribution-oracle (Section 1.3) does not use PCPs and is more concretely deployable.
+- **Round-complexity justification deferred**: Theorem 1.1 claims 4 messages for the full protocol. However, Section 2.3 describes the protocol as a sequential composition of: (1) prover commits to D, (2) verified distribution-oracle protocol (itself using the identity tester requiring multiple rounds), and (3) a 4-message IAP communication phase plus a query phase. The main text provides no explanation of how these components interleave to remain at exactly 4 total messages—this is presumably resolved in the appendix, but the 4-message claim is a highlighted feature and deserves at least a sketch in the body.
 
-- **Grainedness assumption.** The string representation in Section 2.3 is presented under the assumption that D is η-grained (all probabilities are integer multiples of η < 1/N). The paper states "the full construction uses a high-distance error-correcting encoding...to get a tight relationship between Hamming and statistical distance," deferring the general case. The main text does not state how much approximation error is introduced when rounding a non-grained distribution to its nearest η-grained approximation, or how η is chosen in practice relative to N and ρ. For an ML practitioner attempting to apply the result, this gap matters for quantifying the tolerant verification guarantee.
+- **PCP overhead acknowledged but not quantified**: The paper correctly notes "the protocol uses the PCP theorem, which induces overheads for the prover" (Section 2.3). For an ML-motivated paper, some discussion of the practical magnitude of these constants—or at minimum a pointer to concrete PCP instantiations with known constants—would make the complexity claims more credible.
 
 ### Trivial
-None.
+None (formatting artifacts are parser issues per instructions).
 
 ---
 
 ## Nice-to-Haves
 
-- A worked example (e.g., N=8) illustrating the hash-tree commitment and the 4-message round structure would help ICLR readers (and reviewers) see concretely how the phases collapse into 4 rounds, which is not immediately obvious from Section 2.3 alone.
-- Even a toy synthetic experiment (e.g., uniformity or entropy testing at moderate N, comparing verifier sample cost with/without prover) would make the quadratic speedup concrete for an ML audience and strengthen the ICLR case substantially.
-- The public-coin open problem is acknowledged in Section 1.1. A short discussion of what barrier prevents making the protocol public-coin (and hence Fiat-Shamir non-interactive) would sharpen the open problem.
+- A worked example tracing one full protocol execution for a concrete property (e.g., uniformity testing or monotone distributions over a small domain), showing all 4 messages and exact complexity, would make the construction checkable and accessible to ML readers.
+- A discussion of whether the Fiat-Shamir transform (currently blocked by non-public-coin structure) could be applied after any modification, and what the minimal property class would be for a public-coin variant.
+- The ERM application would be greatly strengthened by a worked numerical example: pick a specific hypothesis class (e.g., linear classifiers in d dimensions), set N = sample complexity of agnostic learning, and show that √N is concretely sublinear in the relevant learning parameters.
 
 ---
 
 ## Removed Points
 
-*These points were flagged for removal; treat them with caution.*
+*These points are flagged to be removed; treat them with caution.*
 
-1. **[Harsh Critic, Point 2 — Round complexity unverifiable]:** The critic argues the 4-message claim cannot be verified without the appendix, citing apparent incompatibility between the identity-testing protocol and the IAP's 4-message communication phase. Removed under the hard rule: "REMOVE weaknesses about missing appendix." The claim is in Theorem 1.1 in the main text; the round-counting details are in the appendix, which exists in the original submission.
+**Harsh Critic — "Fundamental venue mismatch / ICLR should not accept this"**: Removed. ICLR accepts theoretical machine learning and adjacent theory papers (e.g., optimal sample complexity for MDPs, generalization bounds, fair clustering in streaming models, all accepted). The ERM verification application and data science motivation establish non-trivial ML relevance. The venue concern is a matter of degree, not a categorical error; it has been absorbed into the "thin ML connection" major weakness above.
 
-2. **[Harsh Critic — ERM application overstated as "new contribution":]** The critic says the ERM application is "presented as if it is a new contribution." The paper explicitly says "Similarly to an application described by Herman & Rothblum (2024)...the main novelty here is that our protocol extends..." — the paper is transparent about the incremental nature of this application. Removed as a strawman misreading.
+**Harsh Critic — "No experiments is disqualifying for ICLR"**: Weakened to a major weakness rather than fatal. Multiple purely theoretical papers have been accepted at ICLR at scores of 6–7. The lack of experiments is a genuine gap for a paper with applied motivation, but it does not invalidate the core theoretical contribution.
 
-3. **[Harsh Critic — Venue mismatch as disqualifying/fatal]:** The critic argues the paper should be declined solely because it belongs at STOC/FOCS/TCC. Demoted from Fatal to Major because ICLR does accept theory papers, and ML relevance is a matter of degree, not a categorical threshold.
+**Harsh Critic — "Round complexity claim conceals potential bugs"**: Weakened to minor. The 4-message claim is likely justified in the appendix. A gap in the main text presentation is worth noting but does not impugn correctness.
 
-4. **[Generic strength from Strength Finder — "problem is important"]:** Strengths about the general societal importance of trustworthy data analysis were dropped; they are generic and not grounded in the paper's specific technical content.
+**Strength Finder — "Low round complexity is a practical advantage"**: Removed as a standalone strength. It is correct but generic and subsumed in the Theorem 1.1 description; without evidence that 4 messages is practically significant (e.g., vs. an alternative with 8 messages), the claim is not independently meaningful.
+
+**Strength Finder — "Extension to NP properties and FNP witnesses"**: Removed. This is a brief remark in Section 1.2 and not independently verified or substantiated with examples. It appears to be a straightforward corollary of the framework rather than a distinct contribution.
 
 ---
 
 ## Novel Insights
 
-The most technically novel insight beyond the paper's own stated contributions is the distribution-commitment construction: by augmenting a standard Merkle hash tree with cumulative probability sums at internal nodes, one gets a commitment scheme that is simultaneously binding to a *valid* probability distribution (summing to 1), locally openable in polylog size for PMF/CDF/quantile queries, and compatible with existing identity testers that require oracle access to a known distribution. This is a small but clean structural observation that could be reused in other verifiable data-analysis settings (e.g., verifiable sampling, range-query auditing) beyond property testing. The "grain" representation reducing statistical distance to Hamming distance via sorted probability grains is also independently clean enough to be reusable in other work connecting distribution-testing and string-proximity arguments.
+The most genuinely novel insight from synthesizing all reviewer perspectives is the identification of the *verified distribution-oracle* (Section 1.3) as the key modular abstraction that separates the paper's two main protocols. The lightweight sub-protocol (no PCP, polylog per query) works for label-invariant properties and provides CRH-only commitments to distributions supporting CDF and quantile access—capabilities that go beyond what cryptographic accumulators supply. The heavier general protocol adds PCP machinery on top of this foundation. Recognizing this modularity clarifies where the technical novelty actually lives (the distribution commitment + verified oracle), and suggests that future work extending or improving this result should focus on improving or replacing the PCP component, since the commitment layer is already tight.
 
 ---
 
 ## Suggestions
 
-1. Add a paragraph in the introduction (or Section 2) quantifying the concrete communication cost for a specific, simple property (e.g., uniformity testing with N=2^20, ρ=0.1, κ=128-bit security), even with generous constant estimates, to give readers a realistic picture of deployment.
-2. Explicitly state the error introduced by grainedness rounding (how large must η be relative to ρ?) in the main text, even as a brief remark, so that the tolerant-verification guarantee is transparent for non-expert readers.
-3. Consider framing the paper more explicitly around the fairness/auditing use case (e.g., opening Section 1 with a concrete ML auditing scenario rather than an abstract data-analysis firm) to better match the ICLR audience and the stated primary area.
+1. Add a paragraph in the introduction or Section 2.3 sketching how the protocol components (commitment, identity tester, IAP) are interleaved to achieve exactly 4 messages.
+2. Add a worked numerical ERM example showing that √N ≪ VC-dimension under realistic dataset sizes.
+3. Discuss what is known about the PCP constants in the applicable instantiations (e.g., Ron-Zewi & Rothblum 2022, cited in Section 2.3) to give the reader a sense of whether "polynomial time" is achievable in practice for any N.
 
 ---
 
 ## Score and Decision
 
-**Calibration anchors consulted:**
+**Calibration anchors used:**
 
-| Path | Avg Human Score | Comparison |
-|---|---|---|
-| `/home/wg25r/review_agent/human_reviews/DhdqML3FdM.md` | 7.0 (Accept) | Theory + experiments, direct ML relevance (SSM/Transformer limitations); stronger ICLR fit than this paper |
-| `/home/wg25r/review_agent/human_reviews/NjNGlPh8Wh.md` | 7.5 (Accept) | Transformer/CoT theory with formal bounds + empirical support; stronger ICLR fit |
-| `/home/wg25r/review_agent/human_reviews/R2834dhBlo.md` | 6.67 (Accept) | Prover-verifier games with neural networks, topically adjacent; has experiments and ML framing |
-| `/home/wg25r/review_agent/human_reviews/PPxyXlCAOJ.md` | 5.5 (Reject) | Learning theory on statistical independence tests; has experiments but weaker theory than this paper |
-| `/home/wg25r/review_agent/human_reviews/evDSvZBFRP.md` | 4.0 (Reject) | Formal verification of transformers; rejected for weak ML connection and unclear soundness |
-| `/home/wg25r/review_agent/human_reviews/JNZ3Om6NPS.md` | 2.0 (Reject) | Severely flawed paper with fundamental proof errors; far below this paper in quality |
+| Path | Avg Score | Decision | Comparison |
+|---|---|---|---|
+| `VGQugiuCQs.md` — Fair Clustering in Sliding Window | 7.5 | Accept (Spotlight) | Theory + experiments, tight bounds; stronger ML relevance and empirical component than this paper |
+| `HMe5CJv9dQ.md` — Efficiently Computing Similarities to Private Datasets | 7.5 | Accept (Poster) | Theory + experiments, tight bounds in DP; stronger ML relevance and experiments |
+| `EeqlkPpaV8.md` — Adaptive Complexity of Parallelized Log-Concave Sampling | 6.75 | Accept (Poster) | Pure theory, tight lower bounds on sampling complexity; closely analogous structure (TCS-style theory at ICLR, tight bounds, no ML experiments) |
+| `jOm5p3q7c7.md` — Optimal Sample Complexity for Average Reward MDPs | 6.5 | Accept (Poster) | Theory-only, resolves open problem on sample complexity; no experiments; comparable theoretical rigor |
+| `NkmJotfL42.md` — Fantastic Generalization Measures | 7.0 | Accept (Poster) | Theory-only paper in ML, strong lower bounds; slightly more ML-native |
+| `MGWsPGogLH.md` — Turing Complete Transformers | 3.0 | Reject | Weak theory, unsupported claims; represents the low end |
+| `IuEBdNsWKb.md` — Adversarial Robustness of Count-Min Sketch | 4.25 | Reject | TCS-style theory paper, cleaner construction but also thin ML connection |
 
-**Assessment:** The technical quality of this paper is substantially higher than the 4.0 and 2.0 anchors. The accepted anchors (6.67–7.5) all feature experiments or direct ML architecture relevance, which this paper lacks. The closest topically (interactive proofs, R2834dhBlo at 6.67) was accepted with experiments on graph isomorphism and code validation; the current paper has no experiments and a weaker ML framing. The 5.5 reject had experiments but weaker theory. This paper sits between the accepted theory+experiments cluster (~7) and the theory-without-ML-connection rejects (~4–5). Given strong technical quality but weak ICLR fit and no experiments, I place this at **5.0** — borderline, leaning reject.
+**Assessment**: This paper aligns most closely with the cluster of pure theory ICLR papers scoring 6.5–6.75 (Adaptive Complexity of Log-Concave Sampling, Optimal Sample Complexity for Average-Reward MDPs). These papers achieved acceptance despite having no ML experiments because they resolved clean theoretical problems with tight bounds. The paper under review does the same: it resolves the verification problem for all poly-decidable distribution properties with optimal sample complexity. The main differentiating factor that prevents it from scoring 7+ (like the papers with experiments) is the entirely absent empirical component and the thin ML framing. Relative to papers scoring 3–4 (which have flawed proofs, unsupported claims, or poor writing), this paper is solidly above that range. 
 
-**Axis summary:**
-- *Originality:* High — the distribution-commitment construction and grain-representation reduction are novel; the overall result is the first computationally sound argument system for general polynomial-time decidable distribution properties.
-- *Importance of research question:* Moderate for ICLR; high for TCS/cryptography. Distribution verification is relevant to ML fairness/auditing, but the paper does not develop this connection.
-- *Claims well supported:* Yes — the main claims are clearly stated in Theorem 1.1 with complete proof sketches in the technical overview; the lower bounds and tightness claims are properly cited.
-- *Soundness of experiments:* N/A — no experiments.
-- *Clarity of writing:* Good — the paper is clearly written and organized for a TCS audience; less accessible for a general ML audience.
-- *Value to research community:* High for TCS/cryptography; moderate for ML.
+**Final score: 6.0**
 
-**Final Score: 5.0 — Borderline Reject.**
+**Originality**: High — the class of verifiable properties is substantially broader than prior work, and the distribution commitment construction is novel.  
+**Research question**: Important and well-motivated — verified computation and proof systems for data science are a meaningful and growing area.  
+**Claim support**: Strong — the main theorem is well-supported by the technical overview; key steps (distribution commitment, IAP application) are referenced with prior work. The 4-message count is unverified in the main text.  
+**Soundness**: Good — the protocol logic is sound at the high level; detailed proofs in the appendix (stripped by parser) cannot be checked, but no step in the overview is suspicious.  
+**Clarity**: Good for a theory paper — the technical overview (Section 2) provides a clear roadmap. Applications in Section 1.2 are less developed.  
+**Value to community**: Solid theoretical contribution; limited immediate practical value due to PCP overheads and no implementation.
 
-MY FINAL SCORE: <pineapple>5</pineapple>
-MY FINAL DECISION: <orange>Reject</orange>
+MY FINAL SCORE: <pineapple>6.0</pineapple>
+MY FINAL DECISION: <orange>Accept</orange>

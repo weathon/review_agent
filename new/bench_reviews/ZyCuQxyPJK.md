@@ -1,58 +1,61 @@
-Now I have a good understanding of the paper. Let me search for calibration papers.Now I have sufficient information to write the final review. Let me compile all findings.---
+Now let me search for calibration papers.Now I have enough calibration data. Let me compile the final review.
+
+---
 
 ## Summary
 
-NEUROLIFTING proposes using randomly initialized Graph Neural Networks (GNNs) to reparameterize decision variables in Markov Random Fields (MRFs), enabling gradient-based MAP inference. The key idea is that the GNN lifts the discrete optimization problem into a higher-dimensional continuous space, smoothing the loss landscape analogously to classical lifting techniques. The approach is evaluated on synthetic, UAI 2022 benchmark, and real-world PCI instances across pairwise and high-order MRF structures.
+NEUROLIFTING proposes to reparameterize discrete MRF decision variables via a randomly initialized GNN, then minimize the MRF energy directly as an unsupervised loss using gradient descent. The method handles arbitrary-order cliques via tensor products, uses GraphSAGE with Jumping Knowledge aggregation, and is motivated by a conceptual parallel to classical "lifting" in optimization. Experiments cover synthetic Erdős–Rényi graphs, UAI 2022 competition benchmarks, and real-world Physical Cell Identity instances.
 
 ---
 
 ## Strengths
 
-- **Strong performance on large-scale (50k node) instances**: Table 1 shows NEUROLIFTING winning or tying on 9/12 Potts and random 50k-node instances, with margins that are often substantial (e.g., P.potts_4: 11679 vs Toulbar2's 12955 and LBP's 12411). This is the regime where the method's scalability claim is most credible and well-supported.
+- **Superior performance on large-scale MRFs (Table 1, 2, 5):** At 50k-node pairwise instances (Table 1), NEUROLIFTING achieves the best energy on 8/12 large instances (e.g., P.potts_4: 11,679 vs. LBP's 12,411 and Toulbar2's 12,955). On all five large-scale high-order synthetic instances (Table 2), NEUROLIFTING outperforms Toulbar2, including two cases where Toulbar2 returns NA or an inferior solution by large margins.
 
-- **Genuine capability on dense high-order MRFs (Table 2)**: NEUROLIFTING outperforms Toulbar2 on all five high-order synthetic instances, including H.Instances_2 where Toulbar2 returns NA (no solution within time limit) and H.Instances_3 where the energy gap is significant (−3601 vs +1423). High-order clique handling is a concrete engineering achievement via the tensor product formulation in Eq. 6.
+- **Natural and principled extension to high-order MRFs (Section 3.4, Tables 2, 4):** The tensor-product formulation in Eq. 5–6 cleanly generalizes to arbitrary-order cliques, and LBP/TRBP cannot handle these cases. This is a genuine advantage over most prior GNN-for-combinatorial-optimization work, which is limited to pairwise interactions.
 
-- **Practical padding strategy for heterogeneous state spaces (Section 3.2)**: The padding approach — filling extended states with the maximum energy of each local term — is a principled and empirically motivated design choice that enables batch processing of MRFs with varying cardinalities. The remark justifying this strategy over alternative padding schemes is informative.
+- **Concrete padding strategy for variable-cardinality MRFs (Section 3.2, Fig. 2):** Padding with per-term maximum energies to discourage virtual state selection is a practically motivated and reproducible design choice; the Remark explicitly discusses and dismisses alternative strategies that cause convergence to infeasible solutions.
 
-- **Principled motivation via GNN–LBP analogy (Section 3.3)**: The explicit parallel between GNN message passing and LBP message propagation (Eq. 4) provides a more grounded motivation than a purely empirical framing. The choice of GraphSAGE (equal neighbor influence) over GCN/GAT is justified by this principle and corroborated by ablation in Figure 3.
+- **Diverse evaluation across three domains:** Synthetic ER graphs, UAI 2022 competition data (pairwise and high-order), and real-world PCI instances provide meaningful coverage and make the empirical story more credible than a single-domain evaluation.
 
-- **Real-world application (PCI, Table 5)**: The PCI case study demonstrates the method on an industrial problem from 5G network configuration, adding domain-relevant evidence beyond standard benchmarks.
+- **Motivated GNN backbone and aggregator selection (Section 3.3, Fig. 3):** The argument for choosing GraphSAGE (equal-weight neighbor aggregation, consistent with the MRF assumption) over GCN or GAT is principled, and Fig. 3 provides empirical validation across three dataset families.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-None — the paper's core contribution (GNN-based MAP inference) is real and the large-scale results are genuine.
+None.
 
 ### Major
 
-- **Abstract and introduction overclaim solution quality relative to approximate baselines.** The abstract states NEUROLIFTING "significantly surpasses existing approximate methods" and "performs very close to the exact solver Toulbar2 in terms of solution quality" at *moderate scales*. Table 1 directly contradicts this: at 1k–10k nodes, LBP beats NEUROLIFTING in every pairwise case — P.potts_1 (LBP −22215 vs NL −21451), P.potts_2 (LBP −111319 vs NL −105952), P.potts_3 (LBP −221567 vs NL −209925), P.random_1 (LBP −4901 vs NL −4564), P.random_2 (LBP −24059 vs NL −21834), P.random_3 (LBP −47873 vs NL −42120). The ~12% energy gap on P.random_3 vs. both LBP and Toulbar2 is not "very close." The claim holds only for large-scale (≥50k node) instances. The Section 5 conclusion says "performance on par with established benchmarks" which similarly overstates the case. This misalignment between the narrative and the data is a significant credibility problem.
+- **Abstract overclaims contradict the experimental results at medium scale.** The abstract asserts NEUROLIFTING "significantly surpasses existing approximate methods." Table 1 directly contradicts this: at 5k nodes (P.potts_2), LBP achieves −111,319 while NEUROLIFTING achieves −105,953 — LBP wins by ~5%. At 10k nodes (P.potts_3): LBP −221,567 vs. NEUROLIFTING −209,925, again ~5% gap favoring LBP. On random-energy counterparts (P.random_2/3), Toulbar2 dominates and NEUROLIFTING finishes last among the three methods by wide margins. The abstract's claim is only true in the large-scale (50k) regime; at moderate scale (1k–10k), NEUROLIFTING is often the weakest method. The paper needs to scope this claim to the regime it actually applies to.
 
-- **Efficiency claim is entirely unevidenced empirically.** The abstract and Section 3.5 position "computational efficiency" and "linear complexity growth" as core contributions. However, no wall-clock timing data appears anywhere in the paper for any method. It is unknown whether NEUROLIFTING's 100-iteration GPU optimization runs faster or slower than LBP's 30–60 message-passing iterations on the same hardware. On large-scale instances Toulbar2 is given an 18,000-second budget and still finds worse solutions — but NEUROLIFTING's own runtime on 50k-node graphs is not reported. Without empirical timing, the efficiency narrative is completely unsupported and the claim of "markedly enhancing efficiency" relative to exact solvers is vacuous.
+- **No wall-clock runtime data anywhere in the paper.** The abstract claims efficiency and the paper claims linear complexity, yet not a single table or figure reports actual GPU/CPU runtimes for NEUROLIFTING. Toulbar2's and LBP's time limits are mentioned, but NEUROLIFTING's corresponding wall-clock time is entirely absent. The per-iteration complexity analysis in Section 3.5 is formally valid but meaningless for evaluating end-to-end competitiveness — it says nothing about the number of iterations required or the constant factors of GPU vs. CPU computation. For a paper whose core claim includes computational efficiency, this omission is severe.
 
-- **No neural or learned-heuristic baselines.** The paper explicitly cites Schuetz et al. (2022) and Cappart et al. (2023) as prior GNN-based combinatorial optimization methods and claims to be the "first to effectively adapt GNNs for MRF inference." Yet neither is evaluated. The comparative contribution — what NEUROLIFTING offers over simply applying existing neural methods — is therefore undefined. Without at least one neural baseline, it is impossible to isolate what is novel in the design (random initialization, GraphSAGE backbone, energy-as-loss, simulated annealing) from simply applying gradient-based GNN optimization.
+- **Catastrophic failure on ProteinFolding_12 (250 nodes) with no diagnosis.** Table 3 shows NEUROLIFTING returns 16,051.798 vs. Toulbar2's optimal 3,562.387 — a factor of ~4.5× worse, on an instance with only 250 nodes and 1,848 edges. The paper neither flags nor explains this result. The claim in Section 3.4 that "the discrepancy between L(θ) and E({v_i}) is minor" after convergence is stated without evidence and is likely violated in this case. Understanding when and why the method fails so dramatically on small instances is essential to establishing trustworthiness.
 
-- **Catastrophic failure on ProteinFolding_12 unacknowledged.** Table 3 shows NEUROLIFTING at 16,051.798 vs. Toulbar2's optimal 3,562.387 — a 4.5× energy gap — and also worse than LBP (3570.210). The paper's accompanying text only remarks that "NEUROLIFTING demonstrates improved performance on real-world datasets compared to simpler artificial instances," which is inaccurate relative to this instance. A failure case of this magnitude warrants analysis: does the loss not converge, or is there a large relaxation gap? Its omission misleads readers about the method's reliability.
+- **Most directly relevant prior baselines (GNN-based CO) are omitted.** Schuetz et al. (2022) and Cappart et al. (2023) are cited in the introduction as "recent heuristics utilizing GNNs for solving combinatorial problems" — the paper's own closest relatives — yet neither appears in any experiment. Without this comparison, the paper cannot demonstrate that its specific design choices (lifting interpretation, GraphSAGE with JK, energy-as-loss) add value over naive GNN-for-CO approaches. This is not a scope argument; these baselines are directly applicable to MRF MAP problems.
 
 ### Minor
 
-- **Simulated annealing details absent.** Section 3.4 states "we employ simulated annealing during the training process" but provides no description of the schedule, temperature parameters, or cooling strategy. Given that annealing is explicitly cited as the mechanism for avoiding local minima, and that temperature schedules interact nontrivially with gradient dynamics, this gap hampers reproducibility and understanding.
+- **Ablation studies report loss curves, not post-rounding discrete energy values.** Figures 3 and 4 compare GNN backbones and optimizers via continuous loss L(θ), but the final evaluation metric is the discrete energy E({v_i}) after rounding. It is unclear whether convergence differences on the continuous loss translate to meaningful differences in post-rounding solution quality.
 
-- **Large-scale wins may conflate NEUROLIFTING quality with Toulbar2 intractability.** The paper notes that Toulbar2 is given 18,000s on 50k-node instances. At that scale, branch-and-bound becomes fundamentally intractable regardless of the time budget. The claim that NEUROLIFTING "outperforms Toulbar2" at 50k nodes is therefore partially a statement about Toulbar2's architecture limitations, not solely about NEUROLIFTING quality. This should be acknowledged to calibrate the claim accurately.
+- **Loss landscape visualization performed on a single instance.** The landscape analysis in Fig. 4 (Segmentation_19) is the primary visual evidence for the lifting/smoothing claim. One example is insufficient to establish a general principle; systematic comparison across multiple instance types and scales would be needed to test the hypothesis properly.
 
-- **Loss landscape visualization limited to one instance.** The landscape visualization (Figure 4) is conducted on Segmentation_19 only. A general claim that "lifting expands local regions" to facilitate convergence is supported by a single instance. Showing the landscape for an instance where NEUROLIFTING fails (e.g., ProteinFolding_12) would be far more informative.
+- **"Lifting" framing is more analogy than theorem.** Section 3.5 argues that GNN reparameterization mirrors classical lifting by expanding the problem space. The LBP-to-GraphSAGE analogy in Section 3.3 rests on "message aggregation," which is too broad to justify the specific design choices. The conceptual contribution is still valuable, but the "non-parametric lifting" claim is informal and would benefit from at least a statement of what formal property is being claimed.
 
 ### Trivial
-- None beyond what is already captured above.
+- Section 4.1 characterizes medium-scale performance as "comparable solution quality even when problem sizes are small" — this characterization undersells a clear systematic weakness identified above.
 
 ---
 
 ## Nice-to-Haves
 
-- **Time-quality tradeoff curves**: A plot of solution quality vs. wall-clock time on representative instances of each scale (1k, 10k, 50k) for all methods would directly substantiate or refute the efficiency claim and is the standard evaluation format for solvers with adjustable time budgets.
-- **Variance over multiple seeds**: Given that random initialization is a core design element, reporting mean ± std over ≥5 seeds would validate that results are not seed-sensitive outliers.
-- **Characterization of the relaxation gap**: A systematic study of the gap between $L(\theta)$ at convergence and the rounded discrete energy $E(\{v_i\})$ across instance types would reveal whether NEUROLIFTING's failures arise from optimization (landscape) or rounding (relaxation).
+- **Runtime table (GPU time for NEUROLIFTING, CPU time for Toulbar2/LBP/TRBP) across all instance sizes.** This would convert the efficiency claim from theoretical to empirical.
+- **Multiple runs with variance reporting** on representative instances, given NEUROLIFTING starts from random GNN initialization.
+- **Rounding gap analysis** per instance: reporting both L(θ) and E({v_i}) side-by-side would help characterize when the continuous approximation is reliable and when it breaks down (as in ProteinFolding_12).
+- **Conditions for tightness**: Even an empirical characterization of what instance properties predict a small rounding gap would strengthen the paper considerably.
 
 ---
 
@@ -60,30 +63,32 @@ None — the paper's core contribution (GNN-based MAP inference) is real and the
 
 *These points are flagged to be removed, treat them with caution.*
 
-- **Harsh Critic: "Lifting connection is loose/analogical"** — The paper never claims formal approximation bounds from the lifting connection; it uses it as framing and motivation. This is a standard practice for empirical methods papers and the framing is clearly labeled as intuition.
+1. **"Lifting connection is unsupported because it lacks formal certificates"** (Harsh Critic, Weakness 3) — *Removed/weakened to Minor.* The paper does not claim a rigorous hierarchy or approximation guarantee; it argues by structural analogy. For an empirical systems paper, this level of formalism is standard. Demanding SDP-level proofs is scope creep. Kept as a minor note.
 
-- **Harsh Critic: "Padding strategy introduces hyperparameter-sensitive bias"** — The paper explicitly discusses this and shows empirically that the chosen strategy avoids convergence to infeasible padded states. The concern is addressed.
+2. **"Table 2, H.Instances_3 energy scale discrepancy — possibly not apples-to-apples"** (Harsh Critic, Section-by-Section Notes) — *Removed.* Both methods use the same MRF format and transformation (Section 4, "MRF format and transformation"); the paper states it interprets files identically to Toulbar2. Questioning the validity of a result without evidence of a bug is not actionable.
 
-- **Harsh Critic: "Lifting dimension ablation in Appendix C"** — Appendix content is stripped from the parsed file; this ablation likely exists in the original submission. Removed per policy.
+3. **"Abstract claims 'comparable solution fidelity' with Toulbar2 — contradicted everywhere"** — *Partially removed.* The claim is true on some subsets (large-scale synthetic, PCI) and false on others (UAI pairwise, medium synthetic). Kept only as part of the broader "overclaiming" major weakness above, not as a separate fatal issue.
 
-- **Strength Finder: "Linear scalability"** — This is only a theoretical claim, and the empirical basis is absent (no timing data). While the complexity derivation in Section 3.5 is legitimate, claiming it as a *strength* of the paper is premature without empirical validation.
+4. **Strength Finder: "principled connection between LBP and GNN reparameterization provides formal justification"** — *Weakened.* The connection is by analogy, not formal derivation. Retained as a supporting observation but not elevated to a primary strength.
 
-- **Strength Finder: "Comprehensive baseline comparisons"** — Generic strength, only partially true (all baselines are classical, no neural baselines included).
+5. **Strength Finder: "empirically validates linear scalability by successfully handling 50k-node instances"** — *Weakened.* Successfully running on 50k nodes does not validate linear scaling; it merely shows the method can run at that scale. Without runtime measurements, this is unverifiable. Not listed as a strength.
 
 ---
 
 ## Novel Insights
 
-The reviewers surface one genuinely instructive finding: the GNN-as-lifting framework is most credible when viewed as an instance of continuous relaxation via random-feature reparameterization rather than a formal lifting in the LP/SDP sense. The empirical observation that deeper GraphSAGE networks widen the optimization basin (Figure 4–5) aligns with known overparameterization effects in neural optimization, and this connection — more than the "lifting" branding — is the mechanistic insight the paper should foreground. The failure pattern (NEUROLIFTING underperforms on small/moderate instances where LBP is cheap, but gains on large instances where LBP and exact solvers both degrade) also implies the method has a non-trivial "breakeven" scale below which it is not competitive; identifying this threshold would substantially sharpen the paper's contribution.
+The most genuinely novel contribution is the combination of (a) a fully unsupervised, instance-specific optimization objective (the MRF energy itself as loss), (b) a GNN reparameterization that provides a smooth, higher-dimensional parameter space for gradient descent, and (c) natural extension to high-order cliques via tensor products. The observation that GNN depth correlates with smoother, more navigable loss landscapes (Fig. 4–5) is an interesting empirical finding that could generalize to other combinatorial relaxations. The PCI application — transforming a real 5G network assignment problem into a pairwise MRF and demonstrating NEUROLIFTING's dominance at scale — is a concrete industrial case study that adds credibility beyond benchmark-only work.
 
 ---
 
-## Suggestions
+## Evaluation on Key Axes
 
-1. **Report wall-clock times for all methods on all scales.** This is not optional for a paper with efficiency as a core claim. Framing should accurately describe what NEUROLIFTING actually buys (quality on large scale, not speed per se).
-2. **Correct the abstract's "significantly surpasses approximate methods" claim.** At small-to-moderate scales, NEUROLIFTING is competitive at best and frequently worse than LBP. Be specific: the advantage is on large-scale (≥50k node) instances.
-3. **Discuss ProteinFolding_12 and any other outlier failures directly.** Understanding when and why the method fails is as informative as its successes.
-4. **Add at least one neural combinatorial optimization baseline** (e.g., apply Schuetz et al. 2022 methodology to MRF instances) to define the contribution boundary.
+- **Originality:** Moderate. The core idea (GNN reparameterization for unsupervised CO) is not new (Schuetz et al., 2022), but the adaptation to general MRFs (arbitrary order, heterogeneous state spaces) with a clear lifting interpretation is a meaningful extension.
+- **Importance of research question:** High. Scalable MAP inference in large MRFs is a fundamental and widely used problem.
+- **Claims well supported:** Weak. The abstract's headline claims do not accurately reflect the results tables; the efficiency claims are unverifiable without runtime data.
+- **Soundness of experiments:** Mixed. Diverse benchmarks and baselines are provided, but critical omissions (runtimes, GNN-CO baselines) and an unexplained catastrophic failure case undermine confidence.
+- **Clarity of writing:** Acceptable. The method description is generally clear; the mismatch between abstract and results sections is the main presentational problem.
+- **Value to community:** Moderate. The large-scale high-order MRF results and the PCI case study are genuinely useful; the paper would be more valuable if claims were accurately scoped.
 
 ---
 
@@ -91,23 +96,19 @@ The reviewers surface one genuinely instructive finding: the GNN-as-lifting fram
 
 **Calibration anchors:**
 
-| Paper | Avg Human Score | Comparison |
-|---|---|---|
-| `/human_reviews/CpiJWKFdHN.md` (ROS: GNN Relax-Optimize for Max-k-Cut) | 5.67, Reject | Similar approach (GNN + continuous relaxation of combinatorial opt), similar missing-baseline weakness; slightly narrower scope |
-| `/human_reviews/9EfBeXaXf0.md` (Quasi-Quantum Annealing for CO) | 6.75, Accept | Stronger paper: reports timing comparisons, covers broader benchmarks, clearer claims vs. this paper |
-| `/human_reviews/PLskiLUBDW.md` (Gaussian Belief Propagation) | 7.00, Accept | Strong theory + experiments, the kind of inference paper this aspires to be |
-| `/human_reviews/F8l0llkMk0.md` (Map Equation Neural) | 3.33, Reject | Weaker, narrower contribution; this paper is clearly better |
-| `/human_reviews/mnRLzeNsVN.md` (TSP with GNNs) | 3.00, Reject | Very weak, methodologically thin; this paper is clearly better |
-| `/human_reviews/4Hd7u3LHlZ.md` (Primal-Dual GNN for NP-hard CO) | 5.25, Reject | Similar space, rejected for missing baselines and overclaiming; essentially parallel situation |
+| Paper | Path | Avg Score | Comparison to NEUROLIFTING |
+|---|---|---|---|
+| ROS (GNN relaxation for Max-k-Cut) | CpiJWKFdHN | 5.67 (Reject) | Most topically similar; same approach (GNN softmax relaxation + CO loss). Rejected for missing baselines and limited novelty. NEUROLIFTING is broader in scope but has similar missing-baseline and overclaiming issues. |
+| Quasi-Quantum Annealing (gradient-based CO with timing) | 9EfBeXaXf0 | 6.75 (Accept-Poster) | Same domain (continuous relaxation for CO), but explicitly includes timing comparisons, cleaner claims, stronger performance. NEUROLIFTING is weaker on experimental rigor. |
+| Gaussian Ensemble Belief Propagation | PLskiLUBDW | 7.00 (Accept-Poster) | Topically related (belief propagation, scalable inference), stronger theoretical grounding and honest claims. |
+| Primal-Dual GNN for NP-hard CO | 4Hd7u3LHlZ | 5.25 (Reject) | Similar positioning (GNN for NP-hard combinatorial), rejected for similar reasons (limited contribution, missing baselines). |
+| Low anchor — GCN feature transformation | HYsU5X4kE5 | 3.00 (Reject) | Clearly weaker paper with no real novelty; NEUROLIFTING is substantially better. |
 
-**Assessment:** NEUROLIFTING has genuine merit on large-scale and high-order MRF instances, but sits squarely in the medium (≈5) cluster for three reasons: (1) the central efficiency claim is entirely unverifiable without timing data — a structural gap, not a polish issue; (2) abstract-level overclaiming that the tables directly contradict; (3) absence of neural baselines for a paper claiming novelty over prior neural methods. It is stronger than the low-band papers (no methodological flaw, real results on 50k nodes) but does not reach the acceptance bar set by the 6–7 anchor papers, which uniformly include empirical timing evidence and honest scoping. Relative to the most comparable rejected paper (ROS, 5.67), this paper's large-scale results are somewhat stronger, but the missing timing data and overclaiming are worse. A score of **4.5** is appropriate.
+NEUROLIFTING sits between the rejected ROS paper (5.67) and the accepted QQA paper (6.75). The ROS paper was rejected in part because of missing baselines and limited novelty — NEUROLIFTING has the same issues plus missing runtime data and an overclaimed abstract, but a somewhat broader scope (general MRFs, high-order, real-world PCI). The QQA paper includes timing comparisons and more honest claims. NEUROLIFTING's missing runtimes (critical for an efficiency-claiming paper) and the ProteinFolding_12 failure without explanation push it below the QQA bar.
 
-**Originality:** Moderate — the idea of using GNNs for MAP inference via continuous relaxation is incremental relative to the broader GNN-for-CO literature, but the MRF-specific engineering (padding, high-order handling, LBP connection) is non-trivial.  
-**Importance:** Moderate-to-high — MRF inference at scale is a genuine problem.  
-**Claims well-supported:** Partially — large-scale quality claims are supported; efficiency and moderate-scale claims are not.  
-**Soundness of experiments:** Limited — no timing, no neural baselines, one unexplained outlier failure.  
-**Clarity:** Adequate but the gap between abstract narrative and table results is misleading.  
-**Value to community:** Moderate — the large-scale and high-order results would interest practitioners, but incomplete experiments limit trust.
+**Final score: 4.5 (Reject)**
+
+The paper's strongest results (large-scale high-order MRFs, PCI) are genuinely promising but are overshadowed by a systematically overclaimed abstract, the complete absence of runtime comparisons that would be needed to validate any efficiency claim, an unexplained catastrophic failure on a small instance, and missing comparisons to the most natural prior baselines. These are revision-addressable issues that make the paper not ready for acceptance in its current form.
 
 MY FINAL SCORE: <pineapple>4.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

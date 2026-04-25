@@ -1,24 +1,23 @@
-Now let me search for calibration papers.Now I have enough information to write the consolidated review.
+Now let me search for calibration papers.Now I have enough information to write the final review.
 
 ---
 
 ## Summary
-
-MC-DML integrates a GPT-3.5-turbo LLM as a dynamic prior policy within the PUCT-MCTS framework for text-based games, replacing the RL-trained policy network used in prior work (PUCT-RL, MC-LAVE-RL). The key technical novelty is a two-tier memory system: in-trial memory (a one-step observation window used as context for the LLM prior) and cross-trial memory (reflections generated from failed MCTS trajectories, accumulated across restarts and injected into subsequent simulations). Evaluated on 9 Jericho benchmark games, MC-DML achieves notably superior results on hard games (Deephome, Ztuu) compared to all baselines, and outperforms the full 4-iteration training convergence of PUCT-RL and MC-LAVE-RL on Zork1 within a single planning phase.
+MC-DML proposes a Monte Carlo Tree Search algorithm that uses a Large Language Model (GPT-3.5-turbo) as the prior policy in PUCT, augmented with two memory mechanisms: *in-trial memory* (a short context window of recent history) and *cross-trial memory* (Reflexion-style reflections generated from failed MCTS rollouts). The key claim is that by integrating these components, MC-DML achieves strong performance in a single planning phase on Jericho text-based games, outperforming iterative PUCT-RL and MC-LAVE-RL baselines even at their converged 4-iteration performance.
 
 ---
 
 ## Strengths
 
-- **Dramatic gains on hard games (Tables 1–2):** MC-DML nearly doubles MC-LAVE-RL on Deephome (67 vs. 35) and triples it on Ztuu (23.67 vs. 7), the two games with the longest completion paths and sparsest rewards. These are the most challenging games in the benchmark and the gains are large enough not to be noise.
+- **Substantial gains on the hardest games (Table 2):** On Deephome, MC-DML achieves 67 ± 1.41 vs MC-LAVE-RL's 35 ± 0.6 — a near-doubling of prior SOTA — and on Ztuu achieves 23.67 ± 1.9 vs 7 ± 2.7, a 3× improvement. These are the games explicitly categorized as the most difficult, making the gains meaningful rather than low-hanging fruit.
 
-- **Cross-trial memory demonstrably critical via causal evidence (Table 5):** The bottleneck analysis on Zork1 quantifies exactly how $\mathcal{M}_c$ shifts the LLM's action probabilities ("open trap" drops from 0.24→0.16, "take lantern" rises from 0.10→0.22) and redirects MCTS visit counts (open trap: 176→21, take lantern: 34→252). This is concrete mechanistic evidence, not just aggregate numbers.
+- **Single planning phase beats fully converged baselines (Table 3):** MC-DML scores 48.66 on Zork1 in its initial planning phase, surpassing both PUCT-RL (38.2) and MC-LAVE-RL (45.2) after their full 4-iteration training cycles. This is concrete evidence that the LLM prior eliminates the cold-start problem of iterative policy learning.
 
-- **Ablation study confirms independent contributions of each component (Table 4):** Removing $\mathcal{M}_c$ from full MC-DML drops Zork1 from 48.66 to 38.33; removing both memories drops it to 31.67. On Ztuu, dynamic pruning is the decisive component (23.67 with DP vs. 7.8 without). Each ablation target has distinguishable effects across different games.
+- **Table 5 qualitative analysis is the paper's strongest mechanistic evidence:** The comparison of Q-values, LLM probabilities, and visit counts for MC-DML vs. MC-DML w.o. Mc on the Zork1 bottleneck state clearly shows how cross-trial memory redirects exploration away from the misleading "open trapdoor" action toward "take lantern." Without Mc, open trap accumulates N(s,a)=176 visits; with Mc, "take lantern" dominates at N(s,a)=252. This is specific and well-documented.
 
-- **Clean integration into PUCT framework (Eq. 3):** The substitution of $\pi(a|s)$ in PUCT (Eq. 2) with $\text{LLM}(a|\mathcal{M}_i, \mathcal{M}_c, p)$ (Eq. 3) preserves the theoretical exploration-exploitation structure of PUCT while injecting language-grounded, experience-adapted priors.
+- **Dynamic pruning ablation shows targeted utility (Table 4):** DP boosts Ztuu from 7.8 → 23.67 (a 3× gain) while having negligible effect on other games. The paper correctly attributes this to Ztuu's uneven reward distribution, which the appendix data supports — a specific, testable, and supported claim.
 
-- **Dynamic pruning for Ztuu is well-motivated:** The depth-adaptive search responds to the uneven reward distribution across game steps, and its impact is validated empirically (Ztuu: 23.67 vs. 7.8 without DP in Table 4).
+- **Clean Reflexion-into-MCTS integration:** Unlike LLM-MCTS (Zhao et al., 2024), which uses a fixed LLM prior, MC-DML adapts the prior mid-search using failure trajectories from within the same MCTS session. This is a well-motivated and natural adaptation of Reflexion to the tree search setting.
 
 ---
 
@@ -29,32 +28,32 @@ None.
 
 ### Major
 
-- **Computational cost of "efficiency" claim is unverifiable (Abstract, Section 4.1, Contribution #3):** The paper's headline contribution is that MC-DML "outperforms strong contemporary methods that require multiple iterations" at the initial planning phase, framing this as superior efficiency. However, the paper reports zero data on wall-clock time per episode, number of LLM API calls per game step, or total compute budget. MC-DML calls GPT-3.5-turbo at every node expansion (for $\pi(a|s)$) and at every terminal failure (for reflection generation), potentially thousands of calls per planning episode. PUCT-RL's policy network, by contrast, runs inference in microseconds. If PUCT-RL's 4 iterations of GPU training finish in less time or cost than MC-DML's single planning pass, the "efficiency" narrative is false. The paper never attempts to compare total compute budget. The core claim about "more efficient language-grounded planning" requires either (a) reporting parity-compute comparisons, or (b) being more precise that "efficiency" means "iteration count" not "total compute or cost." In its current form, readers will likely interpret the efficiency claim in a broader sense that the paper cannot support.
+- **No computational cost comparison undermines the efficiency framing.** The paper's abstract and introduction frame MC-DML as more *efficient* than iterative baselines because it avoids the "time-consuming" planning-then-learning paradigm. However, MC-DML queries GPT-3.5-turbo on *every* node expansion and every failure trajectory for reflection — likely hundreds of API calls per game. No wall-clock time, total API call count, or token cost is reported. PUCT-RL/MC-LAVE-RL run lightweight GRU-based networks. Without a shared compute axis, the efficiency claim is asserted rather than demonstrated. The paper is on solid ground claiming *fewer algorithmic iterations are needed*, but the "efficiency" framing in the abstract is not substantiated. A simple comparison of game-completion time or API cost would resolve this.
 
-- **Ludicorp underperformance is ignored (Table 2):** MC-DML scores 19.67 on Ludicorp, underperforming both MC-LAVE-RL (22.8) and BIKE+CBR (23.8) — the only game where the method does not reach parity. The paper acknowledges only "8 out of 9 games" without any analysis of why. Ludicorp is the hardest game in the benchmark by the paper's own characterization (over 300 steps, over 14 actions per step on average). A semantic-similarity heuristic (MC-LAVE-RL) and a case-based reasoning agent (BIKE+CBR) both beat a GPT-3.5-backed MCTS on this game — understanding why is essential for bounding the method's actual failure modes and validating the generality claims.
+- **In-trial memory M_i contribution is not isolated.** Section 4.1 reveals that M_i is defined as `(o_{t−1}, a_{t−1}, o_t)` — a single-step context window. Section 3.1 describes M_i as "current trajectory history, representing the game state," which overstates a one-step tuple as a memory mechanism. More critically, no ablation isolates M_i's contribution: Table 4 compares "w.o. Mc, Mi, DP" (removes all three simultaneously) against "w.o. Mc, DP" (removes Mc and DP), but never "w.o. Mi only." It is impossible to determine how much work the single-step window actually does versus just M_c and DP. Given that M_i is listed as a co-equal contribution in the introduction, this gap is a real methodological issue.
 
 ### Minor
 
-- **Cross-trial memory size k=3 has no ablation:** Given that cross-trial memory is Contribution #2, and that $k$ is explicitly a key design parameter (Section 4.1), the paper provides no ablation over $k \in \{1, 3, 5, 10\}$. Sensitivity to $k$ is especially relevant because the stopping rule ("if reflections exceed k, collection is terminated early") is unusual — it discards potentially useful reflections rather than replacing older ones with a sliding window. Whether k=3 is a principled choice or an arbitrary one cannot be assessed.
+- **No ablation over cross-trial memory size k.** The paper caps k=3 reflections per root node with no sensitivity analysis. For hard games with long horizons and many failure modes, k=3 may be severely limiting. Given cross-trial memory is presented as the core contribution, a k ∈ {1, 3, 5, 10} ablation would strengthen confidence in the design choice.
 
-- **Random rollout policy is unjustified for sparse-reward games (Algorithm 1, lines 53–54):** The rollout uses `a ~ Uniform(A)`, pure random action selection. In text-based games with hundreds of valid actions per step and sparse rewards, random rollouts carry essentially no reward signal. The paper provides no justification for this choice over, e.g., LLM-guided rollouts. This is not a fatal flaw (MCTS can work with random rollouts if the tree is expanded sufficiently), but it is a notable design gap that the paper never addresses.
+- **Uniform random rollout policy (Algorithm 1, line 54) is unexplained.** The rollout procedure uses `a ~ Uniform(A)`, which is inconsistent with the paper's premise that LLMs provide better exploration guidance than uninformed policies. Since rollout returns feed Q-value estimates, low-quality rollouts degrade value accuracy. No justification or ablation is given for this choice. Using the LLM for rollouts too is the obvious alternative and its exclusion deserves explanation.
 
-- **Data contamination partially unaddressed:** The paper argues that "LLM does not have knowledge of the game's walkthrough under the current prompting setting" because the greedy LLM agent scores 0 on Zork1 (Section 4.2). However, a greedy LLM at temperature=0 without memory or search can fail a game while the model weights still encode game-specific knowledge (e.g., the Grue mechanic in Zork1 is extensively documented in internet text). Such knowledge could become actionable precisely when embedded in MCTS with iterative reflection — as suggested by the reflection in Table 5 ("Ensure you have a light source before entering dark areas"), which is exactly the kind of Zork-specific hint that is ubiquitous in online game guides. The paper's prompting claim (Section 3.3: "We avoid introducing any prior game knowledge or human-designed hints in the LLM prompts") conflates what is in the prompt with what is in the weights. This concern is not fatal, but some discussion or a robustness test (e.g., running on games released after GPT-3.5's training cutoff) would strengthen the paper's claims.
+- **Ludicorp failure is acknowledged in the count but not analyzed.** MC-DML's 8/9 claim is correct — Ludicorp (19.67 ± 1.7 vs MC-LAVE-RL 22.8 ± 0.2) is the acknowledged exception. However, Ludicorp is one of three "hard" games and the only hard game where MC-DML underperforms. The paper provides no analysis of why MC-LAVE-RL's semantic similarity approach works particularly well on Ludicorp while MC-DML does not. Understanding the failure mode would clarify the method's actual scope.
 
-- **In-trial memory window is one step only, but no sensitivity analysis:** In-trial memory is defined as $(o_{t-1}, a_{t-1}, o_t)$ — just the immediately preceding step (Section 4.1). The paper correctly identifies this as a limitation (Section 6), but the ablation only tests complete removal of $\mathcal{M}_i$ rather than varying the window size. The impact of extending the window is unknown, and this is a genuine gap in understanding the method.
+- **High variance on Deephome ablation conditions (Table 4, std=14.9)** for "w.o. Mc, Mi, DP" suggests the Deephome landscape is unstable. While MC-DML itself is stable at 67 ± 1.41, n=3 runs with only 3 seeds across 9 games is the norm in this field, but the high variance in ablation conditions warrants caution in interpreting the full story.
 
 ### Trivial
 
-None flagged beyond what is listed.
+- **Balances and Temple are non-discriminative:** Every method scores 10 on Balances and 8 on Temple (Table 2), suggesting saturation. These contribute no signal to the comparison.
 
 ---
 
 ## Nice-to-Haves
 
-- Report LLM API call counts and wall-clock time per planning episode for MC-DML alongside GPU-hours for PUCT-RL/MC-LAVE-RL, or reframe the "efficiency" claim explicitly as "iteration efficiency" (eliminating RL training iterations) rather than computational efficiency.
-- Ablate cross-trial memory size $k \in \{1, 3, 5\}$ and compare the stopping rule (discard-on-overflow) against a sliding-window replacement policy.
-- Analyze the Ludicorp failure: what structural properties make semantic-similarity or case-based reasoning more effective there than LLM-guided MCTS?
-- Consider LLM-guided rollouts as an alternative to uniform random rollouts, or justify the random choice more explicitly.
+- **Score vs. compute budget curve:** Plotting MC-DML's score vs. cumulative LLM API calls alongside PUCT-RL/MC-LAVE-RL's score vs. training iteration time would make the efficiency comparison honest and informative.
+- **In-trial memory window size ablation:** Testing M_i window sizes of 1, 5, 10, and full trajectory would establish whether the single-step design is sufficient or limiting, and clarify the contribution.
+- **Generalization to open-source or GPT-4-class LLMs:** The method relies on GPT-3.5-turbo's log-probability API feature. Evaluating with an open-source model (even via verbalized probability) would establish generality.
+- **Cross-trial reflection quality analysis:** A characterization of whether generated reflections accurately identify the bottleneck (vs. being noise) would strengthen the mechanistic story.
 
 ---
 
@@ -62,61 +61,62 @@ None flagged beyond what is listed.
 
 *These points are flagged to be removed, treat them with caution.*
 
-- **"Unfair comparison" on iteration count (Harsh Critic, framing as structural flaw):** The critic argues that comparing MC-DML's GPT-3.5-backed initial policy to PUCT-RL's randomly initialized network at Iteration 1 is "structurally unfair." However, *this asymmetry is the contribution*: the paper explicitly proposes replacing the trained RL prior with an LLM prior to avoid expensive training iterations. The comparison is the whole point. This is not an unfair comparison — it is an evaluation of whether the substitution works. The legitimate concern is about computational cost parity (retained above as a Major weakness), not about the comparison itself being invalid.
+- **Harsh Critic: "The 8/9 claim is inaccurate."** — This is factually incorrect. The paper says "8 out of 9," explicitly acknowledging that Ludicorp is the exception. The count is accurate. Ludicorp IS the one game excluded from the 8. Removed as a misreading.
 
-- **"LLM prior alone explains results" argument (Harsh Critic):** The critic argues that the ablation `w.o. Mc, Mi, DP` scoring 31.67 (close to PUCT-RL Iteration 4's 38.2) proves the LLM prior — not the memory mechanism — is doing the work. However, the full model at 48.66 is significantly above 31.67, and the ablations in Table 4 show meaningful incremental contributions of each component. The critic's logic would discount any improvement from memory mechanisms by attributing them to the LLM prior, which is unfair. The ablation clearly demonstrates the memory contributions are real.
+- **Harsh Critic: "Efficiency comparison is structurally invalid — PUCT-RL has random initialization at iteration 1."** — The structural invalidity framing is overblown. The paper argues that MC-DML doesn't need *any* iterative training loop, and Table 3 shows it beats the *final* converged performance of both baselines, not just iteration 1. The efficiency concern about missing API cost is legitimate (kept as Major), but calling the overall comparison structure "invalid" misrepresents what the paper demonstrates.
 
-- **"No computation is explicitly reported so data contamination concern invalidates entire Zork1 analysis" (Harsh Critic, escalation):** This is an overstatement of the data contamination concern. The concern is real but minor; a paper-level discussion or sensitivity test would address it. Calling it a "structural" issue that potentially "attributes all performance to memorized walkthroughs" is too strong given the breadth of results across 9 games with varying LLM familiarity.
+- **Harsh Critic: "Deephome result with n=3 does not robustly establish headline result."** — MC-DML reports 67 ± 1.41 on Deephome — low variance, not high. The high variance (std=14.9) only appears in the ablation condition "w.o. Mc, Mi, DP," not in the main result. Removing this as an inflation of the n=3 concern.
 
-- **Missing related works (Harsh Critic):** Per hard rules, not included.
-
-- **Strength: "Comparison with LLM/Reflection baselines rules out data contamination" (Strength Finder):** Overstated — greedy LLM scoring 0 partially addresses but does not definitively rule out contamination. Kept as a minor weakness rather than a strength.
-
-- **Strength: "Code availability" (Strength Finder):** Generic; removed.
+- **Strength Finder: "Algorithm 1 provides a complete and implementable specification."** — This is a generic presentation strength. Dropped as insufficiently specific to differentiate this paper.
 
 ---
 
 ## Novel Insights
 
-The paper's most interesting insight is that MCTS's restart-from-root mechanism — typically seen as a computational artifact — creates a natural opportunity for iterative reflection: every time a simulation hits a failure terminal, the agent generates a reflection and modifies its action prior *within the same planning episode*. This elegantly reuses MCTS structure for in-episode policy adaptation, which is more tightly coupled to the search than post-episode reflection (as in Reflexion). If cross-trial memory is understood as "in-planning-episode policy refinement" rather than "between-game memory," the distinction from prior LLM-MCTS work (Zhao et al.) becomes clearer and more substantial. This framing is implicit in the paper but could be made more explicit to strengthen the novelty argument.
+The most genuinely novel element of this paper is demonstrating that Reflexion-style failure reflection can be applied *within* a single MCTS session (cross-trial memory over repeated rollouts from the same root node), rather than only across full game episodes. This turns MCTS simulation restarts from a neutral implementation detail into an active learning signal — each rollout that terminates in failure generates feedback that updates the prior for all subsequent rollouts from the same root. The Zork1 bottleneck analysis in Table 5 provides rare, concrete mechanistic evidence for when and how this works: the reflection "Ensure you have a light source before entering dark areas" measurably shifts probability mass from the deceptively rewarding "open trapdoor" to the correctly valuable "take lantern." This is a useful insight for any setting where MCTS search restarts are standard practice and an adaptive prior is desirable.
 
 ---
 
 ## Suggestions
 
-1. Rename or reframe the "efficiency" contribution to be precise: "MC-DML achieves iteration efficiency — it eliminates the need for multi-round planning-then-learning — while achieving superior final task performance." Add a computation budget comparison (even rough API call counts) to make any broader efficiency claims credible.
-2. Add a Ludicorp failure analysis section (even one paragraph) explaining what characteristics of that game the current memory mechanism fails to address.
-3. Ablate $k \in \{1, 3, 5\}$ and test a sliding-window replacement policy for $\mathcal{M}_c$ vs. the current early-termination policy.
-4. Clarify the distinction between in-prompt game knowledge (avoided) and in-weights game knowledge (not controlled), and add either a brief discussion or one robustness result.
+1. Add a table reporting wall-clock time per game or total LLM API calls for MC-DML, and compare to PUCT-RL/MC-LAVE-RL training time over 4 iterations. This single addition validates or reframes the efficiency claim.
+2. Add a "w.o. Mi" ablation condition to Table 4 to isolate the one-step context window's contribution.
+3. Clarify the in-trial memory description in Section 3.1 to accurately reflect that it is a one-step window, not a full trajectory.
+4. Add brief explanation for why uniform random rollouts are used in Algorithm 1 line 54 (e.g., LLM query cost during rollout, no evidence rollout quality matters in this regime).
+5. Add k ∈ {1, 3, 5} cross-trial memory ablation to Section 4.3.
+6. Add a paragraph analyzing Ludicorp failure — compare game structure to Deephome/Zork1 to identify what makes semantic similarity approaches better suited there.
 
 ---
 
+## Calibration
+
+| Anchor | Avg Score | Comparison to MC-DML |
+|--------|-----------|----------------------|
+| `/human_reviews/sdpVfWOUQA.md` (MCTS+LLM problem solving) | 3.00 | Much weaker: no competitive baselines, no ablations, withdrawn |
+| `/human_reviews/koza5fePTs.md` (LLM planning benchmark) | 2.00 | Much weaker: no real methodology, just benchmarking with poor results |
+| `/human_reviews/6LNTSrJjBe.md` (LATS — Language Agent Tree Search) | 4.75 | Comparable framing (LLM+MCTS), broader scope but rejected for weaker execution and overclaiming |
+| `/human_reviews/kpL66Mvd2a.md` (Tree Search for LM Agents) | 5.50 | Similar: tree search + LLM for sequential tasks, rejected (split 6/3/8/5), comparable empirical strength |
+| `/human_reviews/F4f1afsm3R.md` (Interpretable Contrastive MCTS) | 4.60 | Similar topic, similar weaknesses around ablation/overstating; rejected |
+| `/human_reviews/tmBKIecDE9.md` (Motif: LLM feedback for RL/games) | 7.25 | Accepted; stronger theoretical grounding, more comprehensive evaluation across diverse difficulty levels |
+| `/human_reviews/I4YAIwrsXa.md` (DeepSeek-Prover MCTS+RL) | 6.25 | Accepted; stronger technical depth but narrower (theorem proving) |
+
+MC-DML sits between the 4.6-5.5 cluster of borderline/rejected LLM+MCTS papers and the 6.25-7.25 accepted papers. It is clearly stronger than the rejected papers in the low band (concrete contributions, real ablations, strong empirical improvements on hard games). However, it falls short of the high-scoring papers due to overstatement of the efficiency claim, incomplete isolation of the M_i contribution, and reliance on a single proprietary API. The paper's empirical results on hard games (Deephome, Ztuu) push it above the 4.75 LATS paper, but the incomplete ablations and missing compute analysis keep it below the accepted DeepSeek-Prover level. Calibrated score: **5.0**.
+
 ## Score and Decision
 
-**Calibration anchors:**
+**Originality:** Moderate. The approach is a natural combination of Reflexion (Shinn et al.) and PUCT-MCTS, with the key novelty being applying reflection *within* a single MCTS session. Not transformative but genuinely useful.
 
-| Path | Avg Score | Relation to paper |
-|---|---|---|
-| sdpVfWOUQA ("Planning with MCTS for LLMs") | 3.0 | Topically similar (LLM+MCTS); much weaker: no ablations, no memory mechanism, narrow experiments. MC-DML is clearly above this. |
-| PDAflvlxYY ("Language Decision Transformers") | 3.0 | Text-game specific; limited novelty, weak experiments. MC-DML is above this. |
-| LXiG2WqKXR ("STARLING") | 3.5 | Text RL with LLMs; weak ablations and narrow scope. MC-DML is above this. |
-| 6LNTSrJjBe ("LATS") | 4.75 | LLM+MCTS multi-domain; broader but weaker on specific domain, similar weakness pattern (missing baselines, overclaiming). Roughly comparable range. |
-| kpL66Mvd2a ("Tree Search for LM Agents") | 5.5 | Tree search + LM for web tasks; stronger scope, somewhat weaker mechanistic analysis. MC-DML comparable or slightly below. |
-| F4f1afsm3R ("Interpretable Contrastive MCTS") | 4.6 | MCTS+LLM reasoning; has ablations but weak reward model, overclaims efficiency. More similar weakness profile. |
-| ADSxCpCu9s ("LoTa-Bench") | 6.0 | LLM task planning benchmark; accepted poster. Broader contribution (benchmark), comparable rigor. |
-| fp6t3F669F ("BALROG") | 6.25 | LLM gaming benchmark; accepted poster. More general contribution. |
+**Importance of Research Question:** High. Text-based games are a valuable sequential decision-making benchmark, and the cold-start problem in MCTS-RL is real and well-motivated.
 
-**Assessment:** MC-DML is substantially above the 3.0–3.5 range (which reflects shallow experiments and no ablations). It is roughly at the level of 6LNTSrJjBe (LATS, 4.75) and F4f1afsm3R (~4.6) in terms of scope and weakness pattern, but MC-DML has tighter focus and cleaner ablations. The kpL66Mvd2a anchor (5.5, rejected) is the most comparable: a focused tree-search paper for a specific domain, with solid but incomplete experiments. MC-DML's major open issues (computational cost omission, Ludicorp failure unaddressed, k not ablated) align with a paper that makes genuine contributions but leaves important analytical gaps. The dramatic results on hard games (Deephome, Ztuu) push it slightly above pure borderline, but the efficiency claim framing issue and missing computational analysis are genuinely major.
+**Claims Well-Supported:** Partially. The empirical gains on Deephome and Ztuu are well-supported. The efficiency claim is not, due to missing cost analysis.
 
-**Evaluation on key axes:**
-- *Originality:* Moderate. The combination of PUCT + LLM + in-trial/cross-trial memory is novel in the text-game domain, though individually these are established ideas.
-- *Importance of research question:* Meaningful. Text-based games are good testbeds for language-grounded planning, and avoiding expensive RL iterations is practically relevant.
-- *Claims well-supported:* Partially. Effectiveness claims are well-supported; efficiency claims are not.
-- *Soundness of experiments:* Generally sound, with the notable gap of Ludicorp and missing compute budget data.
-- *Clarity of writing:* Good. Method is clearly described.
-- *Value to research community:* Moderate. Demonstrates LLM memory mechanisms can complement MCTS effectively, with ablation evidence.
+**Soundness of Experiments:** Moderate. Good ablations for Mc and DP, but Mi is not isolated. n=3 runs is standard. Uniform rollout policy unexplained.
 
-Final score: **5.0** — above borderline LLM+MCTS applications (3.0–4.0), roughly at the level of focused tree-search + LLM papers that were ultimately rejected (4.75–5.5), held back from acceptance territory by the missing compute analysis and the Ludicorp failure unexplained. Leaning toward reject given that the central efficiency narrative is not adequately supported and the method underperforms on one of the hardest games with no discussion.
+**Clarity of Writing:** Good overall, with the Section 3.1 Mi description inaccurately stating "trajectory history" for a one-step window.
+
+**Value to Research Community:** Moderate-to-good. The paper demonstrates a simple, practical improvement over prior MCTS methods in a real benchmark, with concrete mechanistic evidence. The cross-trial memory within MCTS is a useful and replicable idea.
+
+**Final Score: 5.0 (borderline reject)**
 
 MY FINAL SCORE: <pineapple>5.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

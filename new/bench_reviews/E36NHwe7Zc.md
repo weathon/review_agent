@@ -1,110 +1,115 @@
-Now let me search for calibration anchors.Now I have enough information to write the final review.
+Now let me search for calibration anchors.Now I have enough to write the final consolidated review. Let me also verify the Figure 1 caption claim from the harsh critic.Now I have all the information I need to write the final consolidated review.
 
 ---
 
 ## Summary
-The paper proposes **RoSe (Role-Guided and Self-Reflection)**, a prompt-based evaluation strategy that inserts role guidance (teacher/classmate, judge/lawyer) and strong-reminder cues ("the answer is X") across three self-reflection steps to probe LLM susceptibility to misleading information. Based on findings (LLMs over-rely on strong reminders; authority roles reduce but also reshape reliance), the authors propose a **double-calibrated strategy** — filtering GPT-4 outputs by accuracy consistency *and* verbalized confidence consistency — to build training data for fine-tuning open-source LLMs (LLaMA3-8B, Qwen-7B, Spark-13B). A new bilingual English grammar MCQ dataset (**EG-QA**) with 14 sub-category tags is contributed. Fine-tuned models exhibit smaller accuracy drops when cue information switches from ground-truth to random answers.
+
+This paper proposes **RoSe (Role-Guided and Self-Reflection)**, a systematic three-step prompting framework to evaluate whether LLMs "know what they know" by varying role (teacher/classmate/judge/lawyer/none), reminder presence ("answer is"), and cue type (truth/random). The paper reports behavioral findings on GPT-3.5/4 on two QA datasets, then proposes a **double-calibrated strategy** to extract high-quality reasoning data from GPT-4 and fine-tune open-source LLMs (Spark-13B, Qwen-7B, LLaMA3-8B) to be less susceptible to prompt manipulation. The central finding is that LLMs are highly sensitive to "answer is" cues, that role guidance attenuates this sensitivity, and that fine-tuning on calibrated data reduces over-reliance on misleading cues.
 
 ---
 
 ## Strengths
 
-- **Systematic experimental design (Tables 2–3):** Nine prompt conditions (role × reminder × cue type) applied to GPT-4 and GPT-3.5 on two domains yield a well-structured analysis. The comparison between "no-role + strong-reminder + truth" vs. "no-role + strong-reminder + random" directly isolates the shortcut-dependence effect (9.58% drop on EG-QA, 35.15% on JEC-QA for GPT-4), giving concrete empirical grounding to the over-reliance finding.
+- **Systematic factorial evaluation**: The paper varies role, reminder, and cue type in a full factorial design, producing coherent and replicable comparisons. Tables 2–3 show concrete, quantifiable sensitivity patterns — e.g., a 9.58% accuracy drop on EG-QA and 35.15% on JEC-QA (Section 5.3.1, RQ2) when cue switches from truth to random under strong reminders.
 
-- **Authority-trust finding (Tables 2–3):** The differential effect of authority vs. peer roles is concrete and replicable: under truth cues, Judge guidance (63.58% step-3 acc) outperforms Lawyer (52.46%) on JEC-QA, and Teacher outperforms Classmate on EG-QA, while both are lower than no-role (77.13%). This domain-expertise-sensitive asymmetry is a specific, interesting finding.
+- **Domain-familiarity modulates susceptibility**: The finding that GPT-4 is far more susceptible to cue manipulation on JEC-QA (legal domain, ~33% base accuracy) than on EG-QA (~91% base accuracy) is a concrete and meaningful result: models that don't truly know the material are more vulnerable to adversarial cues.
 
-- **Fine-tuning results demonstrating reduced shortcut reliance (Tables 4–6, Figure 4):** Fine-tuned LLaMA3-8B reduces its accuracy drop under Teacher+random cue from ~17% to ~6.8% on OOD EG-QA (Table 6); Qwen-7B similarly improves. This demonstrates observable behavioral change regardless of whether the mechanism is fully ablated.
+- **Joint tracking of verbalized confidence and accuracy**: Table 2's observation that confidence rises even as accuracy drops under misleading cues (overconfidence following wrong external information) is a specific and meaningful behavioral finding with implications for calibration research.
 
-- **EG-QA dataset (Table 1):** A bilingual English grammar MCQ dataset with 14 sub-category tags enabling explicit ID/OOD splits is a tangible artifact. The dataset covers 26,458 questions sourced from real Chinese high-school examinations and includes Chinese introductions, filling a niche not served by existing benchmarks.
+- **EG-QA with ID/OOD structure**: The construction of a 14-knowledge-point dataset with explicit in-distribution and out-of-distribution splits (Table 1) provides a principled evaluation of fine-tuning generalization, better than most fine-tuning papers evaluated solely on held-out samples from the same distribution.
 
-- **Completion degree (com) metric (Section 5.3.2):** The F1-style composite of accuracy and answer-completion rate is a practically motivated metric that addresses the real problem of base LLMs refusing to output a definite answer, enabling fairer comparisons.
+- **Cross-domain and cross-model consistency**: The behavioral pattern holds across EG-QA, JEC-QA, and openBookQA, and across GPT-3.5/4, Spark-13B, Qwen-7B, and LLaMA3-8B (Tables 2–6, Figure 3), which strengthens the generality of the evaluation findings.
+
+- **Δ sensitivity metric**: The Δ measure (change in performance when cue switches from truth to random, Tables 4–6) concisely captures model robustness and shows that fine-tuned models have substantially smaller Δ values, e.g., Qwen-7B ID drops from Δ=0.1416 to Δ=0.0440 (Table 5).
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-*None.*
+None.
 
 ### Major
 
-- **Conceptual framing mismatch: sycophancy ≠ self-knowledge.** The paper's stated goal — evaluating "whether LLMs know what they know" — invokes the epistemic calibration literature (Kadavath et al., 2022, cited in the paper). Calibration requires measuring whether a model's stated confidence predicts actual correctness (Eq. 1). What the paper actually measures is whether models change their answers when a prompt explicitly states "the answer is X" — i.e., susceptibility to adversarial authority cues, which is *sycophancy* / prompt robustness. A model that correctly knows the answer but also (rationally) updates on an explicit authority statement would be penalized under RoSe despite good self-knowledge. The paper never closes the loop on Eq. 1: no ECE, no reliability diagram, no calibration measurement appears anywhere. The formal definition (Eq. 1) and the actual experiments address different constructs. This mismatch propagates through all four RQs (framed as self-knowledge questions) and weakens the paper's theoretical contribution, though the empirical findings about sycophancy remain valid.
+- **Conceptual conflation: instruction-following ≠ self-knowledge failure.** The paper's central interpretive claim — that a model which updates its answer toward a "answer is X" cue demonstrates a failure of self-knowledge (Section 5.3.1, RQ1: "LLMs fail to adhere to their own correct answer, exhibiting uncertainty on themselves") — is not adequately defended. RLHF-tuned models are explicitly trained to integrate user-provided information; doing so is expected behavior, not an epistemic failure. Both (a) a model that knows the right answer but defers to user instructions, and (b) a model that genuinely doesn't know and updates on external information, produce identical surface behavior (answer changes toward the cue). The experimental design cannot distinguish these two scenarios. This conflation colors all four RQs and the paper's framing. The *behavioral observations* (sensitivity to "answer is" reminders) remain valid and interesting from a robustness/sycophancy perspective, but the self-knowledge framing overstates what can be inferred from the data.
 
-- **Absent ablation of double-calibration vs. single-calibration.** The paper's second core contribution is that filtering training data by *both* accuracy-consistency *and* confidence-consistency (double-calibration) produces better fine-tuned models than not fine-tuning. But there is no comparison against: (a) fine-tuning on accuracy-filtered-only data (single calibration), (b) fine-tuning on all GPT-4 RoSe outputs without filtering, or (c) fine-tuning on any comparable English grammar instruction data. Without these baselines, the observed improvements over the base model reflect only that fine-tuning on in-domain GPT-4 outputs helps — not that the double-calibration filter specifically contributes. The paper's claim that the "double-calibrated strategy" is the operative mechanism is unsupported.
+- **Missing ablations on the double-calibrated strategy.** The paper's second contribution claims effectiveness of double-calibrated filtering (accuracy consistency + confidence monotonicity across steps, Section 4.2). Tables 4–6 show fine-tuned models outperform their base counterparts, but there is no ablation comparing: (a) fine-tune on all GPT-4 data without calibration vs. (b) accuracy-filtered only vs. (c) confidence-calibrated only vs. (d) the full double-calibrated pipeline. The training data is entirely generated by GPT-4, so improvements could entirely be explained by knowledge distillation from a stronger teacher. The causal claim that the *double-calibration specifically* is responsible for improved robustness is unsubstantiated. This is a structural gap: the primary methodological claim requires experimental isolation that is absent.
+
+- **No competitive fine-tuning baselines.** Fine-tuned models are compared only against their own un-fine-tuned base (Tables 4–6, Figure 4). There is no comparison to: (a) standard SFT on correct-answer GPT-4 QA data without RoSe structure; (b) anti-sycophancy training approaches referenced in the related work. Without such baselines, it is impossible to determine whether the proposed pipeline does more than simple knowledge distillation from GPT-4. The paper claims "effectiveness of double-calibrated strategy" (Section 6) but this conclusion cannot be drawn from base-model-only comparisons.
 
 ### Minor
 
-- **Circular use of verbalized confidence as quality filter.** The double-calibration strategy selects training examples where verbalized confidence is maintained or increased alongside accuracy. Yet Section 5.3.1 (RQ4) explicitly reports that LLMs show overconfidence even when accuracy is *decreasing* ("despite the increasing uncertainty"), and acknowledges that GPT-3.5 expresses confidence very differently from GPT-4. Using a known-miscalibrated signal as a quality filter requires validation that the filtered subset is actually higher-quality (e.g., show that confidence-filtered ≠ accuracy-filtered in composition and that it yields better held-out performance). The paper does not provide this, nor does it report what fraction of data is retained by the confidence filter beyond the accuracy filter.
+- **Alternative explanations for role guidance effects not tested (RQ3).** The paper attributes reduced sensitivity under role guidance to the model "focusing on the real problem" rather than cues (Section 5.3.1, RQ3). A simpler alternative: adding a role introduces a second external signal that divides the model's attention across two competing cues, mechanically reducing marginal sensitivity to the "answer is" reminder. This alternative is not tested or acknowledged, making the RQ3 finding weaker than presented.
 
-- **EG-QA ID/OOD characterization is overstated.** The "OOD" split uses categories (articles, conjunctions, adverbs, adverbial clauses) that are lexically and structurally close to the "ID" categories (prepositions, verbs, nouns, adjectives, object clauses). Without a distributional shift measure (e.g., embedding distance between splits, or human difficulty ratings), calling the gap "out-of-distribution" may overstate the generalization challenge. The fine-tuned models' gains on this "OOD" set may reflect simple structural similarity rather than genuine distribution shift.
+- **Verbalized confidence used without formal calibration measurement.** The paper's theoretical framework (Equation 1, Section 3) is standard calibration, yet no Expected Calibration Error (ECE) or reliability diagram is reported. The confidence values in Tables 2–3 are uniformly high (0.87–0.99), suggesting severe overconfidence flagged in passing (RQ4) but never formally quantified. The gap between verbalized confidence and actual accuracy is asserted but not measured rigorously.
+
+- **Training data distribution across conditions not specified.** Footnote 4 states 18,598 calibrated samples are obtained from GPT-4, but the paper does not clarify how these distribute across the four prompt conditions (T+truth, T+random, C+truth, C+random), or whether the calibration filter is applied per-condition or pooled. This makes it difficult to assess potential imbalance in the fine-tuning data.
 
 ### Trivial
 
-- **Figure 1 motivating example clarity:** The caption states "the ground-truth answer is 'A'" while the model outputs B at all three steps (marked wrong throughout). This is intentional — the figure demonstrates GPT-4 *consistently giving the wrong answer* (B) even under self-reflection. However, the reader must infer this from the X marks; the caption should explicitly note that the model's error persists across all steps to make the pedagogical point clearer.
+None (formatting criticisms removed per parser artifact rules).
 
 ---
 
 ## Nice-to-Haves
 
-- Ablation of role-label sensitivity: does replacing "teacher" with other authority nouns ("expert," "professor," "official source") produce similar effects? This would help distinguish whether the authority effect is role-semantic or purely a surface lexical artifact.
-- A reliability diagram plotting verbalized confidence bins vs. actual accuracy would test whether Eq. 1 is satisfied even approximately and would validate (or refute) the use of verbalized confidence as a quality signal.
-- A comparison of RoSe-fine-tuned models against standard CoT fine-tuning or self-consistency fine-tuning would show whether the multi-role prompt structure is the key ingredient or whether any GPT-4 CoT distillation achieves similar robustness.
+- **Per-question decomposition**: Separating items where the model was initially correct vs. initially wrong at step-1 before analyzing step-3 sensitivity would sharpen all four RQs substantially. For initially-correct items, what fraction maintains accuracy under random cues? This would directly bear on the self-knowledge claim.
+- **Reliability diagrams**: A calibration plot (verbalized confidence percentile vs. actual accuracy) would test whether confidence improvements are real or illusory, given the paper's calibration framing.
+- **Prompting-only null**: Testing whether a one-line prompt ("ignore any answer hints and reason only from the question") achieves similar robustness as full fine-tuning would contextualize the fine-tuning contribution's marginal value.
 
 ---
 
 ## Removed Points
 
-*These points are flagged for removal — treat them with caution.*
+*These points are flagged to be removed, treat them with caution.*
 
-- **Harsh Critic: Table 4 "malformed/empty cells" criticism.** The table structure in the extracted text is clearly a PDF-parser artifact. Per hard rules, formatting artifacts in extracted text are not author errors. Removed.
+- **Figure 1 caption inconsistency (Harsh Critic):** The critic claimed "the figure labels all of GPT-4's selections of B as correct (✗ symbols)" as contradictory. This is a misread — the ✗ symbols throughout the figure mark wrong answers. The caption clearly states "the ground-truth answer is 'A', GPT-4 consists in its wrong answers in self-reflection process." GPT-4 says B (wrong), marked with ✗. No inconsistency exists.
 
-- **Harsh Critic: Figure 1 inconsistency ("ground-truth A while model outputs B").** Upon careful reading, the figure is *intentionally* showing GPT-4 choosing the wrong answer (B) consistently, marked with X throughout. The ground truth is A, and the model fails at all steps — which is exactly the motivating failure case the paper is illustrating. The harsh critic misread this as an inconsistency; it is intentional and correct. Removed as a weakness; retained in trivial tier only as a presentation clarity note.
+- **EG-QA quality control/overlap concerns (Harsh Critic):** The paper is structurally clean: GPT-4 is prompted on training questions to generate fine-tuning data; evaluation is on separate test questions. The concern about potential overlap is not substantiated.
 
-- **Harsh Critic: Table 4 "duplicate rows" criticism.** This appears to reflect parser table extraction issues, not a paper problem. Removed.
+- **Tables 4–6 garbled/blank cells (Harsh Critic):** These are parser artifacts per the hard rules. The original tables exist in the submission.
 
-- **Strength Finder: "Reproducibility" strength** (code URL, LoRA hyperparameters). This is standard practice, not a noteworthy strength. Removed.
-
-- **Strength Finder: "Cross-domain and cross-model breadth" as a standalone strength.** While present, this is generic and applies to many evaluation papers. The specific domain selection (EG-QA, JEC-QA) is what matters and is captured in the authority-trust finding above. Removed as standalone.
+- **Cross-domain consistency as generic strength (Strength Finder):** Retained in Strengths above because it is backed by specific experiments across 3 datasets and 5 models, not purely generic.
 
 ---
 
 ## Novel Insights
 
-The most genuinely novel observation is the domain-conditioned differential trust in authority roles: authority roles (teacher, judge) increase step-3 accuracy when cues are correct, but *more strongly decrease* accuracy when cues are wrong compared to peer roles, suggesting that LLMs' authority deference is amplified in domains where they have less pre-trained confidence (legal > grammar). This creates an inverse relationship between role authority and robustness to misinformation that has potential implications for RLHF alignment: the harder a domain, the more dangerous authority-framing prompts become. The paper identifies this pattern in Tables 2–3 but does not analyze the mechanism.
+The most genuinely informative finding is the interaction between domain familiarity and susceptibility to cue manipulation: GPT-4 drops 9.58% on EG-QA (familiar domain) but 35.15% on JEC-QA (specialist legal domain, ~10% human pass rate) when switching from truth to random cues under strong reminders. This suggests that susceptibility to prompt shortcuts is not a fixed property of the model but scales inversely with the model's genuine competence on the topic — a finding with practical implications for deploying LLMs in specialized domains. The companion observation that verbalized confidence *rises* even as accuracy drops under misleading cues (RQ1, Table 2) reinforces that confidence calibration is particularly fragile in adversarial prompt conditions.
 
 ---
 
 ## Suggestions
 
-1. **Add a single-calibration baseline:** Fine-tune one model with accuracy-only-filtered data and compare Δ values to the double-calibrated model. This directly tests whether the confidence filter contributes beyond the accuracy filter.
-2. **Reframe the theoretical contribution:** Replace the self-knowledge/calibration framing with an explicit sycophancy/authority-bias framing. The empirical findings are real and interesting; they just belong to a different theoretical tradition. Citing the sycophancy literature (Wang et al. 2023a, Cohn & Hernandez-Orallo 2023 — both already cited) as the primary frame would strengthen, not weaken, the contribution.
-3. **Validate the OOD claim:** Report an embedding-space distance or difficulty metric between the ID and OOD splits of EG-QA to justify the distributional shift characterization.
-4. **Report data retention rate:** State how many examples pass double-calibration vs. single-calibration vs. no filtering. If the confidence filter discards <5% of data, its contribution is marginal; if it discards >30%, its role is significant.
+1. Add a controlled ablation: (a) all GPT-4 data, (b) accuracy-filtered only, (c) confidence-filtered only, (d) full double-calibrated — before claiming the strategy's causal effectiveness.
+2. Add a competitive fine-tuning baseline (standard QA-SFT on GPT-4 data without RoSe structure) to establish that the pipeline does more than knowledge distillation.
+3. Reframe the paper around *robustness to adversarial cues* rather than *self-knowledge*, which better fits what the experiment actually measures and avoids the RLHF instruction-following conflation.
+4. Report ECE or reliability diagrams for verbalized confidence to substantiate the calibration claims in Section 3.
 
 ---
 
 ## Score and Decision
 
-**Calibration anchors:**
+**Calibration anchors used:**
 
-| Paper | Avg Score | Comparison |
-|---|---|---|
-| E2PFv7ad3p — *VLM Sycophancy (MM-SY benchmark + mitigation)* | 6.67 | Accepted; more rigorous (multiple mitigation methods, attention probing, explicit sycophancy framing). The paper under review is weaker in methodological rigor and missing the ablations that anchor that paper's claims. |
-| yRKelogz5i — *CAUSM causal sycophancy mitigation* | 6.00 | Accepted; stronger methodology (causal framework, comparative baselines). Same topical overlap; paper under review lacks comparable depth. |
-| Z8Mfy0iK4n — *Entropy-guided LLM reliability (SREF)* | 3.67 | Rejected; similar issues (missing comparisons, theoretical-empirical mismatch). Paper under review has larger experimental scale and a new dataset, giving it an edge. |
-| UnstiBOfnv — *Style Over Substance evaluation biases* | 3.67 | Rejected; small-scale (40 questions), thin contribution. Paper under review is more systematic, so sits above this anchor. |
-| P2BgxNCFs9 — *FB-Bench multi-turn evaluation benchmark* | 4.00 | Rejected (treated as reject); comparable scale but similarly weak on baselines. |
+| Paper | Path | Avg Score | Comparison |
+|---|---|---|---|
+| VLM Sycophancy (E2PFv7ad3p) | human_reviews/E2PFv7ad3p.md | 6.67 (Accepted) | Most topically similar accepted paper — has benchmark + multiple mitigation methods + mechanistic analysis. More rigorous than paper under review. |
+| Causal Sycophancy Mitigation (yRKelogz5i) | human_reviews/yRKelogz5i.md | 6.00 (Accepted) | Sycophancy paper with principled causal design; stronger methodological grounding than paper under review. |
+| LLM Spark Critical Thinking Eval (0sJ8TqOLGS) | human_reviews/0sJ8TqOLGS.md | 5.25 (Rejected) | Very similar in spirit — evaluation framework for LLMs with misleading cues, comparable experimental scope. Closest to this paper's quality tier. |
+| Entropy-guided LLM reliability (Z8Mfy0iK4n) | human_reviews/Z8Mfy0iK4n.md | 3.67 (Rejected) | Similar theme (LLM self-knowledge/reliability) but even thinner execution. |
+| Self-assessing LLMs (6GvJf1AWvF) | human_reviews/6GvJf1AWvF.md | 3.50 (Rejected) | Rejected for missing baselines and ablations — the same structural gap as this paper, though this paper has stronger evaluation design. |
 
-The paper under review sits below the accepted sycophancy papers (6.0–6.67) because it lacks the ablations and baselines that make those papers' claims credible, and because the theoretical framing mismatch is substantive. It sits above the 3.67–4.0 rejected papers because it has a larger experimental matrix, a contributed dataset, and three fine-tuned models with observable improvements. I place it at **4.5**.
+**Positioning:** The paper is most comparable to 0sJ8TqOLGS (avg 5.25, rejected) — a systematic LLM evaluation framework with misleading cues and some mitigation results. This paper has a slightly more complete factorial design and includes actual fine-tuning experiments, but is undermined by three major gaps that 0sJ8TqOLGS also suffered from: missing ablations, absent competitive baselines, and interpretation that outruns the evidence. It clearly falls below the 6.0–6.67 accepted sycophancy papers, which had mechanistic analysis and proper ablations. The paper is comfortably above the 3.5 floor (it has real and interesting behavioral findings). I settle at **4.5**.
 
-**Originality:** Low-moderate — the prompting approach is novel in composition but individually unremarkable; the framing as "self-knowledge" is borrowed from calibration literature but not delivered on.  
-**Importance of research question:** The sycophancy question is important and timely.  
-**Claims vs. support:** The sycophancy/sensitivity findings are well-supported; the claim that double-calibration specifically drives improvement is not.  
-**Soundness of experiments:** Adequate for the evaluation part; insufficient for the fine-tuning attribution claim.  
-**Clarity:** Decent but imprecise (conceptual confusion between calibration and sycophancy).  
-**Value to community:** EG-QA dataset and authority-role findings have standalone value; the fine-tuning recipe needs more ablations to be actionable.
+**Originality**: Moderate — the sycophancy-via-cue-injection paradigm is not new, but the factorial role/reminder/cue design adds systematic structure. The "double-calibrated" fine-tuning idea is incremental.  
+**Importance of research question**: High — understanding and mitigating LLM over-reliance on prompt shortcuts is important for alignment and safety.  
+**Claims vs. support**: Weak — the causal claim for the double-calibrated strategy is unverified without ablations; the "self-knowledge failure" framing overstates what the experiment demonstrates.  
+**Soundness of experiments**: Moderate — the evaluation design is systematic but fine-tuning experiments lack controls.  
+**Clarity of writing**: Adequate — the RoSe framework is clearly described; Tables 4–6 are dense but navigable.  
+**Value to community**: Limited — the behavioral findings are interesting but the fine-tuning contribution is not shown to exceed simple knowledge distillation.
 
-**Final Score: 4.5 — Reject**
+**Decision: Reject.**
 
 MY FINAL SCORE: <pineapple>4.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

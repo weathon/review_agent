@@ -1,116 +1,118 @@
-Now I have enough of the paper. Let me verify the key factual claims before running calibration search.
+Now let me run calibration searches to properly score this paper.Now I have enough to write the final consolidated review. Let me verify the key numerical claim about inconsistencies one more time:
 
-Key findings from reading the paper:
-1. Table 3 confirms: GPT-4 scores on FormL4-Basic AS = 90.23%, but abstract says 88.91%. GPT-4 MiniF2F-Valid AS = 67.24% in Table 3, but abstract says 64.34% (and Section 4.3 repeats 64.34%). This is a real inconsistency.
-2. Figure 3 confirms 40% random pairing in FormL4-Basic and FormL4-Random datasets.
-3. Section 4.4 confirms 65.00% FORMALALIGN vs 79.58% human correctness.
-4. Table 3 confirms FORMALALIGN loses to GPT-4 on FormL4-Random AS (85.85 vs 91.85), MiniF2F-Valid AS (66.39 vs 67.24), and MiniF2F-Test AS (64.61 vs 70.82).
+From the paper:
+- **Abstract**: "99.21% vs. 88.91%" on FormL4-Basic, "66.39% vs. 64.34%" on MiniF2F-Valid
+- **Table 3**: GPT-4 = **90.23%** on FormL4-Basic, **67.24%** on MiniF2F-Valid
+- **Section 4.3 narrative**: "GPT-4, which obtained AS scores of **64.34% and 68.31%** on the same datasets [MiniF2F-Valid, MiniF2F-Test]" — Table 3 shows 67.24% and 70.82%
 
-Now let me run calibration searches.Now I have enough to write the full review. Let me compile the findings.Now I have sufficient information to write the final consolidated review.
+The inconsistency is confirmed and substantial: per Table 3, GPT-4 at 67.24% on MiniF2F-Valid *beats* FORMALALIGN at 66.39%, but the abstract claims FORMALALIGN wins by 3.19%. This undermines a key claimed result.
 
 ---
 
 ## Summary
-
-FORMALALIGN is a framework for automated alignment evaluation in autoformalization — specifically, detecting whether a natural language (informal) mathematical statement is semantically aligned with its Lean 4 formalization. The authors fine-tune a Mistral-7B model with a dual loss combining cross-entropy (generation task) and InfoNCE-style contrastive loss (representation alignment), and at inference compute an alignment score averaging token-level certainty and embedding cosine similarity. The system is evaluated on four synthetic benchmark variants derived from MiniF2F and FormL4, augmented with six rule-based misalignment perturbation strategies.
+FORMALALIGN introduces the first automated alignment evaluation framework for autoformalization, combining cross-entropy sequence generation loss with a contrastive representation-alignment loss on a fine-tuned 7B LLM. The model assigns an alignment score to informal–formal statement pairs and is evaluated on four benchmarks augmented with six synthetic misalignment strategies. The paper targets a real gap: neither Lean compiler output nor BLEU score detects semantically misaligned but syntactically valid formal statements.
 
 ---
 
 ## Strengths
 
-- **Addresses a real and important gap.** Existing evaluation relies on Lean compilers (catching only logical invalidity) or surface BLEU (missing semantic errors). The Figure 1 example demonstrates concretely that a logically valid, high-BLEU Lean statement can be semantically wrong (e.g., `80 * c = 63` vs. the correct `63 * a = 80 * c`).
+- **First AAE framework with clear motivation (Figure 1, Section 1):** The Figure 1 motivating example — a Lean statement that compiles successfully and achieves BLEU 0.9022 yet is semantically misaligned — concretely demonstrates the gap that existing metrics cannot close. The problem is both real and under-addressed.
 
-- **Multi-backbone generalization (Table 4).** The paper shows that the FORMALALIGN training recipe generalizes across Phi-2.7B, LLaMA2-7B, DeepSeekMath-7B, and Mistral-7B, all improving over baselines — this is concrete evidence that the training scheme is architecture-agnostic, not an artifact of one model's inductive biases.
+- **Dramatic precision advantage over GPT-4 (Table 3):** FORMALALIGN achieves 93.65% precision vs. GPT-4's 42.68% on FormL4-Basic and 68.58% vs. 59.85% on MiniF2F-Valid. This precision improvement is consistent across datasets and directly supports the core claim that the model generates far fewer false alignments than prompted GPT-4.
 
-- **Structured misalignment taxonomy (Table 2, Figure 3).** The six misalignment categories (constant modification, exponent modification, new variable, variable type change, equality swap, random pairing) provide the community with a reproducible, structured perturbation vocabulary for autoformalization evaluation.
+- **Dual-loss ablation demonstrates meaningful contribution of CL component (Table 5):** CE alone yields 52.45% on out-of-domain MiniF2F-Valid; CE+CL yields 66.39%, a 13.94 pp improvement. The contrastive loss provides significant incremental benefit beyond domain-specific fine-tuning alone, especially on out-of-domain data.
 
-- **Substantial precision improvement over GPT-4.** FORMALALIGN achieves 93.65% vs. 42.68% precision on FormL4-Basic (Table 3), demonstrating that a fine-tuned 7B model with a calibrated threshold substantially reduces false-positive alignment calls relative to a zero-shot prompted LLM.
+- **Multi-architecture generalization (Table 4):** The FORMALALIGN framework is validated across Phi2-2.7B, LLaMA2-7B, DeepSeekMath-7B, and Mistral-7B, demonstrating architectural robustness and practical deployability.
 
-- **Practical runtime argument.** FORMALALIGN reviews 80 items in <2 minutes vs. ~3 hours per human expert (Section 4.4), establishing genuine pre-screening utility even if accuracy is imperfect.
+- **Six-strategy misalignment taxonomy (Table 2):** The paper provides a principled and concrete taxonomy of Lean misalignment types (constant modification, exponent modification, new variable introduction, variable type change, equality swap, random pairing), which is useful to the community independently of the evaluation framework.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-
-*(None that fully invalidate the framework concept, but see Major issues below which jointly undermine the headline claims.)*
+None — the paper's core framework (dual-loss fine-tuning for alignment evaluation) is technically coherent and yields real improvements.
 
 ### Major
 
-- **Internal number inconsistency between abstract/Section 4.3 and Table 3 — headline claims are not supported by the paper's own data.** The abstract states FORMALALIGN is "3.19% higher on MiniF2F-Valid (66.39% vs. 64.34%)" over GPT-4. But Table 3 shows GPT-4's MiniF2F-Valid AS = **67.24%**, meaning FORMALALIGN (66.39%) is actually **0.85% lower**. Similarly, Section 4.3 states GPT-4 achieves "64.34% and 68.31%" on MiniF2F-Valid/Test, while Table 3 shows 67.24% and 70.82%. For FormL4-Basic, the abstract quotes GPT-4 at 88.91% but Table 3 shows 90.23%. These are not rounding errors — they differ by 2–4 percentage points and change the sign of the comparison. Verified directly from Table 3: FORMALALIGN loses to GPT-4 on AS for FormL4-Random (85.85 vs. 91.85), MiniF2F-Valid (66.39 vs. 67.24), and MiniF2F-Test (64.61 vs. 70.82). Only on FormL4-Basic does FORMALALIGN lead in AS (99.21 vs. 90.23). The claim of broad GPT-4 outperformance in the abstract and introduction is unsupported.
+- **Numerical inconsistencies between abstract, body, and Table 3 directly undermine a key result.** The abstract states FORMALALIGN outperforms GPT-4 by 3.19% on MiniF2F-Valid (66.39% vs. 64.34%). However, Table 3 shows GPT-4 at **67.24%**, meaning FORMALALIGN at 66.39% actually *loses* to GPT-4 on that metric. Similarly, the abstract claims GPT-4 scores 88.91% on FormL4-Basic, but Table 3 shows 90.23%. Section 4.3 uses yet a third set of GPT-4 numbers (64.34% and 68.31% for MiniF2F-Valid and MiniF2F-Test) that differ from both the abstract and Table 3. These discrepancies span ~1–3 pp and are not rounding artifacts; they are mutually inconsistent numerical claims, with at least one of the two advertised "wins" for FORMALALIGN being contradicted by its own primary results table.
 
-- **Evaluation conducted on synthetic benchmarks using the same perturbation strategies as training, with 40% trivially-detectable random pairings.** Figure 3 and Table 2 confirm that 40% of all negatives in FormL4-Basic and FormL4-Random are "random pairing" — an entirely different theorem from the corpus substituted in. Detecting a completely unrelated theorem requires no nuanced semantic understanding. The headline AS of 99.21% on FormL4-Basic is achieved on a benchmark where nearly half the negatives can be filtered by rudimentary topic matching. Furthermore, since the six perturbation strategies appear in training data and test data alike, the evaluation measures memorization of detection categories, not generalization to real autoformalization errors of the kind illustrated in Figure 1. No evaluation on actual LLM-generated autoformalization outputs with human-verified alignment labels is provided to bridge this gap.
+- **Overstated advantage over GPT-4 through selective reporting.** Per Table 3, GPT-4 outperforms FORMALALIGN on 3 of 4 datasets by AS (FormL4-Random: 91.85% vs. 85.85%; MiniF2F-Valid: 67.24% vs. 66.39%; MiniF2F-Test: 70.82% vs. 64.61%). The abstract and Section 4.3 narrative only cite datasets where FORMALALIGN appears to lead, and the cited GPT-4 numbers for MiniF2F differ from Table 3. The framing "outperforms GPT-4" is materially misleading given that Table 3 shows GPT-4 winning on AS in three of four settings.
 
-- **Human evaluation reveals a 14.58% accuracy gap (65.00% FORMALALIGN vs. 79.58% human), which the paper underplays.** Section 4.4 reports this result and defers details to Appendix G. A 35% error rate (on the evaluated subset) for a system described as "significantly reduc[ing] the need for manual verification" is a substantive limitation that warrants explicit analysis in the main paper — specifically, which misalignment types FORMALALIGN fails on and what that implies for practical deployment.
+- **Evaluation limited to synthetic misalignments that mirror training negatives.** Training and test negatives are generated using the same six perturbation strategies (Section 4.1, Table 2). This means the headline result of 99.21% AS on FormL4-Basic measures in-distribution perturbation detection, not general-purpose semantic misalignment detection. The human evaluation (Appendix G, 65% correctness) partially addresses this limitation but with only 80 items per expert, limited scope, and a substantial 14.58 pp gap below human expert performance (79.58%). The paper does not evaluate on real misaligned outputs from deployed autoformalization systems (e.g., LLM-generated Lean statements that compile but are semantically wrong), which is the actual deployment target.
 
 ### Minor
 
-- **Contrastive loss ablation results are difficult to interpret due to confounding of training and inference components.** Table 5 shows CE-only achieves 98.64% vs. 99.21% (combined) on FormL4-Basic — a 0.57 point gain. The larger gain on MiniF2F-Valid (52.45% CE-only → 66.39% combined) is the paper's strongest evidence for the contrastive loss, but the ablation conflates two changes: the training loss and the inference score. A model trained with CE-only but evaluated only on Vcer (Table 6: "w/ cer") would clarify whether the MiniF2F gain comes from contrastive training or the similarity score component at inference time.
+- **Recall on out-of-domain data is poor and under-discussed.** FORMALALIGN achieves 60.66% recall on MiniF2F-Valid and 63.37% on MiniF2F-Test, compared to GPT-4's 89.87% and 92.88% (Table 3). In a practical pipeline designed to reduce manual verification burden, a ~40% miss rate on out-of-domain data means a large fraction of true misalignments go undetected, requiring human follow-up. This represents a significant practical limitation that the paper mentions but does not analyze or discuss.
 
-- **Alignment threshold θ = 0.7 is applied without documented calibration.** The precision/recall comparison in Table 3 is entirely determined by this threshold (GPT-4 shows high recall but low precision — a classic miscalibration artifact from an uncalibrated output threshold). Comparing FORMALALIGN and GPT-4 at a single fixed θ, rather than at equal-recall operating points or via P-R curves, makes the precision comparison difficult to interpret as a capability gap.
+- **Human evaluation accuracy gap under-discussed.** Section 4.4 reports that human experts achieve 79.58% correctness vs. FORMALALIGN's 65.00% — a 14.58 pp gap. The paper frames this primarily as a speed advantage (under 2 minutes vs. 3 hours) without discussing whether a 65% correctness rate is sufficient for a tool meant to "significantly reduce the need for manual verification." This should be contextualized as a limitation.
 
-- **BERTScore is cited in the introduction (line 45) as failing on the motivating example but is never included as a quantitative baseline.** If BERTScore systematically fails on this class of misalignment, showing that empirically would strengthen the motivation.
+- **Fine-tuned 7B model vs. prompted GPT-4 comparison framing.** It is well established that domain-specifically fine-tuned smaller models can beat much larger prompted models on narrow tasks. The comparison in Table 3 demonstrates that fine-tuning on domain-specific data is effective, but it does not support the "outperforms GPT-4" framing as a general model capability claim. The paper should include a fine-tuned discriminative baseline (e.g., binary classifier) and note that the comparison is a fine-tuning vs. prompting comparison, not an intrinsic model superiority claim.
+
+- **Contrastive loss mechanism not fully understood.** Table 5 shows CL-alone performs well below CE-alone (59.05% vs. 98.64% on FormL4-Basic). While CE+CL beats CE-alone on MiniF2F (66.39% vs. 52.45%), the paper does not explain why CL helps on out-of-domain data but barely helps in-domain. This leaves the mechanism of the "mutual enhancement" claim (abstract) not fully substantiated; it could partly be a data augmentation effect.
 
 ### Trivial
 
-*(None beyond the number inconsistencies already flagged above as Major.)*
+- **Threshold $\theta = 0.7$ is fixed without cross-validation or sensitivity analysis.** A brief sensitivity analysis would clarify whether the threshold choice materially affects the precision–recall tradeoff.
 
 ---
 
 ## Nice-to-Haves
 
-- Evaluate FORMALALIGN on real autoformalization outputs (from GPT-4 or Mistral attempting FormL4/MiniF2F problems) with human-labeled alignment/misalignment as ground truth, to close the gap between the motivating example and the benchmark.
-- A per-misalignment-type performance breakdown (especially distinguishing "constant modification" — the subtlest, most realistic error — from "random pairing") would reveal where the model succeeds and fails in practice.
-- A demonstration of FORMALALIGN as a pipeline filter — run an autoformalization system, filter with FORMALALIGN, measure reduction in human burden — would validate the practical claim directly.
-- The combination V_align = (V_cer + V_sim) / 2 is unweighted; a learned or ablated weighting could be more principled.
+- **Per-strategy breakdown of AS, Precision, and Recall.** Reporting results separately for each of the 6 misalignment types would reveal which perturbation types the model reliably detects and which it misses, providing actionable insight for future work.
+
+- **Score distribution histograms.** Showing the $\mathcal{V}_{\text{align}}$ distribution for aligned vs. misaligned pairs (perhaps per misalignment type) would justify the threshold choice and reveal whether scores are well-separated or borderline.
+
+- **Evaluation on real LLM autoformalization outputs.** Applying FORMALALIGN to formal statements generated by an autoformalization model (e.g., GPT-4-generated Lean theorems that compile), with human annotation as gold labels, would validate practical utility beyond synthetic perturbations.
+
+- **F1 or AUROC reporting** would give a threshold-independent view of detection performance and enable cleaner comparison between FORMALALIGN and GPT-4.
 
 ---
 
 ## Removed Points
 
-*These points are flagged to be removed — treat them with caution.*
+*These points are flagged to be removed; treat them with caution.*
 
-- **"GPT-4 comparison is structurally unfair" (as a standalone weakness):** Comparing a fine-tuned 7B model to zero-shot GPT-4 is standard practice in NLP and is not inherently unfair — the paper is not overclaiming because of this asymmetry. Importantly, Table 3 shows GPT-4 still wins on 3/4 AS metrics despite being zero-shot, which makes the point moot for the benefit-of-the-doubt argument. The comparison is kept as context for the precision/recall threshold issue but removed as an independent weakness.
+- **Harsh Critic – "Certainty score would fail on Figure 1's motivating example":** Speculative — the paper does not report certainty scores on this specific example, and the conclusion that the certainty score would fail (because the two expressions are "nearly identical token-for-token") is not verified. The combined score (Table 6, Eq. 5) includes the similarity component precisely to complement the certainty score.
 
-- **Criticism of the unweighted average V_align (Eq. 5) without ablation:** While a weighting ablation would be interesting, the paper does provide the cer-only and sim-only ablations (Table 6), which partially addresses this. This is a nice-to-have, not a major methodological flaw.
+- **Harsh Critic – "Asymmetric representation in cosine similarity is semantically meaningless":** The concern that $Z_\phi(\mathbf{NL}_i)$ and $Z_\phi(\mathbf{FL}_i|\mathbf{NL}_i)$ are asymmetric is technically valid, but (a) the paper is transparent about this design, (b) the combined score still works better than either component alone, and (c) the contrastive loss specifically trains representations to be aligned across this asymmetry. The claim that this "has no clean semantic interpretation" is overstated.
 
-- **Missing Appendix / missing proofs:** Stripped by the parser; not a real paper problem.
+- **Harsh Critic – "CL-alone performing below chance implies something":** CL-alone performing poorly does not imply the model is below chance (it's a ranking task over 22 candidates, not a binary coin flip). 45.25% sim-only and 59.05% CL-only on FormL4-Basic (compared to ~4.5% random chance for selecting 1-of-22) still reflects positive signal.
 
-- **Missing related works:** Per policy, not raised.
+- **Strength Finder – "FORMALALIGN achieves 66.39% vs. GPT-4's 64.34% on MiniF2F-Valid":** Conflicts with Table 3 (GPT-4 = 67.24% > FORMALALIGN = 66.39%). This claimed strength is contradicted by the paper's own results table and is removed.
+
+- **Strength Finder – "efficiently reduces reliance on manual verification":** Too generic and directly in tension with the verified 14.58 pp human accuracy gap and 40% miss rate on out-of-domain recall. Removed as delusional given those specifics.
 
 ---
 
 ## Novel Insights
 
-The strongest insight from synthesizing the reviews is the disconnect between the paper's motivating example (detecting a subtle constant transposition in a valid Lean theorem) and what the evaluation actually measures (detecting perturbations including 40% completely-unrelated theorem swaps). This gap is not merely a presentation issue — it suggests the benchmark was designed to showcase high aggregate scores rather than probe the hardest, most realistic failure mode. The MiniF2F results (where random pairing is reduced to 25% and constant/exponent modifications are 37%) give a more honest picture: FORMALALIGN achieves 66.39% AS, below GPT-4's 67.24%, and only 65% correctness in human evaluation. This profile — excellent in-domain on easy negatives, marginal out-of-domain — is consistent with a model that has learned the perturb-and-detect categories rather than generalizable semantic alignment understanding.
+The finding that similarity-score-alone ($\mathcal{V}_{\text{sim}}$) performs near or below 22% across all datasets (Table 6) while certainty-score-alone explains most of the model's performance is counterintuitive: it suggests that for a decoder-trained on NL→FL generation, the semantic alignment signal from the contrastive representation space is largely redundant with or subsumed by the generation confidence, at least for in-domain data. The meaningful CL gain only emerges out-of-domain (MiniF2F), where the certainty score's distributional advantage erodes. This is a diagnostic observation worth highlighting: the value of the contrastive objective is primarily as an out-of-domain regularizer, not a universal alignment signal.
 
 ---
 
-## Calibration Anchors and Score Rationale
-
-| Paper | Path | Avg Score | Relevance |
-|---|---|---|---|
-| Rethinking Autoformalization (BEq + RAutoformalizer) | hUb2At2DsQ.md | **7.20** (Spotlight Accept) | Directly on autoformalization evaluation — stronger: neuro-symbolic method, human-annotated benchmark, correct result claims |
-| Synthetic Theorem Generation in Lean | EeDSMy5Ruj.md | **5.00** (Reject) | Related formal math domain; rejected for marginal results, limited novelty |
-| Lyra: Dual Correction in Theorem Proving | 9Z0yB8rmQ2.md | **6.00** (Reject) | Automated theorem proving framework with empirical evaluation |
-| Contrastive Post-training LLMs | mmSmQ0gNyZ.md | **4.00** (Reject) | Contrastive training paper with weak results; low anchor |
-| Calibrate to Discriminate (ICL) | RUn41kd6i0.md | **4.00** (Reject) | Evaluation/calibration paper with inconsistent evidence; low anchor |
-
-**Score reasoning:** The hUb2At2DsQ anchor (7.20) solves an essentially identical problem but more rigorously — it builds a human-annotated equivalence benchmark and uses neuro-symbolic verification, whereas FormalAlign relies on synthetic perturbations and has inconsistent headline numbers. EeDSMy5Ruj (5.00) was rejected for marginal results but did not have internal number inconsistencies or overclaimed results. FormalAlign's incorrect abstract claims (verified: abstract cites GPT-4 AS numbers that do not match its own Table 3, and the comparison direction is wrong on 3/4 datasets) and the evaluation validity concern (40% trivially-detectable random pairings inflating scores) bring this below the 5.0 borderline. The framework concept is sound and the problem is important, but the evidence as presented does not support the claims made.
-
-**Final Score: 4.0**
-
 ## Score and Decision
 
-**Originality:** Moderate. Automated alignment evaluation for autoformalization is an under-explored area, and the dual-loss framework is reasonable, but not technically surprising.  
-**Importance:** High. Autoformalization is an active area and alignment verification is a genuine bottleneck.  
-**Claim support:** Weak. The headline claims in the abstract cite numbers inconsistent with the paper's own Table 3; FORMALALIGN is actually behind GPT-4 on 3/4 AS metrics.  
-**Experimental soundness:** Moderate concern. The 40% random-pairing rate in the highest-scoring benchmarks inflates results; no evaluation on real autoformalization errors.  
-**Clarity:** Mixed. Tables are clear but Section 4.3's narrative misreports its own table's numbers.  
-**Community value:** The misalignment taxonomy and multi-backbone analysis are genuinely useful.
+**Calibration anchors used:**
 
-**Decision: Reject.** The paper addresses a real problem and contains a reasonable framework, but the internal inconsistency between the abstract's headline numbers and Table 3, the over-reliance on trivially-detectable negatives in the highest-scoring benchmarks, and the human evaluation revealing a 35% error rate together prevent acceptance in the current form. Significant revision — including corrected claims, evaluation on real model outputs, and per-category analysis — is needed.
+| Paper | Path | Avg Human Score | Comparison to FORMALALIGN |
+|---|---|---|---|
+| BEq (autoformalization evaluation) | hUb2At2DsQ.md | 7.20 (Spotlight) | Similar topic, stronger formal grounding, expert-labeled benchmark, consistent numbers — FORMALALIGN is considerably weaker |
+| Synthetic Lean theorem generator | EeDSMy5Ruj.md | 5.00 (Reject) | Related area, marginal improvements, similar generalization concerns — FORMALALIGN is comparable in ambition but has worse reporting issues |
+| 7B math claim paper | fL8sds4naU.md | 3.50 (Reject) | Fine-tuned vs. prompted comparison issue, oracle selection — FORMALALIGN has the same comparison issue but less severely inflated results |
+| Numerical inconsistency paper | WFlLqUmb9v.md | 2.50 (Reject) | Flagged for numerical inconsistencies in results — directly relevant weakness |
+| PORTIA (alignment-based evaluation) | 1hLFLNu4uy.md | 5.00 (borderline) | Automated evaluation with similar moderate contribution level — FORMALALIGN has a slightly more novel contribution (first in domain) but weaker experiments |
+
+**Score reasoning:** FORMALALIGN identifies a real and novel problem with a reasonable approach. However, it has substantive reporting problems: the abstract cites GPT-4 numbers inconsistent with Table 3, and these inconsistencies directly affect whether the paper's headline claims are true (FORMALALIGN may not beat GPT-4 on MiniF2F-Valid at all). The selective reporting of results and the "outperforms GPT-4" framing are further problematic. The evaluation is limited to synthetic misalignments. These issues push the paper below the EeDSMy5Ruj borderline (5.0) and closer to the WFlLqUmb9v/fL8sds4naU range (2.5–3.5). The novelty of the problem and the genuine dual-loss insight pull it above the lowest tier. A score of **4.0** reflects a paper that addresses a real problem with a reasonable methodology but has significant reporting integrity issues and overclaimed results.
+
+**Originality:** Good — first AAE framework for autoformalization.
+**Importance of research question:** High — manual verification is a real bottleneck.
+**Claims vs. support:** Poor — headline claims in the abstract are inconsistent with the primary results table; GPT-4 advantage is likely overstated.
+**Soundness of experiments:** Moderate — multi-architecture, ablation-complete, but limited to synthetic negatives and with inconsistent numbers.
+**Clarity of writing:** Weak — the numerical inconsistencies across abstract, body, and table significantly impair trust.
+**Value to community:** Moderate — dataset creation methodology (Table 2) and dual-loss framework are useful, but the evaluation integrity issues reduce confidence in the results.
+
+**Decision: Reject**
 
 MY FINAL SCORE: <pineapple>4.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

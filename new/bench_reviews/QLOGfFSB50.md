@@ -1,23 +1,22 @@
-Now let me search for calibration papers.Now I have enough information to write the final review. Let me compile it.
-
----
+Now let me search for calibration anchors.Now I have enough information to write the final meta-review. Let me synthesize everything.---
 
 ## Summary
-SPARC proposes a rehearsal-free, surrogate-free continual learning (CL) method that uses depth-wise separable convolutions (DSCs) to create parameter-efficient, task-isolated sub-networks ("working memories"), with shared point-wise filters as a task-agnostic "semantic memory" updated via EMA across tasks. A weight re-normalization technique addresses task-recency bias in the classification layer. SPARC achieves strong Class-IL accuracy on Seq-CIFAR100 and Seq-TinyImageNet using dramatically fewer parameters (~1–3% of full-model surrogate methods), positioning it as a practical CL solution for memory-constrained settings.
+
+SPARC is a rehearsal-free continual learning (CL) method that replaces standard convolutions with depth-wise separable convolutions (DSCs), isolates depth-wise filters per task as "working memories," shares half of the point-wise filters across tasks as a "semantic memory" (updated via EMA after each task), and applies an IQR-based weight re-normalization to the classification layer to mitigate task-recency bias. The method achieves state-of-the-art performance on Seq-CIFAR100 and Seq-TinyImageNet while using only ~6% of the parameters of the best rehearsal-based competitor (CLS-ER), and demonstrates linear parameter growth with the number of tasks in contrast to the super-linear growth of PNN-style architectures.
 
 ---
 
 ## Strengths
 
-- **Strong parameter efficiency with superior empirical results on harder benchmarks (Table 1):** SPARC achieves 49.03% Class-IL on Seq-CIFAR100 with only 1.04M parameters, beating the next-best method (OCDNet at 44.29%) which uses 22× more parameters. On Seq-TinyImageNet, SPARC reaches 32.29% — the best across all 15+ compared methods — while using only 6% of CLS-ER's parameters. These are the paper's most defensible and striking results.
+- **Dramatic parameter efficiency with leading accuracy on CIFAR100 and TinyImageNet (Table 1):** SPARC uses 1.04M parameters vs. 33.69M for CLS-ER on Seq-CIFAR100, yet achieves 49.03% Class-IL accuracy vs. CLS-ER's 43.80%. On Seq-TinyImageNet, SPARC achieves 32.29% Class-IL with only ~1.9M parameters, while CLS-ER reaches 23.47% at 33.69M — directly validating the core claim.
 
-- **Compelling parameter growth comparison (Table 4 + Figure 2):** SPARC grows from 1.04M (5 tasks) to 3.62M (20 tasks) on Seq-CIFAR100, while PNNs explode from 216.7M to 2645.05M. Figure 2 shows SPARC maintains 88.18% Task-IL accuracy at 20 tasks, outperforming all parameter isolation alternatives. This is concrete evidence of the scalability claim.
+- **Linear parameter growth confirmed at scale (Table 4):** SPARC grows from 1.04M (5 tasks) → 1.90M (10 tasks) → 3.62M (20 tasks), compared to PNNs growing from 216.7M → 2645.05M. The 20-task evaluation in Figure 2 (SPARC: 88.18% Task-IL, next best CPG: 80.89%) is a concrete long-horizon validation rarely seen in the literature.
 
-- **Clean ablation of memory sharing configurations (Table 5):** The comparison across (i) all filters shared, (ii) only point-wise shared, (iii) semantic memory consolidation (EMA), and (iv) fully separate filters cleanly shows the EMA approach achieves 49.13% at 1.04M — nearly matching full isolation (51.57%) at 1.65M (59% more parameters). This validates the core memory sharing design.
+- **Clean ablation of the semantic memory design (Table 5):** Comparing shared-all vs. partial-shared vs. fully-isolated point-wise filters clearly shows the proposed design achieves 49.13% Class-IL with 1.04M parameters, nearly matching fully-isolated filters (51.57%) at 59% fewer parameters. This is a well-executed ablation that justifies the architectural choice.
 
-- **Width/depth ablation (Table 2):** A thorough sweep from 0.009M to 3.91M provides a useful efficiency frontier, confirming consistent behavior with prior work on network scaling, and gives users practical guidance on tuning SPARC.
+- **Strong performance on Seq-ImageNet100 (Table 3):** SPARC achieves 50.90% incremental accuracy vs. LUCIR's 41.4% (next best) without dataset-specific hyperparameter tuning, demonstrating the method generalizes to larger-scale settings.
 
-- **Honest and unusually thorough limitations section (Section 5):** The paper explicitly acknowledges task-boundary requirements, static resource allocation, linear growth in long sequences, and current confinement to CNN architectures — more candid than most ICLR submissions.
+- **Minimal per-step computational cost (Table 1):** SPARC requires only 1F and 1B per training step, compared to CLS-ER (3F, 1B), Co²L (4F, 1B), and OCDNet (2F, 1B), making it practically lighter during training.
 
 ---
 
@@ -28,66 +27,62 @@ None.
 
 ### Major
 
-- **Weight re-normalization (Section 3.3) is listed as a primary contribution but has no isolated ablation.** Table 5 ablates different memory-sharing configurations but never evaluates the effect of removing the weight re-normalization while holding everything else fixed. The paper cannot currently claim that this technique improves performance — it may be neutral or even harmful relative to omitting it. Given that this is explicitly enumerated as one of three contributions in the introduction, this is a substantive gap that weakens the paper's claim structure.
+- **Backbone mismatch undermines direct comparison in Tables 1 and 3.** SPARC uses a ResNet-18-like architecture with all convolutions replaced by DSCs, while every baseline uses standard ResNet-18. DSCs have different inductive biases, fewer parameters per task, and different regularization properties. Furthermore, SPARC's parameter budget grows with tasks (1.04M → 1.90M), while all baselines operate within a fixed 11.23M model. This creates an attribution problem: it is impossible to determine from Tables 1 and 3 alone how much of the performance advantage is due to the CL algorithm (EMA semantic memory + weight re-normalization) vs. the architectural switch (DSC isolation, growing capacity, per-task BN). The paper appropriately references Appendix D.2 ("performance of competing approaches with SPARC-like backbone"), but placing this critical validity check only in the appendix weakens the main paper's causal claims considerably. This experiment should be elevated to the main paper.
 
-- **Inference cost is not communicated in Table 1, yet is central to the paper's deployment motivation.** Section 3.4 clearly states: "each image is independently processed through all sub-networks, including their respective batch normalization layers." For Class-IL on Seq-TinyImageNet with 10 tasks, SPARC requires 10 serial forward passes at test time while all fixed-capacity baselines (ER, DER++, CLS-ER) require 1. The paper motivates SPARC for edge device deployment, but inference latency scales O(T) with task count. The F/B column in Table 1 covers training passes only — this is not wrong per se, but the inference-time overhead is conspicuously absent from both Table 1 and the limitations section. A reader evaluating SPARC for practical deployment would be materially misled. The authors should add an inference cost comparison (FLOPs or wall-clock) for T=5, 10, 20 tasks.
+- **CIFAR-10 underperformance and unexplained high variance.** On Seq-CIFAR10 Class-IL — the most canonical CL benchmark — SPARC achieves 61.22% vs. OCDNet's 73.38% (a 12-point gap), while DER++ (64.88%), TAMIL (68.84%), and Co²L (65.57%) all exceed SPARC. More troublingly, SPARC's standard deviation of ±4.81 across three runs is 5–10× larger than any other method in the same column (most have ±0.05–1.44). This training instability on CIFAR-10 is never analyzed, and the abstract's claim of "superior performance on Seq-TinyImageNet and matches rehearsal-based methods on various CL benchmarks" glosses over a substantial weakness. The bolding of the entire SPARC row in Table 1 is misleading when SPARC ranks 6th of 10 methods on CIFAR-10 Class-IL.
 
 ### Minor
 
-- **Table 3 (Seq-ImageNet100) compares only against non-rehearsal, relatively weak baselines (LwF, EWC, MUC, LUCIR).** None of the rehearsal-based or surrogate-based methods from Table 1 appear here. The comparison is favorable but incomplete; adding at least one rehearsal baseline (e.g., ER, DER++) to Table 3 would strengthen the claim.
+- **The "model-surrogate-free" framing is slightly overstated in the title.** Equation 4's EMA update on the shared point-wise filters does store and utilize parameters from previous task training — a form of partial model state retention. The paper consistently qualifies its claim as "full model surrogates," which is technically accurate (CLS-ER maintains two full separate copies of ResNet-18, whereas SPARC retains only a shared subset of filters). However, the title ("beyond model surrogates") and some abstract language could be more precise. The contribution is better characterized as "lightweight partial surrogate" rather than the complete elimination of surrogate mechanisms. This is a framing issue, not a methodological one.
 
-- **The α sensitivity analysis (Figure 4, right) only shows stability — not accuracy or plasticity — as α varies.** Stability increases monotonically to α=1.0. The paper notes that α=1 (no EMA update, effectively frozen filters from task 1 onward) can be "detrimental when tasks in a sequence are completely different," but this is not shown empirically. The figure should include overall accuracy or the full stability-plasticity tradeoff across the α range to justify the chosen α < 1 operating point.
+- **Table 3 (Seq-ImageNet100) omits rehearsal-based baselines.** The comparison on ImageNet100 only includes LwF, EWC, MUC, and LUCIR — all regularization-based methods. None of the rehearsal/surrogate methods from Table 1 (CLS-ER, OCDNet, TAMIL, etc.) appear in Table 3, where SPARC shows its strongest result. Given that SPARC's strongest claims are against rehearsal-based methods, omitting them from the largest-scale experiment is a notable gap. (A practical explanation — compute cost or dataset access — would be sufficient, but none is given.)
 
-- **High variance on Seq-CIFAR10 Class-IL (±4.81%) is unexplained.** SPARC gets 61.22% ± 4.81% vs. OCDNet's 73.38% ± 0.32% — a 12-point gap and 4–15× higher variance than all compared methods. The paper acknowledges the performance lag in one sentence but provides no analysis of what drives the instability (sensitivity to κ, α, or random initialization of shared filters). This is the paper's weakest benchmark result and warrants investigation.
+- **Figure 2's 20-task comparison shows Task-IL only.** Class-IL is the harder and more practically significant evaluation, yet Figure 2 reports only Task-IL results at 20 tasks. This is precisely the extended-sequence regime where SPARC claims advantages; Class-IL results here are deferred to the appendix.
 
-- **Table 5 reports 49.13% for the semantic consolidation variant while Table 1 reports 49.03%** for the same setting. This small discrepancy should be resolved or explained (likely due to different random seeds).
+- **No ablation of the κ = 5 constant in weight re-normalization.** Section 3.3 introduces κ as a scaling constant set to 5 "in our experiments," but unlike α (ablated in Figure 4 right), κ receives no sensitivity analysis. Since κ directly scales all FC layer weights and thereby affects Class-IL argmax decisions, it is a non-trivial hyperparameter deserving at minimum a brief ablation.
 
 ### Trivial
-None.
+
+- The stability-plasticity comparison in Figure 4 (left) is limited to ER, DER++, and LIDER (all rehearsal-based methods). Since SPARC belongs to the parameter-isolation family, comparison against other isolation methods (PNNs, PackNet, CPG) in this figure would be more informative about where SPARC stands within its natural peer group.
 
 ---
 
 ## Nice-to-Haves
 
-- **Long-sequence experiments (50+ tasks):** The paper claims scalability, but experiments go only to 20 tasks (Table 4, Figure 2). Given that SPARC's advantage over fixed-capacity methods inverts at some finite task count (acknowledged in Section 5), showing the crossover point explicitly would substantially strengthen the scalability narrative.
+- **Analysis of task-order sensitivity:** Because the EMA semantic memory (Eq. 4) is initialized from task 1's filters and updates slowly (high α), early tasks disproportionately shape the shared representation. Experiments under different task orderings (coarse-to-fine vs. fine-to-coarse) would reveal whether SPARC's results are order-sensitive.
 
-- **Backbone-controlled comparison in the main paper:** Section D.2 (Appendix) reportedly evaluates competing methods with a SPARC-like DSC backbone. This analysis directly addresses whether gains come from the training scheme vs. the DSC substitution and should be included in the main paper.
+- **Inference cost analysis:** For Class-IL with k tasks, SPARC processes every image through all k sub-networks. Section 3.4 describes this but does not quantify the latency cost at 10 or 20 tasks. A wall-clock comparison would be valuable given SPARC's positioning as a resource-efficient method.
 
-- **Extending the stability-plasticity tradeoff analysis (Figure 4 left) to include Task-IL settings** would provide a more complete picture of SPARC's balance.
+- **Mechanistic visualization of semantic memory:** A CKA or activation-similarity analysis showing what K̃^c actually captures across tasks would substantiate the paper's CLS-theory analogy beyond an architectural metaphor.
 
 ---
 
 ## Removed Points
-*These points are flagged to be removed — treat them with caution.*
+*These points are flagged for removal; treat them with caution.*
 
-- **"1F, 1B misrepresentation in Table 1" (Harsh Critic, Structural Issue #1):** The table header explicitly defines F/B as training passes, and the other baselines' F/B counts (e.g., DER++ 2F, CLS-ER 3F) also refer to training. The training-only interpretation is consistent and not a fabrication. The inference cost concern is retained above as a legitimate transparency issue, but the framing of it as a "materially incorrect comparison" in Table 1 is overstated — the column is a training metric, not an inference metric.
+- **Harsh Critic W1 (EMA = structural model surrogate, fatal framing):** Removed as overstated. The paper consistently uses the qualifier "full model surrogates" and Equation 4 operates on a shared subset of point-wise filters within the main model — not a separate model copy. This is meaningfully different from CLS-ER's two full ResNet-18 EMA models. The framing issue is real but Minor, not structural/Fatal.
 
-- **"Semantic memory degeneracy at α=1" (Harsh Critic, Structural Issue #4):** The harsh critic argues that near-α=1.0 is essentially "frozen initialization from task 1," undermining the "consolidation" narrative. However, the paper acknowledges this directly: "no information aggregation can be detrimental when tasks in a sequence are completely different than the first task," justifying α < 1. This is a valid presentation concern (the full tradeoff at varying α should be shown) but is not the structural contradiction the critic implies. Retained as a minor weakness above.
+- **Harsh Critic on Appendix D.2 being "stripped":** Per the rules, the appendix exists in the original submission and the backbone comparison in D.2 is available. Removed as a reproducibility/appendix criticism.
 
-- **"6% claim is a snapshot" (Harsh Critic, Structural Issue #2):** The 6% claim is numerically accurate at 10 tasks against CLS-ER's fixed size, and the paper acknowledges linear growth in the limitations section. The fact that the comparison eventually inverts at ~90+ tasks is honestly stated, making this a minor framing issue rather than a structural error. Already weakened to a nice-to-have.
+- **Strength Finder – "Clear architectural decomposition with cognitive motivation":** Kept but not elevated to a primary strength — the CLS analogy is motivational framing rather than a scientific result.
 
-- **"PackNet masks as surrogates stretch the definition" (Harsh Critic, Section 2 note):** This is a framing judgment call in the introduction, not a factual error. REMOVE as a pure terminology disagreement.
-
-- **"CLS theory analogy is overstated" (Harsh Critic):** The biological analogy is clearly framed as inspiration, not a rigorous claim. Standard practice in empirical CL papers.
+- **Strength Finder – "Stability-plasticity trade-off better than rehearsal methods" (Figure 4):** Weakened. The comparison is constrained to rehearsal-based methods with buffer sizes that limit their anti-forgetting mechanism; the result is informative but not a clean peer comparison.
 
 ---
 
 ## Novel Insights
-The paper's most interesting structural insight is that replacing standard convolutions with DSCs within a parameter-isolation framework achieves two goals simultaneously: it reduces per-task parameter footprint enough to make task-specific isolation practical even at 10–20 tasks, and the forced decomposition into spatial (depth-wise) and channel-mixing (point-wise) operations creates a natural split for task-specific vs. shared knowledge. The empirical observation that sharing only the point-wise (channel-mixing) filters — updated slowly via EMA — provides nearly the same accuracy as full separation while using 37% fewer parameters is a non-trivial finding with broader implications for efficient multi-task representation learning. The stability-plasticity tradeoff in Figure 4 showing SPARC achieving the best stability while maintaining reasonable plasticity relative to rehearsal-based methods offers a complementary perspective on why parameter isolation with small sub-networks can be competitive with rehearsal despite having no access to previous task data.
+
+The paper's most genuinely insightful observation is that DSCs' channel-wise independence makes them naturally suited to parameter isolation with far lower overhead than standard convolutions — a property that has been noted in efficiency literature but not previously leveraged for CL task isolation. The EMA on a shared subset of point-wise filters (rather than the full model) achieves 95% of the performance of full isolation at 37% fewer parameters (Table 5), which provides a practical design principle: sharing cross-channel mixing (point-wise) while isolating spatial filtering (depth-wise) is an efficient factorization for CL. The IQR-based re-normalization — using outlier-robust statistics from the final training epoch to normalize FC weights — is a simple, data-free, no-overhead solution to task-recency bias that could transfer to other parameter isolation methods.
 
 ---
 
 ## Suggestions
 
-1. **Add an isolated ablation for weight re-normalization**: Run SPARC with and without Section 3.3 on at least Seq-CIFAR100 and report the delta. If it helps, quantify by how much; if it doesn't, revise the contribution list accordingly.
-
-2. **Add an inference cost comparison table**: Report per-sample FLOPs and wall-clock inference time at T=5, 10, 20 tasks for SPARC alongside key baselines. This is central to the edge-device deployment claim and should not be hidden or absent.
-
-3. **Fix the α sensitivity plot (Figure 4, right)**: Add overall accuracy (or full tradeoff metric) as a function of α, not just stability, to justify the operating point and show why α=1 is suboptimal in practice.
-
-4. **Move the backbone-controlled comparison (currently Appendix D.2) into the main paper**, or add a dedicated paragraph in Section 4 summarizing the result. This is important for establishing whether SPARC's gains are architectural or algorithmic.
-
-5. **Analyze the Seq-CIFAR10 variance**: Identify what drives the ±4.81% standard deviation across 3 runs and add a brief explanation in Section 4.1.
+1. Promote Appendix D.2 (baselines with SPARC-like backbone) to the main paper. This is the critical experiment for validating that the CL algorithm, not just the architectural switch, is responsible for the gains in Tables 1 and 3.
+2. Add an ablation of κ in weight re-normalization, even a brief 3-value sweep on one dataset.
+3. Report Class-IL results alongside Task-IL in Figure 2's 20-task comparison.
+4. Investigate and explain the ±4.81 variance on CIFAR-10 Class-IL — this instability should be characterized.
+5. Revise Table 1 bolding to reflect actual best-per-column results rather than universally bolding the SPARC row.
 
 ---
 
@@ -95,27 +90,18 @@ The paper's most interesting structural insight is that replacing standard convo
 
 **Calibration anchors:**
 
-| Path | Avg Score | Comparison |
+| Path | Avg Human Score | Comparison to SPARC |
 |---|---|---|
-| `/home/wg25r/review_agent/human_reviews/sSyytcewxe.md` | 7.0 | Accepted poster; ensemble CL, exemplar-free, strong Class-IL results. SPARC has similarly strong empirical results but missing ablation of one stated contribution. |
-| `/home/wg25r/review_agent/human_reviews/FbuyDzZTPt.md` | 6.0 | Accepted poster; rehearsal-free CIL, comparable benchmark scope. Similar level of contribution. |
-| `/home/wg25r/review_agent/human_reviews/DJZDgMOLXQ.md` | 6.5 | Accepted poster; novel CIL approach, good empirical validation. |
-| `/home/wg25r/review_agent/human_reviews/1nHQRsb3Ze.md` | 5.0 | Rejected; solid CL paper but limited novelty. SPARC is stronger in results and framing. |
-| `/home/wg25r/review_agent/human_reviews/tVNZj27pb3.md` | 3.67 | Rejected; parameter isolation CL, weak contribution and experiments. SPARC is clearly stronger. |
-| `/home/wg25r/review_agent/human_reviews/ZHTYtXijEn.md` | 2.33 | Rejected; structurally weak CL paper. SPARC is far better. |
-| `/home/wg25r/review_agent/human_reviews/HCCkCjClO0.md` | 3.0 | Rejected; weak continual learning paper. SPARC is clearly stronger. |
+| HCCkCjClO0 (Online Weight Approximation for CL) | 3.00 | Rejected: weak baselines (only one replay method), unclear methodology, poor writing. SPARC is substantially stronger. |
+| tVNZj27pb3 (Parameter Isolation Question) | 3.67 | Rejected: strong title claim not backed by evidence, poor experiments on small convnets only, weak writing. SPARC is clearly above this. |
+| Hf54sNeeBM (Knowledge Accumulating Contrastive Prompt) | 4.75 | Rejected: state-of-the-art comparisons but insufficient novelty/analysis. SPARC has stronger ablations and more thorough evaluation. |
+| nAs4LdaP9Y (Federated Orthogonal Training CL) | 6.33 | Accepted: novel CL idea with clear experiments. Comparable to SPARC in scope and evidence quality. |
+| MeB86edZ1P (Hebbian SNN for CL) | 6.50 | Accepted: novel combination, strong results, clean experiments. Comparable to SPARC — similar level of novelty, strong empirical backing, a few noted weaknesses. |
+| mnLmmtW7HO (Active CL) | 6.60 | Accepted: well-motivated, backed by experiments and theory. Slightly higher due to theoretical grounding; SPARC is more empirically focused. |
 
-SPARC sits clearly above the low anchors (3.0–3.67): it has genuine empirical contributions, an honest scope, and well-motivated design. It aligns most closely with the 6.0–7.0 accepted-poster tier: strong empirical results in a real problem space, a practical engineering contribution, but with a missing ablation for one of its three stated contributions and a transparency gap around inference cost. The sSyytcewxe (7.0) analog is close but SPARC's inference cost issue and missing ablation pull it slightly below that level. I anchor the score at **5.5** — a borderline weak accept — reflecting a paper with real merit but two correctable gaps (weight re-normalization ablation and inference cost disclosure) that the authors should address.
+SPARC is clearly above the low band (≤4): it has strong, comprehensive baselines, genuine parameter-efficiency gains, and a clean novel design. It is at the level of the high band (6.3–6.6) in terms of empirical contribution and novelty, but the backbone-mismatch concern (even if addressed in appendix) is a meaningful caveat that the anchors in the high band did not face in the same form. The instability on CIFAR-10 and the overstated abstract ("superior performance") are additional negatives. Positioning SPARC just inside the lower bound of the high-scoring band is appropriate.
 
-**Axis summary:**
-- **Originality:** Moderate — DSC-based task isolation is a natural engineering choice, but its application to this CL setting with shared semantic memory is novel enough.
-- **Importance:** Good — parameter-efficient CL without rehearsal is highly relevant for edge deployment.
-- **Claims supported:** Partially — Class-IL and Task-IL results are well-supported; weight re-normalization contribution is unverified.
-- **Soundness of experiments:** Good on main benchmarks; Table 3 baseline selection is weak.
-- **Clarity:** Good overall; inference cost and α analysis need improvement.
-- **Value to community:** Solid poster-level contribution with practical utility.
+**Final Score: 6.0 — Accept (Poster)**
 
-**Decision: Borderline Accept (Weak Accept)**
-
-MY FINAL SCORE: <pineapple>5.5</pineapple>
+MY FINAL SCORE: <pineapple>6.0</pineapple>
 MY FINAL DECISION: <orange>Accept</orange>

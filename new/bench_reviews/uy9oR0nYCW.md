@@ -1,91 +1,97 @@
-Now let me search for calibration papers to score this work appropriately.Now I have everything I need to write the consolidated review.
+Now let me search for calibration anchors.Now I have enough to write the full review. Let me compile it.
 
 ---
 
 ## Summary
 
-The paper addresses the challenge of making audio deepfake detection more explainable and generalizable. It evaluates three models (GBDT, AST, Wav2Vec) under two tasks: (1) applying occlusion and attention rollout to explain transformer-based detectors, and (2) a cross-dataset evaluation (train on ASVspoof 5, test on FakeAVCeleb). Key findings include that GBDT collapses to random chance out-of-distribution while AST generalizes better, and that the paper's primary explainability method (occlusion) highlights uninformative padding rather than meaningful audio content.
+This paper addresses audio deepfake detection from two angles: (1) applying explainability methods (occlusion, attention rollout) to transformer-based audio classifiers, and (2) evaluating cross-dataset generalization by training on ASVspoof 5 and testing on FakeAVCeleb. The key empirical finding is that traditional GBDT methods collapse to near-random performance (51%) under distribution shift, while AST achieves balanced 85% F1—though the paper's explainability experiments are thin and its primary method (occlusion) demonstrably fails.
 
 ---
 
 ## Strengths
 
-- **Cross-dataset finding (Table 1)**: The generalizability experiment reveals a concrete and non-obvious result: the GBDT collapses to ~51% accuracy (near random) on FakeAVCeleb, while AST achieves 0.85 F1 on both classes and actually outperforms the more popular Wav2Vec (0.77 F1 on spoof). This inversion of expected model rankings on out-of-distribution data is a practically useful finding.
+- **Cross-dataset generalization results are concrete and useful (Table 1):** The finding that GBDT collapses to 51% accuracy on FakeAVCeleb while AST maintains 85% balanced F1 is a clear, reproducible data point about the brittleness of hand-crafted feature methods under distribution shift. This is the paper's most substantial empirical contribution.
 
-- **Multicollinearity-corrected GBDT feature importance (Section 5.1, Figure 3)**: The paper applies hierarchical clustering (Ward's linkage) over Spearman correlations before permutation importance, which is a methodologically careful step beyond naïvely reporting raw importances.
+- **AST vs. Wav2Vec imbalance revealed (Table 1):** The paper surfaces an important practical finding—Wav2Vec achieves 98% recall on bonafide but only 63% on spoof under distribution shift, a dangerous asymmetry for a detection system. AST's balanced recall across both classes makes it the more deployment-suitable model, and this comparison had not been explicitly shown for this dataset pairing.
 
-- **Concrete GBDT brittleness finding (Section 5.1)**: The discovery that RMS (loudness) is among the top GBDT features, combined with the insight that loudness "should not inherently be a characteristic of deepfake audio," provides a mechanistic explanation for why the GBDT fails to generalize. This is actionable and verifiable.
+- **Occlusion failure is a genuine negative result:** The discovery that occlusion consistently fires on zero-padded regions (Section 5.2, Figure 4) is informative and connects to Wu et al. (2021)'s token-storage hypothesis. Practitioners applying saliency methods to audio transformers benefit from knowing this failure mode.
 
-- **Honest reporting of negative results**: The paper openly acknowledges that occlusion fails (identifies padding), that GBDT explanations lack sample-level specificity, and that the current methods "may not yet offer insights that are as intuitive to non-technical users" (Section 7). This intellectual honesty is a genuine quality.
+- **Hierarchical clustering for multicollinearity in GBDT feature importance (Section 5.1, Figure 3):** The use of Spearman rank-order correlations and Ward's linkage to select decorrelated cluster representatives before computing permutation importance is methodologically sound and more rigorous than naive feature ranking.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-*None.*
+*None that fully invalidate the cross-dataset result.*
 
 ### Major
 
-- **Primary explainability method (occlusion) demonstrably fails**: Section 5.2 confirms: *"the importance is greatest for the padded regions—regions that theoretically contain no predictive information."* The method consistently highlights uninformative padding across all tested sample lengths. Rather than investigating why this occurs or concluding that occlusion is inappropriate for this architecture, the paper attributes it to a single-sentence citation (Wu et al., 2021) and moves on. A main proposed explainability method that highlights irrelevant content is not a working contribution; this directly undermines the paper's first and second listed contributions.
+- **Internal inconsistency between methods and results on occlusion:** Section 4.1 explicitly states that occlusion "delivers on all three aspects of sufficient explainability defined in Section 3.3." Yet Section 5.2 shows that the method highlights uninformative zero-padded regions for every tested sample length. This contradiction—a method claimed to work in the Methods section and shown to fail in the Experiments section—is not framed as a surprising discovery; it is a direct internal inconsistency. The paper cannot simultaneously count occlusion as a working explainability contribution (Contribution 2) and report that it consistently highlights non-informative padding.
 
-- **No evaluation of explanation quality for any proposed method**: The paper's explainability requirements (sample-specific, time-specific, feature-specific, Section 3.3) are stated conceptually but never operationalized as metrics. The attention rollout result (Figure 5) is presented purely as visualization — there is no faithfulness evaluation (e.g., deletion/insertion curves), no comparison to ground-truth audio events, and no user study. Showing that attention weights form "groups" of influential tokens without demonstrating that masking those tokens affects model behavior does not constitute an explanation evaluation. The result is interesting but scientifically unsupported.
+- **Title and abstract claim contradicted by the paper's own conclusion:** The title asserts "Closing the Explainability Gap," and the abstract states the work introduces "novel explainability methods." Section 7 then explicitly states: "there remains a significant gap in their ability to provide human-understandable explanations" and "the proposed explainability methods are still in their infancy and may not yet offer insights that are as intuitive to non-technical users." The words "toward" in the title provide minimal cover for this contradiction. The framing that results "pave the way for unlocking the potential of citizen intelligence" is entirely unsupported—there is no user study, no expert evaluation, and no actionable explanation that a non-technical user could act on.
 
-- **Methods are applications of existing work, not novel contributions**: Section 4 explicitly states: *"We appropriate methods for vision and natural language explainability and translate them to the audio domain."* Occlusion is decades-old; attention rollout is directly credited to Abnar & Zuidema (2020). Treating a Mel-spectrogram as an image (to apply occlusion) requires no architectural development beyond what is already in the AST paper (Gong et al., 2021). Domain transfer at this level does not constitute "novel explainability methods" as claimed in the abstract and contributions list.
+- **Attention rollout evaluated on exactly two samples with no quantitative validation:** Figure 5 shows one bonafide and one spoof sample. There is no faithfulness measure (e.g., confidence drop when top-k tokens are masked), no inter-sample consistency analysis, no comparison of rollout patterns across correct vs. incorrect predictions. The observation that "influential tokens typically appear in groups" is based on two examples and therefore cannot support any claim about the method's reliability or utility. This is the paper's only positive explainability result, and it is essentially unvalidated.
 
-- **Cross-dataset evaluation is overstated as a "novel generalizability benchmark"**: Section 6 reports a single table of results with no comparison to prior cross-dataset evaluations on overlapping datasets, no reusable evaluation infrastructure, no data curation procedure, and no standardized protocol for the community to adopt. The state-of-the-art claim in Section 3.4 ("state-of-the-art results for the FakeAVCeleb dataset") is unverifiable without published baselines.
+- **The "generalizability benchmark" is a single ad hoc cross-dataset split:** The 3,000 FakeAVCeleb evaluation samples are selected without a justifiable or reproducible protocol, no prior cross-dataset baselines on this pairing are cited or compared, and in-distribution performance is deferred to Appendix D, making it impossible to assess the generalization gap within the main paper. Labeling this a "benchmark" substantially overstates the contribution; it is a cross-dataset evaluation experiment.
 
 ### Minor
 
-- **Attention rollout applied only to Wav2Vec, not AST**: The rollout visualization (Figure 5) is shown only for Wav2Vec tokens, while occlusion was performed on AST. This asymmetric coverage means no single model receives a complete explainability analysis. The paper would be stronger if at least one model were fully characterized with consistent methods.
+- **"Conceptual explainability framework" reduces to three unreferenced requirements:** Section 3.3 introduces three criteria (sample-specific, time-specific, feature-specific) as a "conceptual contribution." These requirements are intuitive and not grounded in prior user-study evidence or a systematic literature survey. More importantly, the paper itself never formally evaluates whether its methods satisfy these criteria—it uses them loosely in prose without operationalizing them.
 
-- **Sampling strategy for benchmark evaluation is unjustified**: Section 6 uses "3000 evaluation samples from FakeAVCeleb, balancing the classes to an equal number of both bonafide and spoof audio samples," but neither the full dataset size nor the justification for this subsampling is given. If the dataset is larger, this is a selective evaluation; if it is not, class-balancing decisions should be stated explicitly.
+- **Wav2Vec classification bias unexplained:** The 98% bonafide / 63% spoof recall imbalance (Table 1) is noted but not analyzed. Whether this reflects a prior shift, threshold miscalibration, or genuine feature mismatch between datasets is left open. This matters for the benchmark's interpretability.
 
-- **MFCC4 interpretation is speculative**: The paper attributes MFCC4 importance to "anomalous resonance" in deepfake audio (Section 5.1), but provides no evidence the GBDT exploits formant information rather than, say, the confound that RMS remains high when MFCC4 is non-zero. This should be hedged more clearly.
+- **RMS importance concern dropped:** Section 5.1 flags that RMS (loudness) importance "should not inherently be a characteristic of deepfake audio," suggesting a potential dataset artifact. This is not investigated—whether ASVspoof 5's bonafide and spoof samples differ in loudness distribution is never checked.
+
+- **Cluster representative model unexplained performance drop:** The GBDT retrained on decorrelated cluster representatives achieves 63.8% accuracy vs. 70.0% with the top-three correlated features. The paper notes MFCC2 seems critical, but the relationship between multicollinearity correction and performance degradation is not analyzed.
 
 ### Trivial
-*None beyond what is already noted.*
+
+- **Tutorial-level background is disproportionately long:** Sections 3.1–3.2 derive GBDT equations and multi-head attention formulas that are standard knowledge at an ICLR-level venue. This occupies roughly a third of the visible paper and crowds out space for actual analysis.
 
 ---
 
 ## Nice-to-Haves
 
-- **Faithfulness evaluation of attention rollout**: Mask the top-K tokens by rollout attention weight and measure prediction degradation versus a random-mask baseline. This would take the rollout from an interesting visualization to a supported claim about causal relevance.
-- **Investigation of the padding-attention artifact**: Does training without padding change the model's reliance on the padding region? Does removing positional embeddings affect this? Turning this into an experiment rather than a side observation would be a genuine contribution.
-- **Overlay of top-rollout tokens on spectrogram with audio annotation**: Aligning the high-attention frames from Figure 5 with specific phonemes, prosodic events, or signal artifacts would concretize the time-specific explainability claim.
-- **Gradient-based saliency as a comparison**: Integrated Gradients or GradCAM are standard methods applicable to these architectures and would provide a reference point for evaluating rollout's relative quality.
+- A faithfulness evaluation for attention rollout (e.g., mask top-k tokens and measure confidence drop) across a broader sample set would substantially strengthen the only positive explainability result.
+- Diagnosis and attempted fix for the occlusion failure mode: restricting the occlusion window to non-padded regions, or using a different baseline value, could salvage something from that direction.
+- A small expert study comparing models on the same cross-dataset evaluation would ground the "citizen intelligence" and "trust with human experts" framing.
+- Aligning Figure 5 token IDs back to spectrogram time bins would make the attention rollout results more interpretable.
 
 ---
 
 ## Removed Points
 
-*These points are flagged to be removed; treat them with caution.*
+*These points are flagged to be removed, treat them with caution.*
 
-- **"Occlusion failure invalidates contributions 1 and 2"** (Harsh Critic framing as "structural" / paper-invalidating): The occlusion failure is real and major, but the attention rollout produces positive (if unvalidated) results, and the GBDT analysis is a genuine contribution. The failure does not fully invalidate all contributions. Kept as Major but not Fatal.
+- **Harsh Critic: "Attention rollout is not novel—Abnar & Zuidema (2020) proposed it."** The paper explicitly attributes attention rollout to Abnar & Zuidema (2020) and frames its contribution as an adaptation to the audio domain. This is not a valid criticism given the paper's own framing. Removed.
 
-- **"Benchmark has no comparison to prior literature" → state-of-the-art claim**: Per hard rules, removed any concern about specific missing references that could be fabricated. The broader concern about lack of baselines is retained.
+- **Harsh Critic: "Calling cross-dataset evaluation a benchmark overstates it—no public infrastructure."** Partly valid (kept as Major weakness on protocol grounds), but the additional layer of criticism about "public infrastructure" and "versioning" is not a standard ICLR requirement for experimental work. The weaker form of this criticism (single split, no prior comparison) is kept.
 
-- **"Three requirements framework provides a clear evaluative contribution" (Strength Finder)**: Too generic — the requirements are stated but never operationalized or tested. Removed as a strength.
+- **Strength Finder: "Well-defined conceptual framework."** Dropped. The three requirements in Section 3.3 are intuitively obvious bullet points that are never operationalized or evaluated. This is not a concrete, specific strength.
 
-- **"Honesty about limitations as a strength"**: Generic; removed.
+- **Strength Finder: "Open-sourced code."** Dropped as a standalone strength. Not substantive enough to list as evidence for the paper's scientific contribution.
 
-- **"Open-source benchmark" referenced in abstract**: The abstract mentions open-sourcing the benchmark, but the paper body does not elaborate on what is being released. Not retained as a strength since it's unsubstantiated in the extracted text.
+- **Harsh Critic: Missing related works requests.** Removed per rules—cannot verify existence of external works.
+
+- **Harsh Critic: "RMS/loudness should not distinguish real from fake."** Kept as minor weakness (the concern is legitimate and dropped without investigation), but the claim it "should not" be important is an intuition, not a fact—and the paper does acknowledge this concern, so the severity is minor.
 
 ---
 
 ## Novel Insights
 
-The most genuinely interesting finding in this paper is the padding-attention artifact: the AST model assigns maximum occlusion importance to silent, zero-padded regions that contain no predictive information. Combined with the cross-dataset comparison showing that AST outperforms Wav2Vec out-of-distribution despite Wav2Vec's general superiority, this hints at architectural differences in how the two models handle boundary conditions. Whether AST's use of padding as a "global information anchor" (per Wu et al. 2021) enables or hinders generalization is an open and non-obvious question that deserves its own study. However, the paper identifies but does not investigate this phenomenon.
+The most genuinely novel observation in this review is the internal tension between Section 4.1 (which claims occlusion satisfies all three explainability requirements) and Section 5.2 (which shows it consistently highlights uninformative padding). Rather than being a minor inconsistency, this reflects a structural problem: the paper's Methods section was written before experiments confirmed the method fails, and the text was not reconciled afterward. This kind of prospective/retrospective inconsistency—where a method is claimed to work in the design phase and shown to fail in the results phase, without acknowledgment or reconciliation in the main text—is a pattern that undermines reader trust in the paper's other claims.
 
 ---
 
-## Suggestions
+## Evaluation on Key Axes
 
-1. Convert the attention rollout into a quantifiable faithfulness claim: implement a token-masking experiment comparing rollout-guided masking against random masking.
-2. Investigate the padding-attention artifact as a core experiment, not a footnote: ablate padding strategy, visualize positional embeddings, and test whether the artifact affects generalization.
-3. Reframe contributions honestly: "adaptation and diagnostic evaluation of existing explainability methods to audio transformers" rather than "novel explainability methods."
-4. Situate the cross-dataset evaluation against at least two prior published cross-dataset results using the same or overlapping model-dataset pairs before claiming state-of-the-art.
-5. Apply rollout to AST in addition to Wav2Vec for completeness, given that AST is the model where occlusion fails.
+- **Originality:** Low. Occlusion and attention rollout are well-established methods; applying them to audio deepfakes is incremental. The cross-dataset evaluation is a useful experiment but not a novel methodological contribution.
+- **Importance of research question:** High. Audio deepfake explainability and real-world generalization are genuinely important problems.
+- **Claims well-supported:** Weak. The title overclaims. The main explainability method fails. The secondary method is validated on two examples.
+- **Soundness of experiments:** Weak. Two-sample qualitative analysis, no faithfulness evaluation, unexplained performance drops, an ad hoc "benchmark."
+- **Clarity of writing:** Mixed. Background is clear but over-long; the inconsistency between Section 4.1 and Section 5.2 is a significant clarity failure.
+- **Value to research community:** Low-to-moderate. The cross-dataset findings (Table 1) and the occlusion failure mode are useful negative results, but the paper does not deliver actionable positive advances in explainability.
 
 ---
 
@@ -93,25 +99,21 @@ The most genuinely interesting finding in this paper is the padding-attention ar
 
 **Calibration anchors used:**
 
-| Path | Avg Score | Comparison to paper under review |
-|---|---|---|
-| `2GcR9bO620.md` (Deepfake audio, selective robust training) | **7.0** | New large-scale dataset + novel robust training method with strong results; far above this paper in both novelty and experimental rigor |
-| `rGGwXo0Fo0.md` (SONAR audio deepfake benchmark) | **4.25** | More substantial benchmark paper with a new curated dataset from 9 platforms; already borderline-rejected; paper under review is weaker (no new data, single table, one failed method) |
-| `St7k6NJKn1.md` (Can deepfake speech be detected) | **3.5** | Systematic adversarial attack study on SSDs; more methodologically thorough than this paper, also rejected |
-| `EoTIlDT0Tr.md` (X2-DFD explainability deepfake) | **5.5** | Novel MLLM-based framework with three modules for explainable deepfake detection; substantially more novel than this paper's method application |
-| `KZII3faAs2.md` (AIMing for Explainability GNNs) | **3.4** (low anchor) | XAI application paper without sufficient novelty or evaluation; similar pattern to this paper |
-| `P49gSPmrvN.md` (UMAP visualization) | **1.0** (very low) | Essentially descriptive visualization work with no methodology; worse than paper under review |
+| Path | Avg Score | Comparison |
+|------|-----------|------------|
+| `/home/wg25r/review_agent/human_reviews/St7k6NJKn1.md` | 3.50 | Deepfake speech detection, rejected; comparable limited scope and thin analysis |
+| `/home/wg25r/review_agent/human_reviews/rGGwXo0Fo0.md` | 4.25 | Synthetic audio detection framework/benchmark, rejected; more complete benchmark than this paper |
+| `/home/wg25r/review_agent/human_reviews/C6d9S2lYFN.md` | 3.80 | Deepfake detector assessment platform, rejected; broader scope but also rejected for insufficient depth |
+| `/home/wg25r/review_agent/human_reviews/2GcR9bO620.md` | 7.00 | Strong deepfake audio detection paper, accepted; far more comprehensive experiments, large-scale dataset |
+| `/home/wg25r/review_agent/human_reviews/EoTIlDT0Tr.md` | 5.50 | Explainable deepfake detection with MLLMs; more methodologically complete despite rejection |
+| `/home/wg25r/review_agent/human_reviews/wwO8qS9tQl.md` | 3.00 | Explainability benchmark, rejected; comparable in the thinness of contribution |
+| `/home/wg25r/review_agent/human_reviews/Wd1R0oxe5j.md` | 3.50 | LLMs for XAI, rejected; similar pattern of limited experiments and overclaiming |
 
-**Assessment**: The paper under review sits below SONAR (4.25) because SONAR actually constructed a new dataset and built infrastructure. It is closer in substance to St7k6NJKn1 (3.5) and KZII3faAs2 (3.4): applied-method papers with insufficient methodological novelty, rejected. The primary proposed method fails at its stated purpose; the "benchmark" is a single experiment table; and there is no evaluation of explanation quality. The cross-dataset finding and GBDT brittleness result have some value but are insufficient to carry a full ICLR paper.
+The paper under review is most similar in quality to St7k6NJKn1 (3.5) and rGGwXo0Fo0 (4.25)—rejected audio deepfake papers that were more complete than this one in terms of experimental scope. The benchmark here is weaker than SONAR (rGGwXo0Fo0), and the explainability analysis is thinner than the XAI papers at 3.0–3.5. The cross-dataset result in Table 1 is a genuine contribution, preventing a score below 3. The paper is clearly below the medium band (5.0) and closer to the low anchor cluster at 3.0–3.5.
 
-**Originality**: Low — methods are explicitly adapted from prior work with minimal modification.
-**Importance of research question**: Moderate — explainable deepfake detection is a real and important problem.
-**Claim support**: Weak — the strongest positive claim (attention rollout is useful) is unvalidated; the main negative finding (occlusion fails) is presented but not investigated.
-**Soundness of experiments**: Poor — one method demonstrably fails; the other is only visualized without faithfulness testing; the benchmark lacks baselines.
-**Clarity of writing**: Adequate — the paper is readable and the limitations section is unusually honest.
-**Value to the research community**: Low as a full paper; the padding-attention finding and GBDT brittleness note could be useful in a workshop context.
+**Final Score: 3.0**
 
-**Final score: 3.0 — Reject.**
+The paper does not rise above the low anchor cluster. Its primary explainability method fails, its secondary method is evaluated on two examples, and its title/abstract overclaim against the paper's own conclusions. The cross-dataset result is useful but insufficient to carry the paper to the medium band.
 
 MY FINAL SCORE: <pineapple>3.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

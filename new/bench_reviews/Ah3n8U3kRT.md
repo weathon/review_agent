@@ -1,57 +1,56 @@
-Now let me search for calibration papers to properly score this work.Now I have enough to write the final review. Let me synthesize everything.
+Now let me search for calibration papers to score this properly.Now I have enough information to write the complete final review.
 
 ---
 
 ## Summary
 
-The paper proposes median clipping for zeroth-order (ZO) non-smooth convex optimization and multi-armed bandits (MAB) under symmetric heavy-tailed stochastic noise with any κ > 0. By introducing a novel oracle assumption (Assumption 3) and a batched median gradient estimator (Lemma 1), the authors achieve non-degenerating convergence rates that match the optimal bounded-variance case—specifically Õ(d²ε⁻²) iterations for ZO optimization and Õ(√dT) regret for MAB—whereas prior methods require κ > 1 and their rates degenerate as κ → 1. The contribution fills a genuine gap in the literature since no prior ZO work handles κ ≤ 1.
+The paper proposes median clipping techniques for zeroth-order (ZO) non-smooth convex optimization and multi-armed bandit (MAB) problems under symmetric heavy-tailed noise. The core theoretical contribution is removing the κ > 1 restriction of prior work (ZO-clipped-SSTM): by exploiting distributional symmetry through a novel oracle assumption (Assumption 3) and a component-wise median estimator (Lemma 1), the authors achieve Õ(d²ε⁻²) iteration complexity for any κ > 0 in ZO optimization and Õ(√(dT)) expected regret in MAB—both matching optimal rates under bounded variance. The algorithms are applied to synthetic ZO optimization and real-world cryptocurrency portfolio selection experiments.
 
 ---
 
 ## Strengths
 
-- **Theorem 1/2 and Table 1 establish non-degenerating convergence for any κ > 0**: Prior ZO work (ZO-clipped-SSTM [20]) achieves Õ((√dε⁻¹)^{κ/(κ−1)}) iterations, which diverges as κ → 1. Table 1 shows the proposed ZO-clipped-med-SSTM achieves Õ(max{d^{1/2}M₂ʼ/ε, (dM₂ʼ/ε)²/b}) for all κ > 0—a qualitatively different (non-degenerating) rate. This is a genuine advance.
+- **Genuine theoretical advance: removal of the κ > 1 barrier.** Table 1 makes this concrete: ZO-clipped-SSTM [20] has iteration complexity Õ((√dM₂/ε)^{κ/(κ−1)}) that diverges as κ → 1 and is undefined for κ ≤ 1, while ZO-clipped-med-SSTM achieves Õ(max{d^{3/2}M₂R/ε, d(M₂² + dΔ²/κ^{2/κ})R²/(bε²)}) for any κ > 0. Filling this gap is a real contribution.
 
-- **Lemma 1 is the pivotal technical result**: It establishes that the BatchMed estimator (Eq. 9) is unbiased for ∇f̂_τ and has bounded second moment for any κ > 0 (Eqs. 10–11), given m > 2/κ median samples. This is non-trivial because the raw noise can have unbounded first moment (Cauchy), and the proof technique differs fundamentally from first-order median clipping.
+- **Well-constructed technical core (Assumption 3 + Lemma 1).** The novel oracle assumption (Eq. 4) conditions on the noise density p(u|x,y) rather than a moment bound on ξ, enabling exploitation of symmetry. Lemma 1 then shows the component-wise median of 2m+1 samples is unbiased (Eqs. 10–11) with bounded second moment for all κ > 0 with m > 2/κ. The pipeline (randomized smoothing → two-point oracle → symmetry via Eq. 7 → coordinate-wise median → clipping) is modular and well-motivated.
 
-- **Assumption 3 enables fine-grained exploitation of noise symmetry**: The assumption is placed on φ(ξ|x,y) rather than on ξ itself, which is the key design choice allowing control of symmetry and tail behavior independently. Section 3.1.1 explains this distinction clearly, and Remark 3 confirms backward compatibility with standard assumptions for κ ∈ (1, 2].
+- **Optimal MAB regret theorem (Theorem 3).** The bound Õ(√(dT)) matches the Ω(√(dT)) lower bound for stochastic MAB with bounded variance. Prior heavy-tailed MAB results achieve only Õ(d^{(κ−1)/κ}T^{1/κ}), which is strictly worse for κ < 2.
 
-- **Theorem 3 gives optimal Õ(√dT) MAB regret for any κ > 0**: Prior heavy-tail MAB results achieve Õ(d^{(κ−1)/κ}T^{1/κ}) [4, 18, 22, 47], which is suboptimal in both d and T for κ < 2. Theorem 3 matches the Ω(√dT) lower bound—a genuine improvement over all prior heavy-tail MAB algorithms for symmetric noise.
-
-- **Figure 3 provides clean experimental validation for the ZO contribution**: The four subplots spanning κ = 0.75, 1.0, 1.25, 1.5 show that median-based methods dramatically outperform non-median methods for κ ≤ 1 (where baselines break theoretically), while remaining competitive for κ > 1. Oracle calls (not just iterations) are used as the x-axis, providing a fair comparison.
+- **ZO optimization experiments (Figure 3) clearly validate the median advantage for κ ≤ 1.** For α = κ ∈ {0.75, 1.0}, median-based methods converge while non-median counterparts stagnate or diverge. For κ > 1, median methods match baseline performance. This directly supports the paper's core claim in the ZO setting.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-*None.*
+None.
 
 ### Major
 
-- **Figure 1 directly contradicts the paper's stated conclusion in §5.1**. The extracted figure caption reads: "Clipped-INF-med-SMD (blue) maintains regret around 0.2; APE (red) around 0.25; HTINF (green) decreases to around 0.1" for expected regret; and "HTINF quickly reaches ~0.9 probability of best arm selection, while APE and Clipped-INF-med-SMD both stabilize around 0.6." Yet the paper concludes: *"HTINF and APE do not have convergence in probability, while our Clipped-INF-med-SMD does, which confirms the efficiency of the proposed method."* On both displayed metrics, HTINF outperforms the proposed method (lower regret, higher best-arm probability). The paper likely intends to refer to the *tail behavior* (the 0.05–0.95 percentile bands for regret) being wide for HTINF despite its good mean, indicating that HTINF achieves good results inconsistently across runs—but this is never explained in the text. As written, the verbal conclusion is contradicted by the quantitative values, and a reader cannot independently verify the "convergence in probability" claim without knowing that the shaded bands for HTINF are much wider than for the proposed method. This must be corrected with an explicit description of the percentile bands and a clear explanation of what "convergence in probability" means in this context.
+- **Misleading MAB empirical claim contradicts Figure 1 results.** The abstract claims methods "do not lose to SOTA approaches and dramatically outperform them for κ ≤ 1." Yet Figure 1 (the sole MAB experiment, using d=2 arms and Cauchy noise, which corresponds to κ = 1) shows HTINF achieving average regret ≈ 0.1 and probability of best-arm selection ≈ 0.9, while Clipped-INF-med-SMD achieves ≈ 0.2 regret and ≈ 0.6 probability—strictly worse on both metrics. The paper's framing in Section 5.1 ("HTINF and APE do not have convergence in probability, while our Clipped-INF-med-SMD does") is false on its face: HTINF converges to 0.9 while the proposed method stagnates at 0.6. Both methods fail to reach 1.0, but HTINF is unambiguously better. The abstract's empirical headline claim is not supported and is misrepresented by this framing.
 
-- **The MAB experiment is insufficient to support the abstract's claim of "dramatically outperform SOTA"**. The main-body MAB experiment uses only d = 2 arms with a single Cauchy-type noise at κ = 1. HTINF is designed for κ > 1, so testing at exactly κ = 1 is borderline. The theoretical advantage materializes at κ < 1. An experiment explicitly at κ = 0.5 or κ = 0.75 with d > 2 is needed to substantiate the dramatic outperformance claim. Additional experiments are deferred to Appendix D.1 and are not visible in the main body.
+- **Theoretical justification of median in Algorithm 3 (MAB) is missing.** Algorithm 3 applies the coordinate-wise median to 2m+1 importance-weighted vectors {ĝ_t}, where each ĝ_t has exactly one non-zero coordinate (the chosen arm A_t). For coordinate i, the number of non-zero observations is Binomial(2m+1, x_{k,i}). When x_{k,i} < 0.5 (which is typical as the algorithm concentrates on the best arm), the majority of observations are exactly 0 and the coordinate-wise median is 0 regardless of the noise. This means: (a) the distribution of the i-th component of each ĝ_t is a mixture of 0 (with probability 1−x_{k,i}) and a continuous distribution (with probability x_{k,i}), which is NOT symmetric around any non-zero value; (b) the unbiasedness proof in Lemma 1 rests on symmetry of all 2m+1 samples around ∇f̂_τ(x), which requires each sample to be symmetric—a condition that does not obviously hold here. The paper states "we assume noise ξ_t satisfies Assumption 3" without verifying that this assumption is inherited by the importance-weighted estimator ĝ_t. The main text provides no argument that Lemma 1 applies in the MAB setting. The proof of Theorem 3 resides entirely in the appendix and cannot be checked here; but the theoretical gap in the main text is real and concerning.
 
 ### Minor
 
-- **The cryptocurrency portfolio experiment (§5.2) does not test the MAB problem**. As the authors acknowledge, the portfolio setting has *full feedback* (all assets observed each step), which is not the bandit setting. The baselines (hold ETH, Efficient Frontier) are not bandit algorithms. This makes the section a demonstration of practical usefulness rather than evidence that the MAB algorithm outperforms competing MAB methods on real data. This should be framed more carefully—currently it is presented as supporting the MAB claim, which it does not.
+- **Figure 3 shows the primary proposed ZO algorithm (ZO-clipped-med-SSTM) consistently underperforms the simpler ZO-clipped-SGD baseline.** The figure caption states that both SGD variants converge faster than both SSTM variants across all κ values. The paper does not explain when the theoretical acceleration of SSTM over SGD materializes in practice, or why the asymptotic advantage does not appear at the scales tested. The main algorithm being beaten by a simpler baseline without discussion is a gap.
 
-- **The oracle call overhead as κ → 0 is not discussed in the abstract or the comparison section**. Each iteration of ZO-clipped-med-SSTM requires (2m+1)·b = (4/κ+3)·b oracle calls, and the constant σ² in Lemma 1 grows as (4/κ)^{2/κ} → ∞ as κ → 0. Table 1 does note "b/κ calls" honestly, but the headline abstract comparison ("Õ(d²ε⁻²) iterations") refers to iterations only. For κ → 0, the total oracle cost diverges, and the regret constant c² in Theorem 3 also diverges super-polynomially. Section 6.1 briefly notes the κ → 0 limitation in context of the adaptive scheme, but the paper should be explicit upfront that the "κ-uniform optimality" claim holds for fixed κ with a κ-dependent constant.
+- **Regret bound constant in Theorem 3 diverges as κ → 0.** The bound in Eq. (14) contains c² = (32 ln d − 8)·(8M₂² + 2Δ²(2m+1)(4/κ)^{2/κ}), where (2m+1)(4/κ)^{2/κ} = (4/κ + 3)(4/κ)^{2/κ} diverges as κ → 0. The headline "Õ(√(dT)) for any κ > 0" is technically correct but the pre-constant grows without bound, making the bound practically vacuous for small κ. This is inadequately discussed; the limitation section only addresses κ → 0 for the adaptive setting.
 
-- **Figure 3 shows SGD variants uniformly outperforming SSTM variants in all plots**, which is flagged in the figure caption but not discussed in the text. If ZO-clipped-SGD (first-order rate, no acceleration) beats ZO-clipped-med-SSTM (accelerated) on every tested value of κ, the motivation for the SSTM-based algorithm needs discussion. This could reflect the constant in the SSTM bound being larger in practice, or the asymptotic regime not yet having been reached with 2×10⁷ samples.
+- **Experiment in Section 5.1 uses only d = 2 arms.** The theoretical claim in Theorem 3 is Õ(√(dT)) for d-arm bandits, and the linear scaling with d is one of the headline advantages over prior work (which achieves Õ(d^{(κ−1)/κ}T^{1/κ})). Validating this claim requires experiments at larger d (e.g., d = 10, 50). A single two-arm experiment does not test the key d-dependent claim.
 
 ### Trivial
 
-- §1.1 "Theory I" refers to "Assumption 4 (§3.1)" as the novel oracle, but the main body only contains Assumptions 1–3; the actual novel assumption is labeled **Assumption 3**. This is a mismatch that creates confusion.
+- The notation "b/κ calls" in Table 1 header is an asymptotic simplification of the actual (4/κ+3)·b calls per iteration stated in Theorem 1. This is asymptotically correct but imprecise; a clarifying remark would avoid confusion.
 
 ---
 
 ## Nice-to-Haves
 
-- A plot of the effective constant in Theorem 3 (or σ² from Lemma 1) as a function of κ would help readers understand the practical regime where the method's advantage is strongest versus where oracle cost dominates.
-- An explicit statement of *total oracle call complexity* (not just iterations) in both the abstract and Table 1 would make the comparison with bounded-variance methods fully transparent.
-- The §5.1 figure should label the percentile band widths for each method explicitly in the text, so the "convergence in probability" claim is self-contained and verifiable.
+- **Multi-arm MAB experiments (d > 2):** Experiments at d = 10, 50 with varying κ would validate the headline d-dependence claim and are needed to close the gap between theory and practice.
+- **Total oracle complexity comparison:** A plot of function gap / regret vs. total oracle calls (not just iterations) would allow a fair comparison accounting for the (4/κ + 3) oracle overhead per iteration.
+- **Adaptive κ estimation:** The method requires knowing κ to set m = 2/κ + 1. The paper acknowledges this but leaves it for future work. Even a heuristic discussion of robustness to misspecified κ would strengthen the practical case.
+- **Portfolio experiment baselines:** Section 5.2 compares only to static strategies. A comparison against EXP3 or online gradient descent in the full-feedback setting would be more informative.
 
 ---
 
@@ -59,59 +58,51 @@ The paper proposes median clipping for zeroth-order (ZO) non-smooth convex optim
 
 *These points are flagged to be removed; treat them with caution.*
 
-- **"Assumption 4 is missing from the main text"** (Harsh Critic §1.1): The contribution §1.1 refers to "Assumption 4," but the actual novel assumption in the main body is Assumption 3. This is an internal numbering inconsistency, not a missing component. The assumption is present and fully stated. Removing as a fatal/major concern; kept as a trivial note above.
+- **Harsh Critic Issue 3 (oracle-count inconsistency in Table 1):** "b/κ calls" in Table 1 is O-notation for the dominant κ-dependent term in (4/κ+3)·b. This is an asymptotic simplification, not a false claim. The actual per-iteration cost is stated correctly in Theorem 1. Not a substantive error.
 
-- **"Optimal rates claim conflates iteration complexity with oracle call complexity"** (Harsh Critic #2 as formulated as a methodological gap): Table 1 explicitly states "b/κ calls" and Theorem 1 states "Each iteration requires (2m+1)·b oracle calls." The paper is transparent about this. The concern about the *abstract* not stating total oracle complexity is retained as a minor weakness, but the original formulation as a "systematic misrepresentation" was too strong.
+- **Harsh Critic's claim that complexity is not "independent of κ":** The paper claims rates "match optimal bounds for bounded variance for any κ > 0"—this is about the ε-dependence (Õ(d²ε⁻²)), not the κ-dependent constants. The critics's point that the constant grows with κ is captured in the Minor tier above; the core claim about ε-rates is not falsified.
 
-- **"Clipped-INF-med-SMD achieves ~0.6 probability vs HTINF's ~0.9, therefore the method is worse"** (Harsh Critic #1, strong version): The relevant claim is about variance/tail behavior, not just mean performance. The weakness is retained in a more calibrated form as a major issue, but the version claiming the paper's method is "worse" overall goes beyond what can be confirmed without seeing the actual figure's shaded bands.
+- **Strength Finder strength #6 ("experimental confirmation of dramatic improvement for κ ≤ 1"):** Partially valid for ZO (Figure 3, within median vs. non-median comparison), but conflicts with the Major weakness that Figure 1 shows MAB underperformance. Moved to a weaker formulation in Strengths above.
 
-- **Strength: "MAB experiments demonstrate convergence in probability where baselines fail"** (Strength Finder): This directly conflicts with the verified Major weakness—Figure 1 shows HTINF outperforming the proposed method on both mean regret and best-arm probability. Removed as a strength.
-
-- **Strength: "Real-world cryptocurrency portfolio application demonstrates practical relevance"**: The portfolio experiment uses full feedback, not the bandit setting. It tests a different problem with non-competing baselines and does not demonstrate the MAB algorithm's superiority. Too generic and potentially misleading; removed.
+- **Strength Finder generic strength about problem importance:** Not specific to paper contributions; removed.
 
 ---
 
 ## Novel Insights
 
-The paper's most significant insight is that noise *symmetry* can be exploited in the zeroth-order setting through coordinate-wise median of direction-projected gradient differences—an idea that does not trivially transfer from first-order median clipping because the direction vector e is sampled on the unit sphere. The key is that flipping ξ → −ξ (symmetry) flips g(x, e, ξ) → −g(x, e, ξ) + 2∇f̂_τ(x), which makes the component-wise median of 2m+1 samples an unbiased estimator of ∇f̂_τ(x) with bounded second moment, regardless of how heavy the tails of ξ are. This observation—that symmetry rather than bounded moments is what enables optimal ZO rates—is the core insight that unifies the paper's contributions to both optimization and bandits.
+The key technical insight—that the two-point oracle (Eq. 7) preserves the symmetry of the noise (because φ(ξ|x+τe, x−τe) is symmetric in u when p(u|x,y) = p(−u|x,y)), enabling the component-wise median over 2m+1 independent noise realizations to have bounded second moment for any κ > 0—is a clean and genuinely novel connection between distributional symmetry and ZO gradient estimation. This observation, formalized in Assumption 3 and Lemma 1, is the intellectual core of the paper and represents a real advance over the standard bounded-moment approach of prior ZO heavy-tailed work. The limitation is that the same argument's applicability to the MAB importance-weighted setting is not established.
 
 ---
 
 ## Suggestions
 
-1. **Rewrite the §5.1 discussion**: Explicitly state that Figure 1 is evaluated at κ = 1, where HTINF has no convergence *guarantee*. Show the shaded bands for HTINF explicitly and explain that while HTINF's mean looks good on this single instance, it has wide percentile bands indicating high variance. Alternatively, show a κ < 1 case (e.g., κ = 0.5) where HTINF provably fails and the proposed method converges reliably.
-
-2. **Revise the abstract**: Replace "iterations" with "oracle calls after accounting for per-iteration cost" or add a sentence clarifying that each iteration costs O(b/κ) oracle calls, so total oracle complexity is Õ(d²ε⁻²·b/κ) for the Lipschitz oracle case.
-
-3. **Add a MAB experiment at κ < 1 and d > 2**: The theoretical advantage over HTINF/APE materializes exactly for κ ≤ 1 and larger d. A d = 5 or d = 10, κ = 0.5 experiment showing both the mean and the percentile bands would directly confirm the paper's core MAB claim.
-
-4. **Discuss Figure 3's SGD > SSTM finding**: Add two or three sentences explaining why the accelerated SSTM variant does not show empirical acceleration on the tested problem. This could be due to constants or regime issues, but it needs acknowledgment.
+1. **Fix the Figure 1 framing:** Either run experiments at κ < 1 (Lévy-alpha-stable with α < 1, or Cauchy which has κ < 1) where HTINF's guarantee fails and compare, or honestly report that HTINF numerically outperforms the proposed method at κ ≈ 1 while explaining the theoretical difference (convergence guarantees vs. empirical averages). The current framing is misleading.
+2. **Clarify the MAB theory:** Either prove a lemma analogous to Lemma 1 for the importance-weighted case, or explicitly state the additional assumptions under which Theorem 3 holds.
+3. **Explain Figure 3 SSTM vs. SGD gap:** Discuss at what problem scales the theoretical acceleration of SSTM over SGD is expected to manifest.
+4. **Sharpen κ → 0 discussion:** Give explicit numerical values of the constant c² for representative κ (e.g., κ = 0.5, 0.25) to help the reader assess when Theorem 3 is practically informative.
 
 ---
 
 ## Score and Decision
 
 **Calibration anchors used:**
+- `/home/wg25r/review_agent/human_reviews/2pNLknCTvG.md` (uniINF, avg 7.5, Spotlight): Heavy-tailed MAB, parameter-free best-of-both-worlds — substantially stronger than this paper; empirical and theoretical claims both well-supported.
+- `/home/wg25r/review_agent/human_reviews/AfhNyr73Ma.md` (ZO stability, avg 7.0, Poster): Technically sound ZO theory, well-presented, solid experimental confirmation.
+- `/home/wg25r/review_agent/human_reviews/7t8aKBeATc.md` (ZO normalized, avg 3.5, Reject): ZO paper with limited novelty, no fundamental advance; this paper is clearly more original.
+- `/home/wg25r/review_agent/human_reviews/DIAaRdL2Ra.md` (Adafactor convergence, avg 5.0, Reject): Theory paper with correct results but insufficient novelty and experimental support.
+- `/home/wg25r/review_agent/human_reviews/4jzjexvjI7.md` (MAB continuous-time, avg 2.33, Reject): Very weak MAB paper; this paper is well above this level.
 
-| Paper | Path | Avg Human Score | Comparison |
-|-------|------|----------------|------------|
-| ZO stability analysis (AfhNyr73Ma) | `/home/wg25r/review_agent/human_reviews/AfhNyr73Ma.md` | 7.0 (Accept poster) | Similar ZO optimization topic; that paper provides a unifying stability framework. The current paper has a comparably strong theoretical contribution (extending κ coverage) with weaker experimental support. |
-| ZO minimum-variance estimators (ywFOSIT9ik) | `/home/wg25r/review_agent/human_reviews/ywFOSIT9ik.md` | 6.8 (Accept spotlight) | Similar ZO optimization topic; that paper has cleaner experiments but its theoretical contribution is arguably comparable. |
-| Gradient clipping in federated learning (BdPvGRvoBC) | `/home/wg25r/review_agent/human_reviews/BdPvGRvoBC.md` | 6.0 (Accept poster) | Similar clipping analysis; solid theory, moderate scope. The current paper's theoretical contribution is arguably broader (ZO + MAB + κ ≤ 1). |
-| Soft clipping analysis (tsNLIBlG4p) | `/home/wg25r/review_agent/human_reviews/tsNLIBlG4p.md` | 4.0 (Reject) | Similar clipping topic; weaker because it lacked clarity about when soft > hard clipping and had slower-than-standard convergence rates. The current paper has clearer and stronger theoretical contributions. |
-| Stochastic matching bandits (iKLSISIPH7) | `/home/wg25r/review_agent/human_reviews/iKLSISIPH7.md` | 4.8 (Reject) | Low-medium MAB anchor; rejected for limited contribution scope. |
+**Positioning:** The ZO optimization theory (Sections 3–3.3) is at the AfhNyr73Ma level (≈7): novel, clean, fills a real gap. However, the MAB application (Section 4–5.1) is substantially weaker: the theoretical justification is incomplete and the empirical claim in Figure 1 actively contradicts the abstract's headline claim. The combined paper sits between the 5.0 anchors (theory correct but experiments weak) and the 7.0 anchor (solid all-around). Given the Major weakness on the empirical misrepresentation and the theoretical gap in the MAB section, I place this paper at **4.5**: the ZO theory merits publication but the paper as submitted contains a misleading empirical claim about its main MAB algorithm and an unjustified theoretical extension to the MAB setting that together are too significant to overlook.
 
-**Reasoning**: The paper's theoretical core—Lemma 1 plus Theorems 1–3—is sound and fills a genuine gap. However, the major experimental weakness (Figure 1 contradicting the stated conclusion, the MAB experiment being too limited to support "dramatically outperform SOTA") drags the score below the accepted ZO papers in the 6.8–7.0 range. The paper is above the rejected papers at 4.0–4.8 because its theoretical contribution is real and substantial. Accounting for the major Figure 1 issue and the limited MAB experimental support, I position this at **5.5**—above the clear rejects (4.0), below the clean poster accepts (6.0–7.0), as it has publishable theory but presentation and experimental issues that need to be resolved for acceptance.
+**Axes:**
+- *Originality:* Moderate–good. The extension from κ > 1 to κ > 0 is genuine; the connection to median estimation is novel in the ZO context.
+- *Importance of research question:* Good. Heavy-tailed ZO optimization is practically motivated and the κ ≤ 1 gap is real.
+- *Claims well-supported:* Weak. The abstract's empirical headline claim is contradicted by Figure 1; the MAB theoretical argument has a gap.
+- *Soundness of experiments:* Weak. d = 2 arms in MAB, accelerated algorithm underperforms simpler baseline, misleading framing.
+- *Clarity of writing:* Moderate. Theory is clearly presented; experiment interpretation is misleading.
+- *Value to research community:* The ZO optimization part has clear value; the MAB part as currently written has questionable value.
 
-**Axes summary:**
-- *Originality*: Good — extending median clipping to ZO/MAB for κ ≤ 1 is novel and non-trivial.
-- *Importance*: Good — κ ≤ 1 noise (Cauchy etc.) is practically relevant and theoretically unexplored.
-- *Claims well supported*: Mixed — ZO claims (Figure 3) are well supported; MAB claims (Figure 1) are not.
-- *Soundness of experiments*: Weak for MAB, adequate for ZO.
-- *Clarity*: Good for theory; problematic in §5.1.
-- *Value to community*: Moderate-to-high for the optimization community working on heavy-tailed noise.
+**Decision: Reject.** The ZO optimization contribution is publishable in isolation, but the MAB section, which is presented as a co-equal contribution, has both a theoretical gap and an empirical misrepresentation that must be resolved before the combined paper is acceptable.
 
-**Decision: Borderline — lean toward weak reject pending resolution of Figure 1 and MAB experimental support.**
-
-MY FINAL SCORE: <pineapple>5.5</pineapple>
+MY FINAL SCORE: <pineapple>4.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

@@ -1,22 +1,22 @@
-Now let me search for calibration papers.Now I have enough information to write the final consolidated review. Let me verify one more key data point from Table 4 about the transductive loss contribution.Now I have sufficient information to write the final consolidated review.
+Now let me search for calibration anchors.Now I have sufficient information to write the final review. Let me compile it.
 
 ---
 
 ## Summary
 
-NPBML proposes a unified gradient-based meta-learning framework that simultaneously meta-learns three "procedural biases": a MAML-style task-adaptive initialization, a T-Net-style preconditioned optimizer, and a meta-learned loss function — all modulated per task via FiLM conditioning. The framework is evaluated on four few-shot classification benchmarks (mini-ImageNet, tiered-ImageNet, CIFAR-FS, FC-100) with two backbones, demonstrating consistent improvements over MAML-family baselines. The central empirical claim — that jointly learning all three components is better than learning any subset — is supported by a clean ablation study in Table 3.
+NPBML (Neural Procedural Bias Meta-Learning) proposes a unified bilevel framework that simultaneously meta-learns three procedural bias components for MAML-style few-shot learning: a preconditioned gradient optimizer (T-Net style), a meta-learned loss function (with inductive, transductive, and regularization subcomponents), and task-adaptive FiLM conditioning applied to both the encoder and loss network. The paper demonstrates that these components contribute additively and complementarily, validated via ablation studies, and reports consistent improvements over MAML-based baselines across four benchmarks and two architectures.
 
 ---
 
 ## Strengths
 
-- **Well-structured ablation table demonstrating component complementarity (Table 3):** Rows (1)–(5) cleanly show that the optimizer alone adds +2.09%, the meta-learned loss alone adds +6.37%, their combination adds +7.41%, and FiLM task adaptation adds a further +2.22%, for a total of +9.63% over MAML on mini-ImageNet 5-way 5-shot. This directly supports the paper's central claim that jointly training all three components yields synergistic gains.
+- **Unified, modular framework with principled initialization (Section 3.5, Eq. 14):** The three components (optimizer, loss, FiLM) are cleanly decomposed in Eq. 6, and NPBML provably reduces to MAML at the start of meta-training due to its initialization strategy. This is a non-trivial design choice that stabilizes training.
 
-- **Principled initialization strategy (Section 3.5, Eq. 14):** Setting ω₀ = I (recovering SGD), φ₀ ∼ N(0, 1e⁻²) (so M(φ₀, ψ₀) ≈ L^base), and ψ₀ near zero (so FiLM ≈ identity) ensures that NPBML reduces approximately to MAML at initialization. This is non-trivial engineering that avoids cold-start instability and ensures learned improvements are genuinely additive.
+- **Clear and complementary ablation evidence (Tables 3–4):** Table 3 shows a clean monotonic improvement as components are added: MAML (65.38%) → +optimizer (67.47%) → +loss function (71.75%) → +task-adaptation (75.01%). Table 4 provides a fine-grained decomposition of the loss subcomponents. Together these confirm that each meta-learned component provides independent benefit.
 
-- **Broad and consistent empirical coverage:** Evaluation across four datasets, two backbones (4-CONV and ResNet-12), and both 1-shot and 5-shot settings with 95% CI provides a credible, wide-ranging picture of generalization performance. NPBML outperforms all listed MAML-variant baselines across every setting.
+- **Consistent empirical improvement across four benchmarks and two architectures (Tables 1–2):** NPBML outperforms all compared MAML-based baselines in every reported setting. The gains on tiered-ImageNet with ResNet-12 are particularly substantial (~7.6pp 1-shot and ~3pp 5-shot over ALFA), suggesting the framework is especially powerful with larger datasets.
 
-- **NPBML outperforms ensembled competitors (Table 2 footnote):** The paper notes that MeTAL and ALFA in Table 2 ensemble the top-5 models from the same run, yet NPBML without ensembling achieves higher accuracy. This is a concrete and honest advantage.
+- **Task-adaptive modulation of all components via FiLM (Section 3.4):** Both the encoder and the meta-learned loss function are conditioned on activations via FiLM, contributing ~2.22pp on top of the non-adaptive variant (Table 3 rows 4→5). This is a well-motivated design choice grounded in the observation that different tasks may require different optimization procedures.
 
 ---
 
@@ -27,17 +27,19 @@ None.
 
 ### Major
 
-- **Transductive query-set access creates an unfair comparison with inductive baselines.** Section 3.3 explicitly defines $\mathcal{L}^Q$ as "a transductive loss function conditioned on task-related information derived from the query set" — specifically, model predictions on the query set and relation-network embeddings. Table 4, row (8) shows this transductive component alone contributes +5.54% (65.38% → 70.92%), the largest single individual contribution of any sub-component. Meanwhile, the primary baseline comparison partners — MAML, MetaSGD, T-Net, WarpGrad, ModGrad, ALFA, GAP — are all inductive: they adapt using only the support set and never access query features during inner-loop optimization. The paper acknowledges the word "transductive" internally but never segregates the comparison into transductive vs. inductive tiers, and never includes established transductive meta-learning comparisons (e.g., methods that explicitly use query features). The only transductive competitor in Table 1 is SCA (Antoniou & Storkey, 2019), which NPBML does outperform (57.49% vs. 54.84% 1-shot, 4-CONV), but this cannot substitute for a proper transductive baseline comparison. Crucially, the inductive-only variant of NPBML (Table 4, row 7: 70.68%) falls slightly *below* GAP (71.55%), the strongest inductive baseline. This asymmetry means the headline performance gap overstates the advantage attributable to the proposed joint procedural-bias framework, and should be addressed with either a dedicated transductive comparison section or by reporting inductive-only results prominently.
+- **Transductive comparison without positioning disclosure or transductive baselines.** Section 3.3 explicitly labels ℒ^Q as "a transductive loss function conditioned on task-related information derived from the query set," using a pre-trained relation network's embeddings. However, the abstract, introduction, and results sections never position NPBML as a transductive inference method. The majority of compared baselines (MAML, MetaSGD, T-Net, WarpGrad, ModGrad, GAP, ALFA) are purely inductive; MeTAL partially overlaps. Table 4 shows that the transductive loss alone contributes ~5.54pp (70.92% vs 65.38%), while the gap over the strongest inductive baseline (GAP, 71.55%) in the 5-shot 4-CONV setting is only ~3.46pp. This means that in the 5-shot 4-CONV setting, an inductive-only NPBML would be close to or below GAP, and the claimed advantage of "meta-learning optimizer and loss function jointly" is confounded by the transductive advantage. The paper provides no comparison against established transductive few-shot methods (e.g., LaplacianShot, PTMAP, TIM) and no inductive-only NPBML variant (optimizer + inductive loss + regularizer + FiLM) evaluated directly against inductive baselines. The core claim—that jointly learning optimizer, loss, and initialization beats either alone—cannot be evaluated in isolation without this experiment. Note: the paper does disclose the transductive nature in Section 3.3, so this is not a hidden flaw, but the evaluation design and positioning are misleading.
+
+- **GAP (strongest 4-CONV baseline) absent from Table 2 without justification.** GAP (Kang et al., 2023) achieves 54.86%/71.55% on mini-ImageNet and is the strongest inductive 4-CONV baseline in Table 1, yet it does not appear in Table 2 (CIFAR-FS and FC-100). No explanation is given for this omission. Since NPBML's advantage over GAP in Table 1 is modest (particularly in the 5-shot setting before accounting for the transductive component), the omission of the strongest competitor from additional tables undermines the completeness of the empirical evaluation.
 
 ### Minor
 
-- **No parameter count or computational cost reporting.** NPBML jointly meta-trains four sets of meta-parameters (θ, ω, φ, ψ), plus relies on a separately pre-trained relation network for $\mathcal{L}^Q$. No table reports total parameter count or training time relative to any baseline. The ablation in Table 3 is consistent with the hypothesis that adding more parameters improves performance, independent of the framework design. This does not invalidate the results but limits the claim that joint procedural-bias learning — rather than increased capacity — explains the gains.
+- **Ablation studies restricted to one benchmark/architecture/setting.** Both ablation tables (Tables 3 and 4) are performed exclusively on 4-CONV mini-ImageNet 5-way 5-shot. Given that NPBML's advantage varies substantially across benchmarks (large on tiered-ImageNet, smaller on FC-100), the component attribution from the ablation may not generalize. At minimum, a brief ablation on tiered-ImageNet or CIFAR-FS would strengthen confidence in the conclusions.
 
-- **Ablation studies restricted to 5-way 5-shot, 4-CONV, mini-ImageNet only.** Section 6.2 states: "All ablation experiments are performed using the 4-CONV network architecture in a 5-way 5-shot setting on the mini-ImageNet dataset." The 1-shot ablation is absent. The transductive component $\mathcal{L}^Q$ is likely less effective at 1-shot (one support example per class → less reliable relation-network signal), and the absence of 1-shot ablations prevents verification of this. Knowing whether component contributions are consistent across shot-settings is important for assessing robustness.
+- **CIFAR-FS 5-shot ResNet-12 result is not statistically significant over ALFA.** NPBML achieves 83.72±0.64% vs. ALFA's 83.62±0.37% on CIFAR-FS 5-shot ResNet-12 (Table 2). The confidence intervals overlap substantially. The paper presents this as a win without acknowledging the statistical ambiguity.
 
-- **GAP (Kang et al., 2023) is absent from Table 2** (CIFAR-FS / FC-100). GAP is the strongest 4-CONV competitor in Table 1 and its omission from Table 2 is not explained. Given that GAP (71.55% 5-shot mini-ImageNet) nearly matches NPBML's inductive-only variant, including it in all tables is important for completeness.
+- **No parameter count or computational cost comparison.** NPBML adds three FFN networks for the meta-learned loss (ℒ^S, ℒ^Q, ℛ), a preconditioner layer per encoder block, FiLM layers for both the model and the loss, and requires a pre-trained relation network for ℒ^Q. None of this overhead is quantified against baselines. The paper notes that MeTAL and ALFA "ensemble the top 5 performing models," treating their extra capacity as a disadvantage, while leaving its own capacity overhead unquantified—an inconsistency.
 
-- **Section 4 (Implicit Meta-Learning) is analytically weak.** The central equations (15, 16) are existential statements: "∃α ∃φ : …" These are trivially satisfied by any sufficiently expressive function approximator and apply equally to any meta-learned loss or optimizer. The downstream claims about implicit early stopping and batch-size regularization are informal and unsupported by any experiment. While this does not harm the main empirical contributions, the section would be more convincing with either an experiment isolating these effects or removal in favor of tighter methodology.
+- **Section 4 overclaims novelty of "implicit meta-learning" observations.** The paper states it makes "a novel observation" (line 214) that meta-learning the three procedural biases implicitly learns learning rates, schedules, early stopping, and label smoothing. However, each of these connections is directly cited to prior work (Baik et al., 2021; Raymond et al., 2023b; Gonzalez & Miikkulainen, 2020). The paper's contribution here is aggregating these observations in a unified framework, not discovering them. The framing as a novel contribution is slightly misleading.
 
 ### Trivial
 None.
@@ -46,72 +48,77 @@ None.
 
 ## Nice-to-Haves
 
-- Including transductive meta-learning baselines (e.g., methods that explicitly use query features during adaptation) in a clearly labeled separate section or sub-table would resolve the main comparison concern.
-- Ablating the 1-shot performance of each component (Table 3 style) would strengthen the claim of robustness.
-- A visualization of task-adaptive FiLM modulation values (γ_ψ, β_ψ) across tasks would validate whether the FiLM layers are learning meaningful task-specific adaptations or near-zero corrections.
-- Cross-domain few-shot evaluation (e.g., Meta-Dataset) is a natural extension for a "task-adaptive" framework — if FiLM modulation is actually encoding task identity, it should provide larger benefits under domain shift.
+- An inductive-only NPBML variant (removing ℒ^Q) compared directly against GAP and other inductive baselines would greatly strengthen the core claim about optimizer-loss synergy.
+- Ablation experiments (or at least rows from Table 3) replicated on tiered-ImageNet or CIFAR-FS, to confirm that component attributions generalize.
+- Cross-domain few-shot evaluation: NPBML's task-adaptive FiLM conditioning is naturally suited to domain-shifted tasks, and this setting would provide a falsifiable test of the framework's generalization.
+- Reporting training wall-clock time and meta-parameter counts relative to baselines, for practical contextualization.
 
 ---
 
 ## Removed Points
 
-*These points are flagged to be removed; treat them with caution.*
+*These points are flagged to be removed, treat them with caution.*
 
-- **"Structural unfair comparison" framing by the harsh critic** is partially valid but overstated as "fatal." The paper explicitly labels its component as "transductive" and includes SCA as a transductive competitor. It is re-ranked as Major rather than Fatal.
+- **Harsh critic's claim that the transductive comparison "invalidates" the central claim (Fatal):** Downgraded to Major. The paper explicitly labels ℒ^Q as transductive in Section 3.3, so this is not a hidden flaw. Additionally, the inductive components of NPBML (inductive loss +~5.30%, regularizer +~4.66%, optimizer +~2.09%, FiLM +~2.22%) likely still beat inductive baselines even without ℒ^Q—the critic's assertion that "performance would largely collapse to the level of inductive PGD methods" is not supported by the ablation data.
 
-- **Pre-training advantage**: Section 3.5 explicitly discusses pre-training and the paper cites several methods that do the same. Whether specific baselines (MAML, MetaSGD, T-Net) were also run with pre-training is unclear, but pre-training is standard in modern few-shot learning and its use is transparently declared. This is at best a minor caveat, not a structural flaw — removed.
+- **Harsh critic's claim that the implicit learning rate observation (Section 4, Eq. 15) is misleading framing:** Kept as Minor. The criticism that novelty is overclaimed is valid, but the aggregation within a unified framework has independent value.
 
-- **Implicit meta-learning equations as "trivially true"**: While the harsh critic is correct that they are existential statements, the section does attempt to provide conceptual insight. Moved to Minor rather than removed entirely, with the recommendation to add experimental validation.
+- **FiLM under-specification (Section 3.4):** The harsh critic flags that FiLM conditioning on "output activations of the previous layers" is self-conditioning and underspecified. This is a legitimate technical question but is already described with enough clarity for practice (it is a simplified CNAPs-style conditioning the paper explicitly acknowledges), and the ablation shows it works. Removed as a standalone weakness; it could be noted in suggestions.
 
-- **"Missing related works"** (transductive propagation networks, LaplacianShot): per rules, removed — cannot verify existence of uncited works.
+- **Pre-training checkpoint fairness (Section 3.5):** The critic asks whether baselines use the same pre-trained checkpoint. This is a standard concern in few-shot learning papers but falls under minor reproducibility details typical in the field.
 
-- Any typo/formatting criticisms: removed per rules.
-
-- **Strength: "novel observation about implicit meta-learning of hyperparameters"** — this is partially delusional as a concrete strength given that the equations are vacuously existential. Removed as a strength; the corresponding concern is kept as Minor weakness.
-
-- **Strength: "FiLM provides +2.22% on Table 3 row 4→5"** — kept as specific, concrete evidence cited above.
+- **Strength Finder's claim about "implicit learning" being a "novel theoretical justification":** Downgraded and absorbed into strengths section only as a framing note; it is not a novel theoretical contribution as the critic correctly identifies, but the unified framework is still a contribution.
 
 ---
 
 ## Novel Insights
 
-The most novel empirical observation in this paper — independently of the transductive concern — is that meta-learning an optimizer and a meta-learned loss function are strictly complementary: Table 3 shows that their combination (row 4: 72.79%) exceeds MAML plus either component alone (rows 2 and 3: 67.47% and 71.75%), and both contributions are non-trivially positive. This is not obvious a priori, since both components modify the gradient dynamics and could interfere. The finding, if replicated in the 1-shot regime and with a properly segregated inductive comparison, would be a genuine contribution to understanding what makes gradient-based meta-learning work.
+The paper's most interesting observation is the interplay between the transductive and inductive loss components: despite individually delivering ~5% gains in 5-shot 4-CONV classification, their combination yields only 6.37% total (Table 4). The paper's hypothesis—that this non-additivity arises because both components implicitly learn the same scalar learning rate (Eq. 15)—is a testable, principled explanation that could guide future designs of multi-component meta-learned loss functions. This insight, if correct, suggests a general principle for disentangling complementary contributions in meta-learned objectives.
 
 ---
 
 ## Suggestions
 
-1. **Add a clearly labeled transductive comparison section:** Re-run Table 1/2 with the transductive component removed (the inductive-only variant from Table 4, row 7) and report it as the primary comparison against inductive baselines. Include NPBML-full only when compared against other transductive few-shot methods.
-2. **Extend ablation to 1-shot setting:** Table 3 and 4 reproduced for 1-shot would substantially strengthen the claims about component contributions being consistent.
-3. **Report parameter counts and FLOPs** for NPBML and each baseline in Tables 1–2; this would separate capacity effects from methodological effects.
-4. **Strengthen or remove Section 4:** Either add an experiment demonstrating one of the implicit regularization effects (e.g., show that the meta-learned loss implicitly implements label smoothing by inspecting the learned function), or streamline this section to one paragraph of conceptual context.
+1. **Provide an inductive-only ablation:** Remove ℒ^Q, keep all other components (optimizer, inductive loss ℒ^S, regularizer ℛ, FiLM), and compare directly against GAP and ALFA. This is the single most important experiment to clearly establish the contribution of the non-transductive components.
+
+2. **Include GAP in Table 2** or explicitly explain why it was omitted (e.g., if the authors could not reproduce its results on CIFAR-FS/FC-100).
+
+3. **Position NPBML as a transductive method in the abstract and results**, or provide transductive baselines for fair comparison.
+
+4. **Extend ablations** to at least one additional benchmark (tiered-ImageNet or CIFAR-FS) to validate that component attributions generalize.
+
+5. **Report computation cost** (training time, inference time per episode, total meta-parameter count) relative to at least ALFA and GAP.
 
 ---
 
 ## Score and Decision
 
-**Calibration anchors used:**
+**Calibration anchors:**
 
-| Path | Avg Human Score | How it compares |
-|------|----------------|----------------|
-| `/human_reviews/T7YV5UZKBc.md` | 7.33 (Accept oral) | NAS for few-shot — strong empirical, clear NAS-based novelty; stronger novelty framing than NPBML |
-| `/human_reviews/mQ72XRfYRZ.md` | 6.67 (Accept spotlight) | Hierarchical Bayesian few-shot; principled framework, accepted despite "somewhat limited innovation" — comparable structural profile to NPBML |
-| `/human_reviews/nnicaG5xiH.md` | 6.33 (Accept poster) | Meta-learning for physical systems; methodological concerns about novelty but accepted on empirical grounds |
-| `/human_reviews/88hh5GtLBJ.md` | 5.4 (Reject) | Few-shot class-incremental learning; rejected for missing baselines and conceptual issues — comparable profile to NPBML with transductive concern |
-| `/human_reviews/MCjVArCAZ1.md` | 4.5 (Reject) | PT vs. MAML comparison; rejected for limited novelty and scope — lower novelty than NPBML |
-| `/human_reviews/WM5G2NWSYC.md` | 2.0 (Reject) | Gradient-based meta-learning with very weak empirical validation — clearly weaker than NPBML |
+| Paper | Avg Score | Decision | Comparison |
+|---|---|---|---|
+| ConML (meta-learning + contrastive) | 4.00 | Reject | Less novel framework, weaker ablations; NPBML clearly better |
+| Hierarchical Bayesian Few-Shot | 6.67 | Accept (spotlight) | Novel probabilistic framework with principled derivations; stronger novelty profile than NPBML |
+| Efficient Heterogeneous Meta-Learning | 6.00 | Accept (poster) | Similar level: clean method, good results, some missing details — comparable to NPBML |
+| MetaAdapter (FSCIL) | 5.40 | Reject | Marginal contribution, similar missing-comparison concerns |
+| Meta-Learning with Personalized LR | 3.00 | Reject | Weak, incremental; NPBML substantially stronger |
+| Is Pre-training Better than Meta-Learning? | 4.50 | Reject | Fair-comparison concerns; NPBML has more novel contribution |
 
-**Positioning:** NPBML's empirical breadth and clean ablation structure put it above the low-scoring anchors (WM5G2NWSYC at 2.0, MCjVArCAZ1 at 4.5). Its consistent multi-benchmark improvements and principled design are in the range of the accepted papers (nnicaG5xiH, mQ72XRfYRZ). However, the major transductive vs. inductive comparison asymmetry — which the paper does not acknowledge in the headline comparisons — places it below the spotlight/oral anchor (T7YV5UZKBc, mQ72XRfYRZ). The inductive-only variant of NPBML (70.68%) slightly under-performs the strongest inductive baseline GAP (71.55%), weakening the headline claim under a fair comparison. Closest analogue is papers in the 5–6 range (nnicaG5xiH at 6.33, 88hh5GtLBJ at 5.4): NPBML has stronger empirics but a more significant methodological concern. I place it at **5.5**.
+**Assessment:** NPBML sits between the Efficient Heterogeneous Meta-Learning paper (6.00, accepted) and ConML (4.00, rejected). It has a more unified contribution than ConML and cleaner ablations, but has real evaluation concerns (transductive comparison, missing GAP) that the accepted papers at 6.0 do not. The paper likely deserves a borderline evaluation — the framework is principled, the results are strong, but the methodological concerns about transductive comparison and the missing strongest baseline require addressing. Given the cluster of accepted papers in the 5.5–6.0 range for work with similar strengths and comparable (or fewer) weaknesses, and given that this paper's major weaknesses are addressable in revision, I score it at **5.0**.
 
-**Axes summary:**
-- *Originality:* Moderate — unifies known components (MAML + T-Net + meta-loss + FiLM) in a principled framework; no fundamentally new primitive.
-- *Importance of research question:* High — improving gradient-based meta-learning is a central open problem.
-- *Claims vs. support:* Partially supported — internal ablation is solid, but external comparisons are confounded by transduction asymmetry.
-- *Soundness of experiments:* Mostly sound; ablation scope is narrow (5-shot only), and the lack of transductive context is a real gap.
-- *Clarity of writing:* Good — the paper is well-organized and the mathematical framework is clear.
-- *Value to community:* Moderate — the unified framework is useful, but the transductive component needs clearer presentation.
+**Originality:** Moderate — unifying three known approaches (T-Net, MeTAL-style loss, FiLM conditioning) is incremental but the joint optimization and initialization strategy add genuine value.
 
-**Decision: Borderline reject.** The paper has genuine contributions but the major comparison concern (transductive vs. inductive asymmetry) needs to be addressed before acceptance. The authors can resolve this by segregating inductive and transductive evaluations and reporting inductive-only results prominently.
+**Importance:** Moderate-to-high — optimization-based meta-learning for few-shot classification is a core ML problem.
 
-MY FINAL SCORE: <pineapple>5.5</pineapple>
+**Claims vs. evidence:** Partially supported — the framework clearly works and ablations are clean, but the transductive comparison makes the quantitative advantage over inductive methods hard to interpret.
+
+**Soundness:** Good for inductive components; questionable for the presentation of the transductive comparison.
+
+**Clarity:** Good overall; the transductive issue disclosure is buried in Section 3.3 rather than prominently stated.
+
+**Value to community:** Moderate — the framework itself is a useful synthesis; the implicit meta-learning observations are a helpful conceptual contribution.
+
+**Decision: Borderline Reject.** The main claims require either an inductive-only comparison demonstrating the framework's advantage holds without the transductive component, or a full repositioning as a transductive method with appropriate baselines.
+
+MY FINAL SCORE: <pineapple>5.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

@@ -24,6 +24,7 @@ export MERGER_MODEL="claude_sdk:claude-sonnet-4-6"
 export NEUTRAL_MODEL="ollama:glm-5.1:cloud"
 export OUTPUT_CSV="bench_scores_claude_sonnet_3.csv"
 export MERGE_LOG="pipeline_whole_claude_3.log"
+export MAX_PAPERS=100
 ollama serve & 
 # use balanced to see quality in the whole spectrum of scores
 export CONCURRENCY=3   

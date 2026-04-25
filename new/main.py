@@ -490,6 +490,7 @@ async def run_benchmark(data_dir: str, n_samples: int = 10, seed: int = 42, bala
     else:
         samples = random.Random(seed).sample(available, min(n_samples, len(available)))
         print(f"Random sample: {len(samples)} papers")
+    samples = samples[:int(os.environ.get("MAX_PAPERS", len(samples)))]  # allow limiting number of papers via env var but keep order
 
     out_dir = Path(__file__).parent
     csv_path = out_dir / os.getenv("OUTPUT_CSV", "bench_scores.csv")
@@ -514,7 +515,7 @@ async def run_benchmark(data_dir: str, n_samples: int = 10, seed: int = 42, bala
             print(f"  Continuing — will skip {len(finished)} already-finished papers.\n")
     samples = [s for s in samples if s["paper_id"] not in finished]
 
-    if not finished:
+    if not finished: 
         with open(csv_path, "w", newline="") as f:
             csv.writer(f).writerow(["paper_id", "pred_score", "pred_decision", "gt_avg_score", "gt_decision", "gt_binary", "match", "cost", "sdk_savings",
                                     "gt_score_0", "gt_score_1", "gt_score_2", "gt_score_3", "gt_score_4", "gt_score_5", "gt_score_6"])

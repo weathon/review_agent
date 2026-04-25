@@ -1,121 +1,110 @@
-Now let me search for calibration anchors.Now I have sufficient information to write the final review. Let me synthesize everything.
+Now let me search for calibration papers.Now I have sufficient information to write the final review. Let me compile it.
 
 ---
 
 ## Summary
-
-SuMi proposes a multimodal wild Test-Time Adaptation (TTA) framework that addresses the practically important setting where the test stream contains a mixture of weak OOD samples (single modality corrupted) and strong OOD samples (multiple modalities corrupted or missing). The method combines three components: (1) IQR-based smoothing that gradually expands the sample pool over iterations, (2) Unimodal Assistance (UA) that filters for low multimodal entropy but high unimodal entropy, and (3) a Mutual Information Sharing (MIS) loss aligning unimodal and multimodal predictions via KL divergence. Experiments on Kinetics50-C and VGGSound-C show clear gains over prior TTA baselines on strong OOD scenarios.
+This paper proposes SuMi, a method for **multimodal wild TTA** — a new setting where test data contains both weak OOD samples (single modality corrupted) and strong OOD samples (multiple modalities corrupted or one modality missing). SuMi consists of three components: (1) IQR smoothing, which dynamically gates samples during adaptation using a time-varying interquartile range criterion applied to feature representations; (2) unimodal assistance, which selects low multimodal-entropy samples that also exhibit sufficiently high unimodal entropy (indicating reliance on cross-modal interaction); and (3) mutual information sharing (MIS), a cross-modal KL-divergence alignment loss. The paper introduces two benchmarks (Kinetics50-C and VGGSound-C) covering 21 video corruption types, 6 audio corruption types, and 4 strong OOD scenarios, and shows that existing TTA methods fail catastrophically on strong OOD while SuMi maintains significant accuracy gains.
 
 ---
 
 ## Strengths
 
-- **Novel, well-motivated problem formulation (§1, Figure 1(b,c,d))**: The multimodal wild TTA setting is genuinely underexplored. Figure 1 clearly demonstrates that all existing TTA baselines—including the multimodal-specific READ—fail catastrophically on strong OOD (missing or multi-corrupted modalities), collapsing to ~10–16% accuracy, which is a compelling motivation for the new challenge.
+- **Novel and well-motivated problem formulation, concretely demonstrated.** The paper shows in Figure 1(b)–(d) that existing methods (Tent, SAR, SoTTA, DeYO, CEMA, and even the multimodal-specialized READ) fail dramatically under strong OOD and wild TTA settings, often degrading far below the source model. This establishes a genuine, unaddressed gap.
 
-- **Strong empirical results on the hardest scenarios (Table 2, Table 4, Figure 5)**: SuMi achieves 33.4% average strong-OOD accuracy on Kinetics50-C vs. next-best READ at 29.1%, and most other baselines at 11–16%. The robustness under increasing strong-OOD ratio (Figure 5), where baselines degrade rapidly while SuMi holds its performance, is the paper's most convincing evidence.
+- **Strong empirical gains on the hardest setting (Tables 2 and 4).** On Kinetics50-C strong OOD, SuMi achieves 33.4% average vs. 29.1% for READ (+4.3%), with the largest gain on "Mix" scenarios (18.4% vs. 13.7%). On VGGSound-C strong OOD, SuMi achieves 19.7% average vs. EATA's 17.4%. These are substantial absolute improvements in a regime where most baselines are near chance.
 
-- **Unimodal assistance insight is empirically grounded (Figure 3(c), Table 6)**: The observation that the [20,40] unimodal entropy quantile outperforms the [0,20] quantile (Figure 3(c)) is supported by Table 6, where Area 1 samples (low multimodal entropy, rich multimodal information) achieve 39.4% vs. Area 3 (low multimodal entropy, little multimodal info) at 32.1%. This is a concrete and novel insight.
+- **Informative non-obvious empirical finding about unimodal entropy (Figure 3(c), Table 6).** The observation that unimodal entropy in the [20,40] percentile outperforms the [0,20] percentile — indicating that very-low-unimodal-entropy samples lack multimodal discriminative value — is experimentally well-supported and motivates the unimodal assistance component in a principled way.
 
-- **Comprehensive benchmarks**: The construction of Kinetics50-C and VGGSound-C with 15 video and 6 audio corruption types at five severity levels, plus four strong OOD scenarios, provides a thorough and reusable evaluation framework.
+- **Graceful degradation under wild mixing ratios (Figure 5).** The mixed-ratio evaluation across 10 different proportions of strong OOD samples provides a realistic assessment of wild TTA conditions and shows SuMi degrades more gracefully than all baselines.
+
+- **Benchmark contribution.** Kinetics50-C and VGGSound-C with strong OOD scenarios is a concrete, reusable contribution that fills a genuine gap since prior benchmarks (including READ's) only consider single-modality corruption.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-
-None.
+*None* — the core empirical results are not invalidated by the identified issues.
 
 ### Major
 
-- **Table 5 contains two indistinguishable full-model rows that give substantially different results, and the paper's textual interpretation of the ablation is factually wrong.** Table 5 has two rows both labelled "IQR ✓, UA ✓, MIS ✓" that report (54.3, 44.6, 51.3) and (59.3, 52.0, 59.1) on Kinetics50-C—a difference of ~7.4 pp at severity 5—with no explanation of what differs between them. More critically, the lower full-model row (54.3 at severity 3) is even *worse* than UA alone (52.1) or IQR+MIS (58.0), which is inexplicable if all three components are genuinely complementary. The paper offers no clarification about what these two rows represent (different MIS stopping time? different β?). This makes the ablation uninterpretable as the primary evidence for each component's contribution.
+- **The paper's primary interpretive claim about IQR smoothing directly contradicts its own ablation data.** Section 4.3 states: *"IQR smoothing brings the most improvements to the model."* Table 5 (Kinetics50-C, severity 3) shows: IQR alone = 37.1, UA alone = 52.1, MIS alone = 49.4. IQR is the **weakest** single component. Marginal contribution analysis from the full model is equally clear: removing MIS costs **−11.9 points** (59.3→47.4), removing IQR costs −3.3 points (59.3→56.0), and removing UA costs −1.3 points (59.3→58.0). By every reasonable metric, **MIS contributes the most**. This mischaracterization is not minor phrasing — it is the paper's core narrative claim and is factually incorrect per the authors' own data.
 
-  Beyond the duplication, §4.3 claims: *"IQR smoothing brings the most improvements to the model."* This is directly contradicted by Table 5: UA alone achieves 45.1% vs. IQR alone at 31.7% and MIS alone at 39.4% at severity 5. By any reading—whether comparing single components in isolation or computing marginal gains—UA is the strongest single component and IQR is the weakest. The text's central interpretive claim about the ablation is factually wrong.
-
-- **IQR+UA combination actively hurts relative to UA alone (38.1% < 45.1% at severity 5), and this negative interaction is never acknowledged or explained.** The two mechanisms are presented as complementary (IQR for smoothing, UA for quality filtering), but their combination degrades performance by ~7 pp on Kinetics50-C severity 5. Understanding why these components conflict would be essential to validating the architecture—instead, the paper ignores this.
+- **Table 5 contains two rows with identical checkmarks (IQR ✓, UA ✓, MIS ✓) reporting different results (54.3/44.6/51.3 vs. 59.3/52.0/59.1) with no label distinguishing them.** Section 3.4 explains that MIS is applied for all iterations in weak OOD but only the first t₀ iterations in strong OOD — these two rows almost certainly correspond to those two cases. However, the table provides no such label, making it impossible for a reader to determine which row corresponds to the proposed method (SuMi) and which to an ablation variant. This is a presentation failure of a methodologically important design decision.
 
 ### Minor
 
-- **IQR applied to high-dimensional feature vectors lacks statistical justification.** Algorithm 1 (lines 5–6) computes Q1 = quantile(**h**, 0.25) and Q3 = quantile(**h**, 0.75) where **h** ∈ ℝ^d is a concatenated representation vector. Tukey's fence is a univariate rule for detecting outliers *across a scalar sample*; applying it across feature dimensions of a single sample representation is an unconventional extension. The paper's claim that this naturally selects "weak OOD" samples early is supported only by a qualitative t-SNE visualization (Figure 3(b)), not by direct measurement of which samples (weak vs. strong OOD) are retained at each iteration. Whether the apparent curriculum effect is caused by IQR or by the entropy threshold in Equation 4 is not disentangled.
+- **Overclaiming in the comparison section.** The paper states SuMi "outperforms other methods consistently and significantly on all the four distribution scenarios." Table 4 shows EATA achieving higher accuracy than SuMi on Crowd noise (28.8 vs. 27.9), Rain (32.3 vs. 31.6), Wind (33.2 vs. 34.1, SuMi is better here actually), and importantly EATA's strong OOD average (17.4) is lower than SuMi (19.7, so SuMi is better on average here). But specifically on audio noise categories in Table 4, EATA beats SuMi on Crowd and Rain. The text should acknowledge this nuance rather than claiming uniform dominance.
 
-- **β hyperparameter differs substantially across datasets (0.6 vs. 0.9) with no ablation.** The smoothing coefficient governing sample admission is set to 0.6 for Kinetics50-C and 0.9 for VGGSound-C (§4.1), a large gap suggesting dataset-specific tuning. No sensitivity analysis over β is presented, making it unclear how robust the method is to this choice.
+- **No sensitivity analysis for the smoothing coefficient β, which varies dramatically between datasets (0.6 for Kinetics50-C vs. 0.9 for VGGSound-C).** Figure 7 only analyzes µ and λ. Given that β governs the core IQR smoothing behavior and takes very different values on the two datasets, its sensitivity is arguably more important to understand than λ.
 
-- **μ hyperparameter shows divergent behavior across datasets.** Figure 7(a) shows performance increasing with μ on Kinetics50-C but decreasing on VGGSound-C. The authors attribute this to modality dominance, but selecting the optimal μ requires prior knowledge of which modality dominates—this should be discussed more honestly as a limitation of the method's claimed generality.
+- **No source model (no-adaptation) baseline row in Tables 1–4.** Although Figure 4 includes a "Source" bar for comparison, the main tables make it impossible to directly assess how much each method degrades from or improves over the pre-trained model. This is particularly important for Tables 2 and 4 where Figure 4 suggests many baselines drop dramatically below source on strong OOD.
 
-- **Unexplained catastrophic failure of several baselines on VGGSound-C audio corruptions (Table 4).** SAR achieves 3.6%, SoTTA 7.7%, DeYO 4.2% on audio corruption (well below the source model), while EATA achieves 32.5%. These failures warrant explanation—whether this is a hyperparameter issue or a known failure mode of these methods, the paper should address it rather than simply reporting the numbers.
+- **The IQR mechanism applied to high-dimensional feature vectors is ad hoc.** Algorithm 1 computes scalar Q₁ and Q₃ over all dimensions of the concatenated representation batch, then uses a dimension-level voting threshold. The paper provides no formal argument for why this would preferentially select weak OOD samples over strong OOD ones — it relies entirely on the qualitative t-SNE in Figure 3(b). A quantitative analysis tracking what fraction of selected samples are weak vs. strong OOD as a function of iteration t would directly validate or refute the smoothing narrative.
 
 ### Trivial
 
-- The "mutual information sharing" name is misleading—the loss actually minimizes KL divergence between unimodal and multimodal predictions, which is cross-modal prediction alignment, not mutual information optimization in the information-theoretic sense. This creates a false impression of stronger theoretical grounding.
+- **Hyperparameter µ has opposite effects on the two datasets** (Figure 7(a): increases Kinetics50-C, decreases VGGSound-C). The explanation offered (Kinetics50 is video-dominant, VGGSound is audio-dominant) is reasonable but presented as post-hoc rationalization; µ=1.0 is used for both without acknowledged trade-off.
 
 ---
 
 ## Nice-to-Haves
 
-- A "multimodal-aware Tent or EATA" baseline (e.g., filtering by unimodal entropy without IQR or MIS) would clarify whether the gains come from SuMi's specific design choices or simply from incorporating any multimodal signal.
-- A direct per-iteration measurement of what fraction of admitted samples are weak vs. strong OOD would validate or refute the smoothing narrative (rather than relying on t-SNE visualization).
-- Ablation over β (0.6–0.9) and t₀ (MIS stopping iteration) to demonstrate stability.
-- Evaluation on a three-modality dataset to validate the generalization claim for M > 2 modalities (the paper presents M-modality formulation in Equation 5 but only tests M=2).
+- Quantitative selection statistics over adaptation iterations (fraction of weak/strong OOD samples selected at each step) would directly verify the IQR smoothing mechanism beyond the current t-SNE visualization.
+- A hybrid baseline (e.g., EATA + IQR smoothing only) would help disentangle whether gains on VGGSound-C strong OOD come from IQR smoothing specifically or from the interaction with MIS.
+- Since MIS emerges as the most impactful component in the ablation (when honestly read), a dedicated analysis of when and why MIS helps vs. hurts (especially in Mix scenarios where both modalities are degraded) would substantially strengthen the paper's contribution narrative.
 
 ---
 
 ## Removed Points
+*These points were flagged for removal; treat with caution.*
 
-*These points are flagged to be removed; treat them with caution.*
-
-- **Comparison against unimodal TTA baselines is structurally unfair (Harsh Critic)**: Removed. The baselines are indeed designed for unimodal models but are legitimately applied here to assess whether they generalize. The comparison structure (all methods on the same multimodal model) is standard. The one multimodal-specific baseline (READ) is the most relevant, and the paper properly highlights gains over it.
-
-- **Figure 1(b-d) uses approximate values and collapses baselines**: Removed as a pure presentation nitpick. The approximate values are illustrative, and exact numbers are given in Tables 1–4.
-
-- **Learning rate difference (1e-4 vs. 1e-5) suggests unfair comparison**: Removed. The paper states different learning rates for different datasets, which is standard practice. There is no evidence baselines were not also tuned per dataset.
-
-- **Termination of MIS loss (t₀ = iter/2) gets no ablation**: Partially valid concern, but moved to Nice-to-Haves as it's not central enough to constitute a Major weakness on its own.
-
-- **Strength Finder claim that IQR smoothing is validated by t-SNE (Figure 3b)**: Downgraded. The t-SNE is only qualitative and does not directly measure which OOD type is selected at each iteration. Listed as a concern in Minor weaknesses instead.
+- **"Mutual information sharing is not standard information-theoretic MIS"** (harsh critic). This is a cosmetic naming complaint. The method is clearly defined in Equation 6.
+- **"Large hyperparameter differences between datasets imply per-dataset tuning" framed as reproducibility concern** (harsh critic). Different hyperparameters per dataset are normal in TTA literature and not a methodological flaw.
+- **Weakness about the specific form of the KL target in Eq. 6 (½(p^u' + p^m) vs. p^u' alone) not being ablated** — partially addressed: the design motivation is clearly stated (robustness to corrupted modalities), and requiring every sub-design choice to have an isolated ablation is beyond standard norms.
 
 ---
 
 ## Novel Insights
 
-The paper's most genuinely novel observation is that unimodal entropy has a *non-monotone* relationship with multimodal adaptation quality: very low unimodal entropy is actually *harmful* because it signals the sample doesn't require cross-modal integration, removing informative multimodal signal. Samples in the moderate [20,40] unimodal entropy quantile outperform those in the [0,20] range (Figure 3(c), Table 6). This insight—that the most "confident" unimodal predictions are the *least useful* for multimodal adaptation—could be broadly applicable to multimodal learning research beyond TTA.
+The paper's most genuinely novel empirical observation — that the [20,40] unimodal entropy quantile outperforms the [0,20] quantile for cross-modal learning — is a non-obvious finding with clear practical implications: samples that are too easy in individual modalities carry little cross-modal information and are therefore less useful for multimodal model adaptation. This insight, validated in Figure 3(c) and Table 6, suggests a general principle for multimodal self-supervised learning: moderate unimodal uncertainty is a proxy for multimodal discriminativeness, not just noise. The paper also demonstrates, perhaps inadvertently through its ablation, that cross-modal prediction alignment (MIS) is by far the most powerful single component for handling strong OOD and missing-modality scenarios — a finding that the paper underplays but that has independent value for the community.
 
 ---
 
 ## Suggestions
 
-1. Clearly distinguish and label the two full-model rows in Table 5, explaining what differs between them (e.g., whether MIS is applied for all iterations vs. only iter/2). If one row represents the default SuMi and the other a variant, say so explicitly.
-2. Correct §4.3: the claim that "IQR smoothing brings the most improvements" is inconsistent with Table 5 and should accurately reflect that UA or MIS contributes more.
-3. Investigate and explain the IQR+UA negative interaction—this is the most important missing piece of analysis. 
-4. Provide a sensitivity analysis for β, since it varies substantially between datasets.
+1. **Correct the ablation interpretation in Section 4.3.** Per Table 5, MIS is the largest single contributor by marginal impact; IQR is the second largest. Rewrite the narrative to reflect this honestly. The method is still novel and effective — the story should be told accurately.
+
+2. **Label the two full-model rows in Table 5.** Distinguish "IQR+UA+MIS (all iterations)" from "IQR+UA+MIS (first t₀ iterations only)" and explain that the latter is the proposed SuMi. Make Algorithm 1's conditional MIS logic explicit in the ablation table.
+
+3. **Add a β sensitivity figure** alongside the existing µ and λ analyses in Figure 7. Given β=0.6 vs. 0.9 across datasets, this is the most underspecified hyperparameter.
+
+4. **Add a "Source" row** to Tables 1–4 so readers can directly see how much baseline methods degrade below no-adaptation on strong OOD scenarios.
 
 ---
 
 ## Score and Decision
 
-**Calibration anchors used:**
+**Calibration anchors:**
 
-| Path | Avg Human Score | Comparison |
-|------|----------------|------------|
-| TPZRq4FALB (READ) | 8.0 | Direct precursor to SuMi; cleaner methodology, consistent ablation, excellent presentation. SuMi clearly below this bar. |
-| 9w3iw8wDuE (DeYO) | 7.0 | TTA with novel confidence metric, strong theory+experiments. SuMi's contributions are more incremental. |
-| sEMJ1PLSZR (AEA) | 6.25 | TTA paper accepted as poster; solid but mixed scores. Comparable scope to SuMi but cleaner analysis. |
-| UhKkWHkvfg (MDAA) | 5.0 | Multimodal Continual TTA, rejected. Similar setting, similar motivation-as-combination-of-ideas concern. SuMi has stronger empirical gains but worse ablation issues. |
-| nc0XGK40dn (IDKR) | 4.67 | Continual TTA, rejected for overlapping motivation with existing methods. Comparable quality tier. |
-| ws0F5NTzGw (AdapTable) | 4.5 | Tabular TTA, rejected. Low technical depth. SuMi is clearly stronger. |
-| Wure6HljpJ (CoSDA) | 3.67 | Source-free domain adaptation, rejected. Lower technical quality. SuMi is clearly above this. |
+| Paper | Path | Avg Score | Comparison |
+|-------|------|-----------|------------|
+| READ (high anchor) | TPZRq4FALB | 8.0 | First multimodal TTA paper; accepted 8/8/8/8. More principled (attention modulation + theory-backed loss). SuMi extends to a harder setting but with weaker methodology narrative. |
+| MM-CTTA (medium anchor) | UhKkWHkvfg | 5.0 | Similar multimodal TTA extension; rejected. Comparable level of novelty, but weaker empirical gains. SuMi has larger gains over baselines than MDAA. |
+| IDKR TTA (low anchor) | nc0XGK40dn | 4.67 | Similar "mixed distribution" TTA framing; rejected for unclear contribution/methodology. SuMi is clearly stronger with better empirical results. |
+| AdapTable TTA (low anchor) | ws0F5NTzGw | 4.5 | TTA in a new domain with distribution shift issues; limited novelty. SuMi is methodologically more interesting. |
 
-SuMi's empirical results on the strong OOD problem are genuinely useful, and the problem formulation is a meaningful extension of READ's work. However, the ablation study has a fundamental presentation failure (two unexplained identical rows with divergent results), the primary textual claim about component contributions is factually wrong per the authors' own data, and a key claimed synergy (IQR+UA) actually degrades performance relative to UA alone with no explanation. These are substantive analytical failures, not mere presentation issues.
+SuMi occupies a position clearly above the low anchors (nc0XGK40dn, ws0F5NTzGw) due to its genuine new problem setting, strong empirical results, and non-trivial method. Compared to the MM-CTTA paper (5.0), SuMi offers larger and more compelling empirical gains, a cleaner problem formulation, and more thorough evaluation — suggesting a modest upward shift. However, SuMi falls well below READ (8.0) due to the incorrect ablation narrative (a major interpretive flaw), the ambiguous ablation table, and a less methodologically principled design. The **major weakness** — the paper's stated core claim that "IQR brings the most improvements" is directly contradicted by the authors' own data — is serious enough to require substantial revision but does not invalidate the method's empirical value.
 
-Positioning relative to anchors: READ (8.0) is the gold standard for multimodal TTA papers at this venue—clean methodology, clear ablations, strong contributions. SuMi falls well short of READ on analytical rigor. MDAA (5.0, rejected) is the closest comparator: both are multimodal TTA extensions with real empirical gains but methodological concerns. SuMi has larger empirical gains but more serious ablation problems. I place SuMi slightly below MDAA, at 4.5.
+Positioning: slightly above the MM-CTTA medium anchor (5.0), warranting a **5.5**.
 
-**Originality**: Moderate — problem is a meaningful extension of READ, but IQR mechanism is heuristic without clear justification.  
-**Importance**: Moderate-high — multimodal wild TTA is a real problem.  
-**Claim support**: Weak — main textual claim about ablation is factually wrong per Table 5.  
-**Experimental soundness**: Mixed — results are broad but ablation is unreliable.  
-**Writing clarity**: Adequate, with the notable exception of the ablation discussion.  
-**Community value**: Moderate — benchmarks are useful; MIS loss concept is clean.
+**Axis ratings:**
+- *Originality*: Good — the wild multimodal TTA setting and the benchmark are genuine new contributions.
+- *Importance of research question*: High — multimodal strong OOD robustness matters in practice.
+- *Claims vs. support*: Weak — the core narrative claim about IQR is contradicted by the paper's own ablation.
+- *Soundness of experiments*: Moderate — empirical results are strong, but ablation interpretation is wrong.
+- *Clarity of writing*: Moderate — ambiguous Table 5 and incorrect Section 4.3 narrative.
+- *Value to community*: Moderate-High — benchmarks and empirical findings are useful despite interpretive issues.
 
-**Decision: Reject.** The paper addresses a genuine and practically important problem, but the ablation study is both internally inconsistent (two indistinguishable full-model rows with very different results) and textually misinterpreted. The central claimed advantage of IQR smoothing is contradicted by the paper's own data. These issues would need to be resolved before acceptance.
-
-MY FINAL SCORE: <pineapple>4.5</pineapple>
+MY FINAL SCORE: <pineapple>5.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

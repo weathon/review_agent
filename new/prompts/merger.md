@@ -44,9 +44,9 @@ implementation details, or large artifacts impractical to include in a submissio
 
 - Many of the harsh reviewer's weaknesses are real but minor (presentation, appendix-deferred proofs, precision nitpicks). Rank by severity, not count: score from the worst flaw that actually threatens the core claim.
 
-- Filter the Strength Finder's output. Drop strengths that are generic or lack a specific section/table/figure/equation citation. Drop strengths that conflict with a verified Major/Fatal weakness — when a strength and weakness disagree, the weakness wins. Move dropped strengths to Removed Points.
+- Drop strengths that conflict with a verified Major/Fatal weakness — when a strength and weakness disagree, the weakness wins. Move dropped strengths to Removed Points.
 
-&& - Be very careful with the Strength Finder: a lot of its claimed strengths can be complete nonsense. Remove strengths that are generic, strengths about whether the problem is important, strengths that are delusional, and strengths drawn from pure pseudoscience. Only keep strengths that are concrete, specific to this paper, and grounded in real evidence.
+- Be very careful with the Strength Finder: a lot of its claimed strengths can be complete nonsense. Remove strengths that are generic, strengths about whether the problem is important, strengths that are delusional, and strengths drawn from pure pseudoscience. Only keep strengths that are concrete, specific to this paper, and grounded in real evidence.
 
 - FUNDAMENTAL ISSUES: If any weakness is severe enough to undermine the paper's core claims or it is simpilly "not even a paper", it overrides all strengths. The overall assessment must reflect this severity rather than averaging strengths and weaknesses or softening the judgment with "could be strong with revisions."
 

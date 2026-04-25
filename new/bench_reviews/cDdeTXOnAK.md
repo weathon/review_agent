@@ -1,57 +1,57 @@
-Now let me search for calibration anchors.Now I have enough to write the final consolidated review.
+Now let me search for calibration papers.Now I have enough to write the final review. Let me synthesize everything.
 
 ---
 
 ## Summary
 
-AutoCoder introduces AIEV-INSTRUCT, a pipeline for generating code instruction datasets through agent-based interaction (questioner/programmer roles) augmented with a Docker-based execution verifier that filters incorrect code at training time. The pipeline has two stages: a Teaching Stage relying on GPT-4 Turbo, and a Self-Learning Stage where the student model takes over once it surpasses the teacher. Using 169K generated samples, two models are trained: AutoCoder (33B) and AutoCoder-S (6.7B), evaluated across HumanEval(+), MBPP(+), MultiPL-E, DS-1000, and LiveCodeBench.
+AutoCoder introduces AIEV-INSTRUCT, a method for generating high-quality code instruction datasets using two interacting agents (questioner and programmer) coupled with Docker-based execution verification to validate and correct generated code. The paper trains AutoCoder (33B) and AutoCoder-S (6.7B) on the resulting 169K-sample dataset, and further extends the models to support a code interpreter that can install external packages via bash commands—a capability absent from GPT-4 Turbo and GPT-4o's interpreters.
 
 ---
 
 ## Strengths
 
-- **Execution-verified data generation is a real improvement over existing pipelines**: The ablation in Figure 6 shows that Base+EFMT (multi-turn with execution feedback) outperforms Base+MT across all three benchmarks for both model sizes, with the 33B model gaining +5.1pp on DS-1000 compared to the multi-turn baseline. This validates the core insight that execution filtering corrects incorrect training signal.
+- **Ablation evidence for execution verification (Figure 6):** The ablation cleanly shows that Base+EFMT (execution-verified multi-turn) substantially outperforms Base+MT (multi-turn without execution feedback), most dramatically at the 33B scale on HumanEval (81.3% → 91.4%), validating that execution feedback and unit-test verification is the key differentiator in the pipeline, not merely multi-turn dialogue format.
 
-- **Broad multi-benchmark evaluation**: The paper evaluates on HumanEval(+), MBPP(+), MultiPL-E (6 languages), DS-1000, and LiveCodeBench — a diverse and comprehensive suite. This breadth is commendable and reveals a more nuanced picture of the model's capabilities than HumanEval alone.
+- **Broad multi-benchmark evaluation:** The paper evaluates across HumanEval/HumanEval+, MBPP/MBPP+, MultiPL-E (six languages), DS-1000, and LiveCodeBench. AutoCoder-33B consistently leads same-scale open-source models across all benchmarks—strong performance over DeepSeek-Coder-Instruct-33B and OpenCodeInterpreter-DS-33B at every benchmark (Tables 1–4).
 
-- **Code interpreter with external package installation**: The post-processing pipeline (Figure 5) that teaches the model to generate bash commands for installing dependencies is a practically useful engineering contribution that addresses a real limitation of existing code interpreters (Section 4.1).
+- **Novel code interpreter feature (Section 4.1, Figure 5):** The post-processing pipeline that teaches models to emit special tokens around bash commands and code blocks, enabling external package installation, is a concrete and practical contribution. The data transformation pipeline is clearly described.
 
-- **Strong performance at the 33B parameter scale**: On DS-1000, AutoCoder achieves 47.2%, outperforming GPT-3.5 Turbo (39.4%) and competitive with GPT-4 Turbo (53.9%); on MultiPL-E it leads all non-70B+ models; on MBPP, it leads all ≤33B models. These results are genuine.
+- **Dataset design and comparison (Figure 4):** The comparison of AutoCoder-AIEV-Instruct against Magicoder-Evol-Instruct, Magicoder-OSS-Instruct, and Code-Feedback is concrete and well-motivated—more samples, more dialogue turns, and unit tests added to each entry.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-None that fully invalidate the method.
+None.
 
 ### Major
 
-- **The headline "surpasses GPT-4 Turbo and GPT-4o" claim is not supported by the full evidence.** The abstract, introduction, and Figure 1 prominently advertise that AutoCoder-33B surpasses GPT-4 Turbo and GPT-4o on code generation. However, this rests on a single 0.7pp margin on HumanEval base (≈1 problem out of 164), with no significance testing. More importantly, Table 1 shows the result *inverts* on HumanEval+: AutoCoder scores 78.0% vs GPT-4 Turbo's 86.6%, an 8.6pp deficit. HumanEval+ was designed specifically to detect shallow solutions that pass the original limited test suite. Similarly, on MBPP (82.5% vs 85.7%) and MBPP+ (70.6% vs 73.3%), AutoCoder trails GPT-4 Turbo. The claim of "surpassing" is thus only valid on the most saturated, easiest-to-overfit metric and is contradicted by every other available data point involving GPT-4 Turbo. This pattern, combined with the ~1-problem margin with no variance estimate, renders the headline claim scientifically indefensible as presented.
+- **Misleading headline claim not supported across benchmarks.** The abstract and conclusion state AutoCoder "surpasses GPT-4 Turbo 2024-04-09 and GPT-4o 2024-08-06" based on a 90.9% vs. 90.2% margin on HumanEval—roughly 1–2 problems on a 164-item benchmark, evaluated without variance or confidence intervals. Critically, Table 1 directly shows AutoCoder at **78.0% on HumanEval+** vs. GPT-4 Turbo at **86.6%**—a −8.6pp gap on the harder version of the same benchmark. On MBPP, AutoCoder is 82.5% vs. GPT-4 Turbo's 85.7%. On LiveCodeBench (Table 4), AutoCoder 33B scores **25.4%** vs. GPT-4 Turbo's 44.2% and GPT-4o's 46.1%. Across three of four benchmark families, AutoCoder is substantially *below* both GPT-4 Turbo and GPT-4o. The paper selectively leads with the one benchmark result where it wins (by a margin within noise), while Section 5.1 deflects on HumanEval+ by comparing only to "models with fewer than 70B parameters," not to GPT-4 Turbo. This framing is materially misleading.
 
-- **The Self-Learning Stage — claimed as a second core contribution — is entirely unvalidated.** Section 3.1 describes transitioning from GPT-4 Turbo to the student model once pass@1 on an internal test split flips. However: (a) the paper never states whether this transition actually occurred during the generation of the 169K samples; (b) no ablation compares Teaching-Stage-only vs. Teaching+Self-Learning-Stage data; (c) the internal test split composition and size are unspecified; and (d) the critical claim that AIEV-INSTRUCT "reduces dependence on proprietary large models" is accordingly unverified. The Self-Learning Stage may be real and valuable, but there is no evidence for it in the paper.
-
-- **The ablation (Figure 6 vs. Table 1) contains unexplained numerical inconsistencies that undermine confidence in the headline number.** Figure 6 reports AutoCoder-33B at 91.4% on HumanEval, while Table 1 reports 90.9%. For AutoCoder-S (6.7B), Figure 6 shows 79.2% and Table 1 shows 78.7%. These discrepancies are never explained. They suggest different evaluation configurations between the ablation and the main experiment, raising the possibility that the headline number in Table 1 was obtained under different (possibly less favorable) conditions than the ablation — or vice versa.
-
-- **The ablation does not control for data quantity or distribution, making AIEV-INSTRUCT's contribution ambiguous.** The paper never states the sizes of the Base+ST and Base+MT training sets compared to the full 169K AIEV-INSTRUCT set. If the MT baseline used a subset, then the 10.1pp jump for the 33B model (81.3% → 91.4% on HumanEval) could be partly attributable to data volume rather than the execution-feedback mechanism. Additionally, the asymmetry — +10.1pp for 33B but only +1.9pp for 6.7B — is striking and unexplained, raising further questions about whether the datasets are truly equivalent across conditions.
+- **Self-Learning Stage is described but not empirically validated.** The Self-Learning Stage is explicitly presented as a key contribution answering the second research question ("can we enable our student model to learn autonomously?"). The paper describes the transition criterion (when student pass@1 > teacher on an internal 200-sample test set), but never reports: (1) how many of the 169K samples came from the Teaching vs. Self-Learning stage, (2) whether the transition criterion was ever triggered during the reported experiments, or (3) an ablation comparing a Teaching-Stage-only model vs. the full pipeline. This is a complete evidential gap for a stated research question.
 
 ### Minor
 
-- **LiveCodeBench gap is not discussed.** On LiveCodeBench (Table 4), AutoCoder-33B scores 25.4% vs. GPT-4o's 46.1% (−20.7pp) and GPT-4 Turbo's 44.2% (−18.8pp). This contamination-resistant benchmark directly contradicts the headline claim that AutoCoder surpasses these models. The paper presents the LiveCodeBench result but offers no analysis of this stark discrepancy with the HumanEval narrative.
+- **Ablation does not control for data-quantity confounds.** Figure 6 compares Base+ST, Base+MT, and Base+EFMT, but the paper does not specify whether these three conditions are trained on the same number of samples. If EFMT uses the full 169K and ST/MT use subsets, more data—not execution verification alone—could explain some gain. Explicit data-size matching would strengthen the causal attribution.
 
-- **The Code Interpreter superiority claim is unsupported.** Section 4.1 and the abstract state that AutoCoder has a "more versatile" code interpreter and is "the only model that supports automatically installing external packages in the Code Interpreter" as of September 2024. No systematic evaluation or comparison with other models is provided to substantiate this. It is illustrated by a single figure but never benchmarked.
+- **Unexplained inconsistencies between Figure 6 and Table 1.** The ablation table in Figure 6 reports AutoCoder-S 6.7B at 79.2% and AutoCoder-33B at 91.4% on HumanEval, while Table 1 reports 78.7% and 90.9%, respectively. No explanation is offered; these discrepancies suggest different evaluation configurations or runs.
+
+- **Code interpreter capability is entirely qualitative.** Section 4.1 claims AutoCoder is "the only model" to support automatic external package installation as of September 2024, but this is asserted without a structured evaluation—no benchmark, no pass rates, no failure cases for competing systems. The feature occupies a full section but is explicitly *disabled* in all comparative experiments (Section 5).
 
 ### Trivial
-- The paper contains some redundant figure descriptions (Figure 3 caption is reproduced verbatim twice in the parsed version), though this is likely a parser artifact.
+
+None worth noting.
 
 ---
 
 ## Nice-to-Haves
 
-- A controlled ablation matching Base+ST, Base+MT, and Base+EFMT in data size and source would cleanly isolate the contribution of execution feedback from data volume effects.
-- A direct ablation of Teaching-Stage-only vs. Teaching+Self-Learning data would validate the second claimed innovation.
-- Statistical significance analysis (e.g., repeated sampling, pass@k for k > 1) for the main HumanEval comparison would address the ~1-problem margin concern.
-- An analysis of which HumanEval problems AutoCoder passes but HumanEval+ fails would clarify whether the high base-HumanEval score reflects genuine competence or test-suite overfitting.
+- Report pass@1 with multiple samples or provide confidence intervals for the HumanEval headline result to determine whether the 0.7pp advantage over GPT-4 Turbo/GPT-4o is within sampling noise.
+- Include a quantitative micro-benchmark (even 20–30 tasks) comparing AutoCoder vs. GPT-4o on code requiring external package installation, to validate the code interpreter claim.
+- Match data sizes explicitly across ablation conditions to isolate the effect of execution verification.
+- Report Self-Learning Stage statistics: number of samples generated per stage, and training curves showing the transition point.
+- Consider an experiment fine-tuning DeepSeek-Coder on an equivalent-sized EVOL-INSTRUCT or OSS-INSTRUCT dataset to directly compare dataset quality against prior methods.
 
 ---
 
@@ -59,54 +59,59 @@ None that fully invalidate the method.
 
 *These points are flagged to be removed; treat them with caution.*
 
-- **"Only 113 entries removed by decontamination is suspicious"** (Harsh Critic): The paper used Levenshtein distance on code snippets from *already-decontaminated* source datasets (Magicoder-Evol-Instruct and Magicoder-OSS-Instruct). A low count is expected given this pre-filtering. Not a valid criticism.
+- **"As of September 2024, AutoCoder is the only model that supports automatically installing external packages"** (harsh critic: claimed needs systematic evaluation). The harsh critic is right to note this is qualitative, but the specific criticism "no systematic evaluation" is partially addressed by showing Figure 2—a qualitative demonstration. The claim itself is plausible but not provable; kept as a **Minor** issue above, downgraded from major.
 
-- **Formatting/parsing artifacts** (duplicate figure captions, line number remnants): These are parser extraction artifacts, not author errors.
+- **Dataset decontamination 90% threshold not justified** (harsh critic): The paper uses Magicoder datasets already pre-decontaminated and runs Levenshtein at 90%—removing 113 entries. The concern about semantic overlap is speculative; the paper follows standard practice. REMOVED as insufficiently grounded.
 
-- **Missing appendix proofs for the theoretical claim** $\mathcal{A}_{\text{evol}} < \mathcal{A}_{\text{oss}} < \mathcal{A}_{\text{AIEV}}$: The appendix exists in the original submission; the parser strips it. Not a valid criticism.
+- **Strength Finder: "Self-learning stage reduces dependence on proprietary models"**—removed from strengths because there is no empirical validation; it is a description of a design intent, not a demonstrated result. The corresponding weakness is kept as Major.
 
-- **Strength Finder — "Reduced reliance on proprietary models"**: This is claimed, not demonstrated. Removed as a strength because the self-learning stage is an unvalidated contribution (as described in the Major weakness above).
+- **Strength Finder: "Careful dataset decontamination"**—while technically accurate, this is generic and insufficiently specific to constitute a meaningful strength. Removed.
 
-- **Strength Finder — "Practical cost efficiency ($1,000 per 6,500 entries)"**: The observation is used as motivation for the self-learning stage, but since the self-learning stage is unvalidated, this strength does not translate to a demonstrated saving. Removed.
+- **Strength Finder: "Theoretical analysis of dataset accuracy"**—located in the appendix (stripped by the parser), cannot be evaluated, and theoretical analysis alone (without empirical confirmation matched to the theory) is not a standalone strength. Removed.
 
-- **Strength Finder — "Strong benchmark performance against proprietary models"**: As a global strength claim it conflicts with the verified major weakness that AutoCoder trails GPT-4 Turbo on HumanEval+, MBPP, MBPP+, and LiveCodeBench. Removed as stated; the more specific "strong at the 33B scale on DS-1000 and MultiPL-E" is kept.
+- **Harsh critic internal test-set noise concern** (200-sample evaluation to decide stage transition): This is a methodological observation worth noting but is secondary since the Self-Learning Stage itself is unevidenced. Folded into the Self-Learning Stage weakness.
 
 ---
 
 ## Novel Insights
 
-The paper surfaces a methodologically important observation worth highlighting for the community: a model can score higher than frontier proprietary models on HumanEval base while simultaneously scoring substantially *lower* on HumanEval+, the extended version. This 0.7pp lead vs. −8.6pp gap is a concrete case study in how benchmark saturation on 164-problem suites can produce misleading comparisons, and it reinforces the utility of EvalPlus-style extensions as a check against superficial benchmark chasing. Beyond this meta-observation, no additional novel insight emerges from the reviews.
+The most genuinely novel observation synthesized from the reviews is the HumanEval-vs-HumanEval+ divergence: AutoCoder drops 12.9 percentage points from HumanEval (90.9%) to HumanEval+ (78.0%), while GPT-4 Turbo drops only 3.6 points (90.2% → 86.6%). This disproportionate degradation on expanded test cases suggests the execution-verification loop may improve performance on canonical tests while leaving the model brittle to edge cases and additional test coverage. This is worth investigating: is AIEV-INSTRUCT's unit-test generation sufficiently diverse, or does it inadvertently teach the model patterns that overfit to common test structures rather than building truly robust code generation?
 
 ---
 
 ## Suggestions
 
-1. Replace "surpasses GPT-4 Turbo and GPT-4o" in the abstract/introduction with a more accurate claim scoped to HumanEval base only, and acknowledge the HumanEval+ inversion directly.
-2. Explicitly state whether the Self-Learning Stage was ever triggered during the generation of the 169K dataset, and provide an ablation with and without it.
-3. Report the sizes of Base+ST and Base+MT training sets to enable clean interpretation of the EFMT ablation.
-4. Reconcile the Figure 6 vs. Table 1 numbers — they should be identical for the same models — and explain any difference in evaluation configuration.
-5. Add a brief discussion of the LiveCodeBench gap relative to GPT-4o, framing it as a limitation of the current approach on competitive-programming-style problems.
+1. **Reframe the abstract and conclusion.** Replace "surpasses GPT-4 Turbo and GPT-4o" with an accurate comparative summary: AutoCoder achieves competitive HumanEval performance among open-source 33B models and leads all same-scale open-source baselines across multiple benchmarks, while remaining below frontier closed-source models on HumanEval+, MBPP, and LiveCodeBench.
+
+2. **Add Self-Learning Stage ablation.** Report sample counts per stage and add a "Teaching-Stage-only" model to Table 1 or Figure 6. If the transition criterion was never triggered, say so explicitly.
+
+3. **Clarify ablation data sizes.** State explicitly how many samples each of ST, MT, and EFMT conditions uses.
+
+4. **Investigate HumanEval vs. HumanEval+ gap.** Diagnose whether the 12.9pp drop (vs. 3.6pp for GPT-4 Turbo) is due to unit-test style in AIEV-INSTRUCT, limited test diversity in generated tests, or another cause.
+
+5. **Quantitative code interpreter evaluation.** Provide a small held-out set of tasks requiring external package installation, and report pass rates for AutoCoder, GPT-4o, and DeepSeek-Coder-Instruct.
 
 ---
 
 ## Score and Decision
 
-**Evaluation on key axes:**
-- *Originality*: Moderate. The execution-verification loop for data generation is not entirely new (OpenCodeInterpreter's Code-Feedback dataset uses similar ideas), but the combined agent-interaction + Docker verification + self-learning framing is a reasonable engineering advance.
-- *Research question importance*: High. Reducing reliance on proprietary models for code LLM training is genuinely important.
-- *Claim support*: Weak. The headline claim is contradicted by HumanEval+ and unsupported on every other benchmark where GPT-4 Turbo data is available. The second claimed contribution (self-learning) has no experimental support.
-- *Soundness of experiments*: Below average. Ablation confounds data quantity with method; numerical inconsistencies between Figure 6 and Table 1; no significance testing for a 1-problem margin.
-- *Clarity*: Acceptable. The method description is reasonably clear.
-- *Value to community*: Limited in current form. The released model and dataset may be useful, but the paper's claims significantly exceed what the experiments support.
-
 **Calibration anchors:**
-- `/home/wg25r/review_agent/human_reviews/rO8QOHrCeA.md` (avg 4.5, Reject): Execution-feedback for code instruction tuning; similar approach to this paper but narrower scope. Rejected for unclear motivation and missing baselines. This paper is comparable in terms of validation quality, though with a broader evaluation suite.
-- `/home/wg25r/review_agent/human_reviews/fL8sds4naU.md` (avg 3.5, Reject): Fine-tuned 7B math model claimed to surpass GPT-4; rejected for methodological flaws and overclaiming. Very similar pattern of headline overclaiming on a single saturated benchmark. This paper is slightly better because it has a genuine engineering system.
-- `/home/wg25r/review_agent/human_reviews/00SnKBGTsz.md` (avg 7.5, Accept Spotlight): Data generation agents with student feedback — related concept, better validated with rigorous ablations and clear contribution. This paper falls well short of that standard.
-- `/home/wg25r/review_agent/human_reviews/chfJJYC3iL.md` (avg 6.25, Accept Poster): LiveCodeBench paper — comprehensive evaluation methodology, well-designed and validated. Higher bar.
-- `/home/wg25r/review_agent/human_reviews/XXVRkPB1tg.md` (avg 4.0, Reject): Execution-based code benchmark generation; rejected for limited novelty and validation issues.
+- *WizardCoder* (path: `/home/wg25r/review_agent/human_reviews/UnUwSIgK5W.md`, avg 6.25, accepted as poster): Most topically similar—code LLM instruction fine-tuning, achieves SoTA vs. open-source models and some closed-source models on HumanEval. WizardCoder's framing is more honest (claims comparability to GPT-3.5, not superiority to GPT-4). AutoCoder has richer contributions (execution verification, code interpreter) but is undermined by the misleading headline and unevidenced self-learning stage.
+- *phi-1 / Textbooks Are All You Need* (path: `/home/wg25r/review_agent/human_reviews/Fq8tKtjACC.md`, avg 6.0, rejected): Influential high-quality-data-for-code paper, rejected despite 6.0 avg, showing this topical cluster runs 5–6 at ICLR. AutoCoder is roughly comparable in quality.
+- *GIFT4Code* (path: `/home/wg25r/review_agent/human_reviews/rO8QOHrCeA.md`, avg 4.5, rejected): Execution-feedback code fine-tuning, rejected for weak motivation and missing baselines. AutoCoder is clearly stronger—broader benchmarks, actual model trained, explicit ablation.
+- *MHPP* (path: `/home/wg25r/review_agent/human_reviews/TVFVx8TUbN.md`, avg 4.25, rejected): Code generation benchmark paper—less relevant, used as low anchor.
 
-**Conclusion**: The paper clusters around the rO8QOHrCeA (4.5) and XXVRkPB1tg (4.0) anchors — execution-focused code LLM work that was rejected for insufficient validation and overclaiming. The overclaiming here is more severe (the headline claim is directly contradicted by HumanEval+), and the missing self-learning stage validation leaves one of two claimed contributions entirely unverified. However, the AIEV-INSTRUCT execution loop does show genuine value in ablation (EFMT > MT across benchmarks), which keeps it above fL8sds4naU (3.5). Final score: **4.0**.
+AutoCoder sits between WizardCoder (6.25) and GIFT4Code (4.5). The contributions are real and the ablation is substantial, but the misleading central claim (cherry-picking HumanEval while HumanEval+, MBPP, and LiveCodeBench all show the model below GPT-4 Turbo) is a significant credibility issue that human reviewers at ICLR would weigh heavily. The unevidenced self-learning stage further weakens a stated key contribution. These together pull the paper below WizardCoder and toward the low end of this cluster.
 
-MY FINAL SCORE: <pineapple>4.0</pineapple>
+**Evaluation on key axes:**
+- *Originality*: Moderate–good. AIEV-INSTRUCT combining agent interaction with Docker execution verification is a useful and concrete advance over prior methods.
+- *Importance of research question*: High. Data quality for code LLMs is a significant and timely problem.
+- *Claims well supported*: Poor. The headline claim is not supported; the self-learning stage is unevidenced.
+- *Soundness of experiments*: Moderate. Ablation is informative but has confounds; multi-benchmark evaluation is thorough.
+- *Clarity of writing*: Moderate. The pipeline is clearly described; the selective reporting in Section 5.1 is misleading.
+- *Value to the research community*: Moderate. The AIEV-INSTRUCT pipeline and code interpreter training recipes are useful contributions.
+
+**Final score: 4.5** — The execution-verification methodology and code interpreter contributions are real, but the paper's central claim is misleadingly stated and a key contribution (self-learning stage) is empirically unsupported. This places it below WizardCoder (6.25) and closer to GIFT4Code (4.5), but above the lower bound anchors—the method is more complete and the ablation more convincing than GIFT4Code.
+
+MY FINAL SCORE: <pineapple>4.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

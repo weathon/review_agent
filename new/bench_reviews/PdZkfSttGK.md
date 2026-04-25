@@ -1,57 +1,61 @@
-Now let me do calibration searches.Now I have enough information to write the final review. Let me synthesize everything.
+Now let me do calibration searches to anchor my score.Now I have enough to write the final review. Let me compile everything.
 
 ---
 
 ## Summary
-This paper proposes a nonparametric mean-covariance regression framework for high-dimensional neural data, extending Fox & Dunson (2015) by (1) adding a Graph Laplacian-based GP (GL-GP) prior to handle restricted input domains, and (2) introducing a Poisson log-normal observation model with Pólya-Gamma augmentation for spike count data. Both continuous (LFP) and count (spike) observation types are addressed. The model is inferred via MCMC and applied to two publicly available neural datasets.
+
+This paper proposes a nonparametric mean-covariance regression framework for high-dimensional neural data. Building on Fox and Dunson (2015)'s latent factor covariance regression and Dunson et al. (2022)'s graph Laplacian GP (GL-GP), the paper extends both to count (Poisson) observations via Pólya-Gamma augmentation and validates the approach on simulations and two real neural datasets (LFP and hippocampal spiking).
 
 ---
 
 ## Strengths
 
-- **Unified Gaussian/Poisson framework (Sections 2.1, 2.3; Figures 1A–F):** Explicitly deriving mean and covariance expressions for both observation types and validating each in dedicated simulation panels (Gaussian: Fig. 1A–C; Poisson: Fig. 1D–F) is a genuine contribution over prior work (GPFA, LDS) that handles only one type.
+- **Technically sound Pólya-Gamma extension to covariance regression (Section 2.3):** The NB approximation to Poisson and the resulting pseudo-response conditional distribution `ζ_ij ~ N(m_ij, V_ij)` are correctly derived and provide a tractable sampler for a previously intractable inference problem. This is the paper's most concrete novel contribution over Fox and Dunson (2015).
 
-- **Restricted-domain motivation and GL-GP formulation (Section 2.2):** The paper makes a specific and correct conceptual point that restricted subspaces need not be manifolds, disqualifying manifold-based GP methods. The use of the Dunson et al. (2022) GL-GP as a principled non-manifold alternative is well-motivated and correctly implemented.
+- **Well-motivated and well-designed simulation testbed (Section 3):** The "two boxes connecting with a tunnel" restricted domain is an excellent illustration of when Euclidean-kernel GPs fail (two nearby Euclidean points far apart geodesically), giving L-GLGP-adaptive a principled and demonstrable advantage that is directly visible in Figures 1B and 1E.
 
-- **Adaptive basis dimension selection (Section 2.1, 3):** The multiplicative shrinkage prior on Θ allows L to be set conservatively large with data-driven column shrinkage, confirmed empirically ("the last few columns of fitted loading basis Θ are shrunk to 0"). This removes a tuning burden relative to GPWP.
+- **Interpretable neuroscientific findings on HC data (Section 4.2):** The first four PCs of the fitted mean correspond to known hippocampal neuron types—interneurons, location-selective, and direction-selective neurons—and the model captures place-field drift over the 2-minute recording window, consistent with established neuroscience. This provides genuine scientific credibility beyond engineering evaluation.
 
-- **Robustness of Poisson model to latent dimension k (Section 3; Fig. 1E–F; Section D.1):** The paper documents a useful practical finding — L-GLGP-adaptive yields more consistent held-out log-likelihoods across k=2 and k=5 in the Poisson case, whereas L-GP with k=5 can be noisy. This is a concrete practical advantage, supported by replicated simulations (6 independent runs).
+- **L-GLGP-adaptive robustness to latent dimension k (Section 3, Figure 1E):** In Poisson simulations, L-GLGP-adaptive achieves similar held-out log-likelihoods for k=2 and k=5, while L-GP is sensitive to this choice—a practically important property given the difficulty of selecting k a priori.
 
-- **Two public datasets, code provided (Section 4):** Applying the framework to both LFP (Steinmetz 2019) and hippocampal spiking (Mizuseki 2013) data, and releasing MATLAB code, supports reproducibility.
+- **Code and data transparency:** MATLAB implementation in supplementary and use of two publicly available datasets (Steinmetz 2019, Mizuseki 2013) support reproducibility.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-*None.*
+None.
 
 ### Major
 
-- **Title claim of "massive neural data" is unsupported.** All experiments use 14–50 neurons on a laptop. The paper itself concedes in Section 5 that "MCMC sampling can be cumbersome for large scale datasets" and explicitly lists variational inference as a future direction. The framing "massive" typically implies hundreds to thousands of simultaneously recorded neurons — a regime this method has never been demonstrated in. This mismatch between the title framing and the actual experimental scale is not a minor wording issue; it misleads about the paper's scope and practical readiness. The title should reflect what the paper actually demonstrates.
+- **Missing ablation of the covariance regression component:** The paper's core scientific claim is that modeling *covariate-dependent covariance* (not just covariate-dependent mean) provides value beyond a standard latent factor model. Yet no experiment compares against a model with covariate-dependent mean but stationary covariance (e.g., fix Λ(x) = Θ with constant loadings, only GP-modulated mean ψ(x)). All reported comparisons—L-GP, L-GLGP-fixed, L-GLGP-adaptive—differ only in their covariance kernel, not in whether covariance is modeled at all. GPWP tests a different covariance model, not no covariance model. Without this ablation, the improvement over L-GP could reflect better geometry handling alone, not the covariance regression. This is the central claim, and it lacks direct evidence.
 
-- **The GL-GP (the paper's core novelty over Fox & Dunson 2015) is only weakly validated.** The paper's primary contribution over L-GP is incorporating graph-Laplacian structure for restricted covariates. However: (i) In simulations, the authors themselves describe the improvement as "slightly" better than L-GP (Section 3: "generally improve the fitting results slightly compared to L-GP"). (ii) In the main count-data application (Section 4.2, HC dataset), L-GLGP-fixed and L-GP produce **identical** held-out log-likelihoods (both −6.24×10³), and only L-GLGP-adaptive achieves a modest gain (−5.89×10³). (iii) No experiment demonstrates a qualitatively wrong inference under L-GP that GL-GP corrects — i.e., there is no case study showing that ignoring the restricted geometry leads to meaningfully misleading scientific conclusions. The gap between the theoretical motivation ("two Euclidean-close points may be distant in the restricted domain") and the empirical payoff is substantial.
+- **Title/framing mismatch with actual scale ("massive neural data"):** The simulations use n=50 neurons, the LFP application n=14, and the HC application n=36. The Discussion explicitly acknowledges MCMC "can be cumbersome for large scale dataset" and identifies variational inference as needed future work. These scales are not large by any modern standard (modern probes record hundreds to thousands simultaneously). The paper would be more accurately titled around "covariate-restricted" or "general covariate" rather than "massive." This misleading framing affects how the scientific contribution is assessed.
 
-- **Baseline comparison in the HC application conflates pooling benefit with GL-GP benefit.** The only non-latent-factor baseline in the count-data application is dCMP fitted independently per neuron (Section 4.2). The paper is transparent about this limitation ("fit the model separately for each neuron, which ignores the correlation between neurons"), but this means the large performance gap (−9.90×10³ dCMP vs. −6.24×10³ L-GP) reflects the advantage of joint multi-neuron modeling rather than any benefit of the restricted-domain handling. The correct comparison to isolate the GL-GP contribution is L-GP vs. L-GLGP, where the fixed version shows zero improvement, undermining the central claim.
+- **HC dataset dCMP comparison conflates two contributions:** dCMP is fit per-neuron (choice 2 as the paper describes), while all L-models are fit jointly. The held-out log-likelihood gap (−9.90×10³ vs. −5.89×10³) reflects both (a) the benefit of joint multi-neuron modeling and (b) the benefit of the proposed covariance regression kernel. A per-neuron Poisson-log-normal model with fixed covariance would help disentangle these. As presented, the experiment cannot establish whether the *covariance regression* component—as distinct from joint modeling alone—is what drives the improvement in this real dataset.
 
 ### Minor
 
-- **Poisson-NB approximation lacks empirical validation of r.** Section 2.3 introduces the approximation Poisson(e^ζ) ≈ NB(r, σ(ζ − log r)) "using a large enough dispersion parameter r," but never states what value of r is used in experiments, nor provides any sensitivity analysis or bound on the approximation error for finite r at the observed spike rates. For a methods paper, this is a meaningful gap in methodological transparency.
+- **LFP application is underpowered and weakly concluded:** Only 4 trials from 1 of 39 sessions are used, selected without stated criteria. The authors themselves write: "for a more concrete conclusion for formal analysis, we may need to include more data" (Section 4.1). Including a weakly-concluded application as a main result weakens the paper's case.
 
-- **LFP application (Section 4.1) is inconclusive.** Only 4 trials from a single session are analyzed, and the authors explicitly hedge: "for a more concrete conclusion for formal analysis, we may need to include more data." The section demonstrates the method runs on this data but yields no definitive scientific insight. This weakens the paper's claim to broad neural data applicability.
+- **GL-GP hyperparameters {ε, K, t} not defined inline:** Section 2.2 states "see Dunson et al. (2022) for details" but the formula for H̃ references these parameters without definition. A reader cannot reconstruct the kernel from the paper alone.
 
-- **No MCMC convergence diagnostics.** No trace plots, Gelman-Rubin R-hat, or effective sample sizes are reported for any experiment. The authors acknowledge sensitivity to hyperparameters (Section 2.3, Section 5), making the absence of any convergence evidence notable. This is an established standard concern for Bayesian method papers in this area.
+- **No MCMC convergence diagnostics:** For a Bayesian paper with known-sensitive GL-GP hyperparameters and PG augmentation, no trace plots, R-hat statistics, or effective sample sizes are reported. (Likely in appendix, but should be flagged for completeness in the main text.)
+
+- **Posterior uncertainty not visualized:** Figures 2E-F and 3C-D show point estimates only. For an MCMC-based Bayesian method, credible intervals on fitted mean and covariance trajectories would be more informative.
 
 ### Trivial
-*None of substance.*
+
+- Only 6 simulation replications are used to assess robustness (Section 3). While unlikely to change conclusions, this is thin for assessing variance under hyperparameter sensitivity.
 
 ---
 
 ## Nice-to-Haves
 
-- A controlled simulation with a maze topology (e.g., long narrow passage) where two Euclidean-close points are far along the path, demonstrating that L-GP infers spurious smoothness that GL-GP corrects, would directly justify the core contribution.
-- A scaling experiment showing timing vs. n (neurons) and p (conditions) — even for modest growth — would clarify practical scope.
-- A brief comparison of MCMC vs. mean-field VI on one dataset would better characterize the scalability frontier and strengthen relevance to practitioners.
+- An application to more trials/sessions from the Steinmetz (2019) dataset (39 sessions) would transform the LFP analysis from a proof-of-concept into a genuine scientific finding.
+- A difference plot (L-GLGP minus L-GP fitted covariance) over the restricted domain would make the geometric advantage concrete without requiring readers to compare two heatmaps.
+- A wall-clock time and held-out likelihood profile at larger n (e.g., n=100, 200) would clarify where MCMC breaks down and motivate the variational future work more concretely.
 
 ---
 
@@ -59,55 +63,58 @@ This paper proposes a nonparametric mean-covariance regression framework for hig
 
 *These points are flagged to be removed; treat them with caution.*
 
-- **Harsh Critic — Structural unfairness of baseline (strict removal not warranted):** The criticism is substantively correct (dCMP baseline conflates pooling with GL-GP benefit), so it is kept as a Major weakness above. However, the framing that the comparison is "intentionally asymmetric to prove a stronger point" was not accurate here — the comparison is structurally ambiguous, not intentionally conservative toward the baseline.
+1. **GPWP single-trial comparison unfairness (Harsh Critic):** The critic claims fitting GPWP on a single trial while L-models use full training set is unfair. However, GPWP is a model for repeated measurements per condition (Nejatbakhsh et al. 2023)—this is a fundamental design constraint of GPWP, not an experimental choice by the authors. The comparison is not unfair; it reflects the baseline's actual limitations.
 
-- **Harsh Critic — Request for variational inference implementation:** Moved to Nice-to-Haves. Demanding VI is outside the stated scope of a Bayesian MCMC paper.
+2. **Scalability claim questioning model existence (Harsh Critic):** The critic's concern about variational inference being needed is valid as a limitation but is already addressed in the Discussion. The paper does not claim to solve massive-data inference with MCMC; it proposes the method and discusses future work. The Discussion is honest about this. The core issue (misleading title) is retained as a Major weakness; demands for solved scalability in the same paper are out of scope.
 
-- **Harsh Critic — O(p³) scaling discussion / GPWP cross-validation comparison:** The GPWP uses 5-fold CV while L-models use MCMC, so cost-adjusted comparisons are genuinely hard. However, this is a standard practice difference, not a methodological flaw. Moved to Nice-to-Haves (timing curves).
-
-- **Strength Finder — "Pólya-Gamma augmentation enabling tractable Poisson inference":** This is an existing technique (Polson et al. 2013; Windle et al. 2013) applied here via NB approximation. The application is competent but not itself a contribution. Removed as a standalone strength.
-
-- **Strength Finder — "Computational feasibility on standard hardware":** Running on a laptop with 3.3–3.5 s/iteration at n=14–36 neurons is not a demonstrated strength when the title claims "massive neural data" — it is a tension. Removed as a generic statement.
+3. **"Scalable factorization" Strength Finder claim:** The Strength Finder claims the factorization Λ(x) = Θξ(x) makes the method "feasible for modern high-dimensional neural recordings." The Discussion contradicts this (MCMC at 3.3-3.5s/iter on a laptop for n=14-36 is not scalable). This generic strength is removed.
 
 ---
 
 ## Novel Insights
 
-The most genuinely novel and underappreciated observation in the reviews is the conflation between (a) the advantage of jointly modeling multiple neurons (multi-neuron latent factor model vs. per-neuron independent fitting) and (b) the advantage of using the GL-GP for restricted covariates. These two sources of gain are inseparable in the HC real-data evaluation, which means the paper's headline result (the large log-likelihood gap over dCMP) cannot be attributed to the GL-GP at all. This is not a design flaw in the paper's goal — it is a gap in experimental design that obscures whether the paper's stated core contribution (restricted-domain handling) provides any meaningful practical benefit beyond what standard L-GP already achieves.
+The most substantive insight from reviewing this paper is the distinction between two separable contributions that are conflated throughout: (1) **joint multi-neuron modeling** (which a per-neuron baseline cannot do) and (2) **covariate-dependent covariance regression** (the paper's stated primary contribution). The experiments establish (1) convincingly but never isolate (2). This conflation is not just a presentation issue—it is a fundamental gap in the evidence supporting the central claim. A paper that genuinely demonstrates benefit from modeling covariate-dependent covariance for count neural data would be a meaningful contribution to the neuroscience methods literature; this paper makes a plausible argument for it but does not close the loop experimentally.
 
 ---
 
 ## Suggestions
 
-1. Add a simulation where the Euclidean GP and the GL-GP provably differ — a maze with a bottleneck, where two distant-along-path but close-in-Euclidean-space conditions are held out. Show that L-GP infers inflated covariance there while GL-GP does not.
-2. Include an independent Poisson-GP-per-neuron baseline (same covariates as L-GP, but no inter-neuron pooling) in the HC application so the GL-GP benefit can be isolated from the pooling benefit.
-3. Report ESS and/or R-hat for at least the k=2 Poisson simulation to establish convergence credibility.
-4. Rename the paper to remove "massive" or add a scalability experiment that actually justifies the claim.
+1. **Add a mean-only ablation:** Include L-GP-fixed-covariance (covariate-dependent ψ(x) but fixed Λ = Θ) as a baseline. If L-GP outperforms this, the covariance regression contribution is established. This is the single most important experiment to add.
+2. **Rename/rescope the title:** Replace "massive neural data" with language more accurately reflecting the contribution (e.g., "on restricted covariates" without the "massive" claim), or demonstrate the method at n ≥ 200 neurons.
+3. **Replace or supplement the dCMP comparison** with a per-neuron Poisson-log-normal model with fixed covariance, to isolate the joint-modeling benefit from the covariance regression benefit.
+4. **Expand the LFP analysis** to multiple sessions or at minimum report if session-13 findings replicate in even 5-10 other sessions.
 
 ---
 
 ## Score and Decision
 
-**Calibration anchors:**
+**Calibration anchors consulted:**
 
-| Path | Avg Score | Decision | Comparison to this paper |
-|---|---|---|---|
-| `ZYm1Ql6udy` (Bayesian Bi-clustering of Neural Spiking, MCMC) | 6.67 | Accept (poster) | Similar structure (nonparametric Bayesian MCMC, neural spiking, two applications), but that paper had clearer bi-clustering contribution and stronger simulation recovery results |
-| `2iCIHgE8KG` (Switching Infinite GPFA) | 7.50 | Accept (Spotlight) | More technically innovative (IBP prior, scalable VI), stronger results; this paper is clearly below this level |
-| `FwW3jqchtY` (Interventional SSM, neural dynamics) | 5.00 | Reject | Similar scale and scope, theoretical claims partially unsupported — comparable difficulty level |
-| `ZDoaLbOFaP` (Sparse Covariance Neural Networks) | 3.00 | Reject | Weaker paper with more fundamental flaws; this paper is above this level |
-| `NPzuN3Rxi8` (TAVRNN) | 3.00 | Reject | Methodologically weaker with questionable validation; this paper is above this |
+| Paper | Path | Avg Score | How it compares |
+|-------|------|-----------|-----------------|
+| Bayesian Bi-clustering Neural Spiking (MCMC+PG, n=30-60) | ZYm1Ql6udy | 6.67 (Accept poster) | Same method family; cleaner contribution isolation; accepted despite small n |
+| Switching Infinite GPFA | 2iCIHgE8KG | 7.50 (Accept spotlight) | Higher quality; variational, fully novel; not a direct comparator |
+| Multi-modal GP-VAE for neural data | aGH43rjoe4 | 5.80 (Accept poster) | Accepted with mixed scores; has real datasets + weaker ablations |
+| SIMPL neural representations | 9kFaNwX6rv | 6.25 (Accept poster) | Clean contribution, competitive baselines |
+| Interventional SSMs for neural data | FwW3jqchtY | 5.00 (Reject) | Medium anchor; rejected with split scores; limited eval |
+| Sparse Covariance NNs | ZDoaLbOFaP | 3.00 (Reject) | Low anchor; covariance + graph, but weak experiments |
+| Probabilistic Geometric PCA | mkDam1xIzW | 7.33 (Accept spotlight) | Strong accepted neuroscience methods paper |
 
-The paper under review sits below ZYm1Ql6udy (6.67), which is the most structurally comparable accepted paper. That paper had validated clustering recovery and credible improvements over baselines. This paper's core contribution (GL-GP over standard GP) is described by the authors as "slight" in simulations and is zero in one real application — a much weaker evidential basis for the key claim. The misleading title framing and the baseline confound are substantive issues. However, the framework is sound, the problem is real, and the paper is above the clearly-weak papers (avg ~3). Positioning between FwW3jqchtY (5.0, reject) and ZYm1Ql6udy (6.67, accept), closer to the lower end given the strength of the Major weaknesses, yields a score of **4.5**.
+**Reasoning:** This paper sits below ZYm1Ql6udy (6.67, accepted) primarily because ZYm1Ql6udy's core contribution (bi-clustering) is clearly demonstrated, whereas here the covariance regression benefit is not isolated from the joint-modeling benefit. The paper also sits below FwW3jqchtY (5.0, rejected) in experimental clarity, but the technical execution is cleaner and more honest about limitations. The "massive neural data" framing and the missing ablation are the two issues that push it toward rejection. The paper is technically sound—it is not a weak paper—but its primary claim is not adequately supported by its experiments, placing it closer to 4.5.
 
-**Originality:** Moderate — combination of existing components (Fox & Dunson 2015 + Dunson et al. 2022 GL-GP + Pólya-Gamma), but the integration is nontrivial and addresses a real gap.  
-**Importance of research question:** Genuine — covariate-dependent covariance in neural data is underserved.  
-**Claims supported:** Weakly — the central claim (GL-GP helps with restricted inputs) is labeled "slight" by the authors and is zero improvement in one real application.  
-**Soundness of experiments:** Problematic — conflated baselines, thin LFP application, no convergence diagnostics.  
-**Clarity of writing:** Adequate — the model is presented clearly; the discussion section is candid.  
-**Value to research community:** Limited in current form — the scalability limitation and weak GL-GP validation reduce immediate practical impact.
+**Originality:** Moderate — combines two prior frameworks (Fox & Dunson 2015; Dunson et al. 2022) with PG augmentation for count data. Technically sound but largely an extension.
 
-**Decision: Reject.** The paper addresses a genuine problem, but the experimental evidence for its core contribution (GL-GP for restricted covariates) is insufficient. The title framing and the baseline comparison require substantial revision before acceptance.
+**Importance of research question:** High — covariate-dependent covariance for neural data with restricted inputs is a real open problem.
+
+**Whether claims are well supported:** Weak — the central claim (covariance regression benefit) lacks a direct ablation.
+
+**Soundness of experiments:** Fair — simulations are well-designed; real data applications are limited and one is under-powered.
+
+**Clarity of writing:** Good — honestly acknowledges limitations; Section 2.2 has some presentation gaps.
+
+**Value to research community:** Moderate — a corrected version with the ablation and rescoped framing would be a useful contribution to statistics/computational neuroscience.
+
+**Final score: 4.5 — Reject**
 
 MY FINAL SCORE: <pineapple>4.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

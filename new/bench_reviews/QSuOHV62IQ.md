@@ -1,54 +1,55 @@
-Now let me search for calibration papers to properly score this paper.Now I have enough information to write the final review.
+Now let me search for calibration anchors.Now I have enough information to write the final consolidated review.
 
 ---
 
 ## Summary
 
-This paper proposes an identifiability theory for latent variables in nonlinear causal models using single-domain data. The core contributions are: (1) a structural reduction of any SCM (with no directed paths among observed variables) to an equivalent powerset bipartite graph (PBG-SCM) by clustering exogenous variables with identical observed descendant sets; (2) a novel "minimality" condition on shared latent variables that, together with invertibility and independence, guarantees identifiability up to invertible transformation; and (3) small-scale synthetic experiments ablating the necessity of each condition.
+The paper proposes a latent variable identifiability theory for nonlinear causal models using only single-domain observational data. The central contributions are: (1) a reduction procedure mapping any structural causal model (under no-directed-paths-among-observed-variables assumption) into an equivalent powerset bipartite graph SCM (PBG-SCM), and (2) identifiability theorems (Theorems 1 and 2) showing that all latent variables in a PBG-SCM are identifiable up to invertible transformations under invertibility, independence, and a novel "minimality" condition. Experiments on synthetic data validate that violating any one of the three conditions degrades identification performance.
 
 ---
 
 ## Strengths
 
-- **PBG Reduction (Section 4, Figure 1):** The formal reduction of any admissible SCM to an equivalent PBG-SCM — by clustering exogenous variables indexed by the binary representation of their observed descendant sets — is a conceptually clean and genuinely novel structural insight. It provides a canonical form for identifiability analysis that is applicable to general causal graphs.
+- **SCM reduction to PBG-SCM (Section 4, Figure 1):** The reduction procedure—clustering exogenous variables by their observed descendant set and naming them by binary-indexed concatenation—is a principled and clean conceptual contribution that formally bridges general causal models and tractable bipartite structures. This is concrete and novel.
 
-- **Novel minimality condition and its analysis (Assumption 1.iii, Proposition 5.1, Corollary 5.1):** The minimality condition formalizes why a shared latent variable with "oversized" intrinsic dimension causes identifiability failure, and Proposition 5.1 gives a precise characterization of what goes wrong. Corollary 5.1 provides a practically useful equivalent criterion (match latent dimension to IDim(z)) and explains why minimality has been implicitly satisfied — but not recognized — in prior experimental practice.
+- **Novel minimality condition with formal characterization (Assumption 1(iii), Proposition 5.1, Corollary 5.1):** The minimality assumption is genuinely new to the identifiability literature. Proposition 5.1 rigorously characterizes exactly what happens when minimality is violated—the shared variable z decomposes into components z₀, z₁, z₂ where z₁ and z₂ absorb private information from s₁ and s₂ respectively—providing both theoretical insight and intuitive understanding. Corollary 5.1 gives a practical substitute (match latent dimension to ground truth intrinsic dimension), even if this requires oracle knowledge.
 
-- **Constructive proof structure (Theorem 2, Section 5.2, Figure 4b):** The extension from the basis model to general PBG-SCMs via iterative application of basis models is elegant, and Figure 4b concretely validates that the iterative procedure achieves high R² across all 7 latent variables in a size-3 PBG-SCM.
+- **Constructive proof for general identifiability (Theorem 2, Figure 4b):** The iterative basis-model approach that decomposes general PBG-SCMs into basis models is a clean inductive strategy. Figure 4b concretely shows R² > 0.93 for all 7 latent variables in the size-3 general model, directly supporting the constructive proof.
 
-- **Ablation experiments confirm necessity of each condition (Table 1, Figure 3/4a):** Across three qualitatively distinct datasets (Concatenation, Split, Fusion), removing CLUB (violating independence) or inflating dimension (violating minimality) substantially degrades R², providing empirical support that each assumption is necessary.
+- **Experimental validation of assumption necessity (Table 1, Figure 4a):** The ablations systematically confirm that each assumption is load-bearing: removing independence (AE, d_z=5) or minimality (AE+CLUB, d_z=7) both significantly reduce R² across all three dataset types. This pattern is consistent and cleanly presented.
+
+- **Honest limitations section (Section 7):** The paper candidly acknowledges the no-directed-paths assumption, continuous-variable restriction, and oracle knowledge of intrinsic dimension as limitations.
 
 ---
 
 ## Weaknesses
 
 ### Fatal
-None.
+None — the core theoretical framework is internally coherent and the proof strategy is sound.
 
 ### Major
 
-- **The minimality condition is not operationally checkable without ground-truth knowledge, limiting the theoretical contribution's practical impact.** Assumption 1.iii (and its generalization in Assumption 2.iii) requires existential quantification over all models satisfying invertibility and independence — a condition that cannot be verified from data alone. As Corollary 5.1 makes explicit, minimality is automatically satisfied when the practitioner sets dim(z̃) = IDim(z), i.e., when the true intrinsic dimension is known in advance. The paper correctly acknowledges this in Section 7: *"the succeeded algorithms in our experiments still need pre-known knowledge of the intrinsic dimension of latent variables."* The result therefore characterizes *why* the standard practice of using the correct dimension works, rather than enabling new identification in genuinely unknown-dimension settings. Papers such as p60Y6o85Cj address this gap directly (identifiability under unknown latent dimensions); the paper under review does not. The contribution is real but its scope is narrower than the framing suggests.
+- **"Invertible" vs. "injective" imprecision in core assumptions.** Assumption 1(i) and Assumption 2(i) state: "There exists a differentiable **invertible** function g: S → V, and g has a differentiable **inverse** g⁻¹." In the experiments, dim(S) < dim(V): the basis model has latent dimension 3+5+4=12 and observed dimension 10+10=20; the general model has 7×2=14 latent dimensions and 3×10=30 observed dimensions. A function g: ℝ¹² → ℝ²⁰ cannot be bijective (invertible in the standard sense) because the dimensions don't match. The paper compounds this by claiming in Section 6.1 that "We checked the rank of weight matrices in each linear layer to ensure they are of full rank, therefore any fᵢ is guaranteed to be invertible"—but a full-rank linear map from ℝ⁸ to ℝ¹⁰ (e.g., in the Concatenation dataset where [s₁, z] ∈ ℝ⁸ maps to v₁ ∈ ℝ¹⁰) is injective but never surjective, hence not bijective/invertible. The operationally correct assumption for the theory is global **injectivity** (a left inverse exists), which is possible when dim(S) < dim(V) since g maps S into a lower-dimensional submanifold. Because this imprecision appears in the central assumptions of both main theorems and the experimental setup does not satisfy the stated assumptions, this is not a cosmetic issue—it creates a gap between the stated theory and the experiments, even though the underlying mathematics (if based on injectivity) may be sound.
 
-- **Experiments contain no comparison with any prior method and use exclusively toy-scale synthetic data.** The entire experimental section is an ablation of the proposed method across two hyperparameters (CLUB on/off, dimension inflated/correct). There is no evaluation against Lachapelle et al. (2024), Kong et al. (2024), Brady et al. (2023), or any other method on shared benchmarks. The basis-model experiments use a 2-observed-variable setup with at most d_v = 10, d_z = 5; the general model uses 3 observed variables with d_s_i = 2 each. Without competitive comparison on established benchmarks, the paper cannot substantiate its claim that minimality is "easier to satisfy" or more generally applicable than compositionality or subspace-span conditions.
+- **"Verifiable" label for minimality is misleading; oracle knowledge required in practice.** Assumptions 1 and 2 are titled "Verifiable identifiability conditions," yet the minimality condition as stated—"there does not exist a model satisfying assumptions i and ii such that z' ≺ z"—is a universal statement over all possible models, making it non-verifiable from data alone. Corollary 5.1 provides an operational substitute (set dim(z̃) = IDim(z)), but IDim(z) is itself defined as the minimum over all equivalent variables and requires oracle access to ground-truth latent structure. Every experiment in Section 6 uses the ground-truth latent dimension. This does not invalidate the theory, but calling the conditions "verifiable" is misleading, and the claim in Section 2 that minimality is "easier to be satisfied in general scenarios" is unsubstantiated.
 
 ### Minor
 
-- **The differentiability condition (Assumption 1.i) is technically violated by the Split dataset.** Assumption 1.i requires a *differentiable* invertible function g with differentiable inverse. The Split dataset constructs z⁺ = max(z, 0) and z⁻ = min(z, 0), which are non-differentiable at z = 0. The paper states these datasets are "globally invertible but not locally invertible" (Section 6.1) but does not address the differentiability failure. While the measure-zero nature of the issue may render this practically harmless, the paper claims the theory is validated on datasets that technically violate one of its own assumptions.
+- **No comparison with prior identification methods.** The paper's stated motivation is that its assumptions are milder than prior work (Kong et al. 2024, Lachapelle et al. 2024, Brady et al. 2023), yet the experimental section contains no comparison with any existing method. All experiments are within-method ablations on synthetic Gaussian data. The paper does acknowledge being "mainly a theoretical work," but even a single empirical comparison—or at minimum an explicit theoretical comparison showing a case where the paper's assumptions are satisfied but prior work's are not—would substantially strengthen the contribution.
 
-- **The full-rank weight check does not guarantee global invertibility of a deep nonlinear MLP.** Section 6.1 states: *"We checked the rank of weight matrices in each linear layer to ensure they are of full rank, therefore any fi is guaranteed to be invertible."* This argument is invalid: layer-wise full-rank matrices in a nonlinear network do not imply global invertibility of the composed nonlinear function. This is a gap in the dataset construction argument, though the empirical results are consistent with the datasets behaving as intended.
-
-- **The hierarchical minimality condition (Assumption 2.iii) uses an ordering that is not fully justified in the main text.** The condition requires s'_k ~ s_k for k satisfying k ≠ i and k & i = 0. This "lower variable" restriction implicitly relies on a topological ordering that is not explicitly motivated in the main text. The full justification is deferred to the appendix, making Section 5.2 difficult to evaluate on its own.
+- **Experiments exclusively on Gaussian synthetic data with known latent dimensions.** All experiments use standard normal latent variables and random MLP transformations. The claim of practical applicability is not empirically grounded in any non-Gaussian, semi-synthetic, or real-world setting.
 
 ### Trivial
-None worth mentioning.
+
+- The Remark in Section 5.2 uses informal language ("upper" and "lower" variables) to explain hierarchical minimality without formally connecting to the binary-index structure. This could be tightened.
 
 ---
 
 ## Nice-to-Haves
 
-- An algorithm or heuristic for estimating IDim(z) without ground-truth knowledge — even a simple elbow-curve approach — would make the theory actionable and significantly strengthen the practical relevance of the minimality condition.
-- Evaluation on a benchmark dataset used in the disentanglement literature (e.g., 3DShapes, Sprites, or the Causal3DIdent benchmark) would demonstrate that the theory's conditions are achievable outside pure toy settings.
-- A formal comparison showing a concrete case where minimality holds but the subspace-span condition of Kong et al. (2024) fails (or vice versa) would substantiate the claimed advantage over prior work.
+- **Experiment with unknown latent dimension.** The paper itself argues that "researchers should consider experiment settings with unknown latent dimension for validating their identifiability results." Demonstrating a practical procedure for estimating IDim (e.g., via intrinsic dimension estimators) and showing it recovers correct latent structure without oracle knowledge would transform the theoretical insight about minimality into a fully actionable result.
+- **Visualization of learned vs. ground-truth latent spaces** (scatter plots or traversals) beyond R² values.
+- **Failure mode analysis** showing what happens when the invertibility/independence assumptions are violated (not just minimality), to demonstrate the conditions are roughly necessary as well as sufficient.
 
 ---
 
@@ -56,53 +57,53 @@ None worth mentioning.
 
 *These points are flagged to be removed; treat them with caution.*
 
-- **Harsh Critic: "The SCM reduction preserves marginal distributions but not full interventional structure."** The paper explicitly scopes its equivalence claim to marginal distributions over observed and concatenated exogenous variables; this is an intentional scope restriction for observational identifiability, not an oversight.
-- **Harsh Critic: "AE(dz=5) without CLUB achieving R²≈0.81 is not theoretically analyzed."** This is a valid observation but is actually shown empirically in Figure 3 and Table 1 and is discussed in Section 6.2. Demanding a full theoretical analysis of this gap goes beyond the paper's stated scope.
-- **Strength Finder: "Clear notation and formalism."** Removed as generic; not grounded in a specific section or figure citation.
-- **Harsh Critic: "The claim that minimality is weaker than Kong et al.'s condition is unsubstantiated."** While this could be strengthened with a formal counterexample, it is a claim about comparative ease of satisfaction, not a proof claim. Moved to Nice-to-Haves rather than a main weakness.
+- **Harsh Critic Claim — "SCM reduction is lossy with respect to structure":** The paper explicitly and honestly discusses that the reduction identifies concatenations of original exogenous variables at the finest grain, and that further structure within a cluster is unidentifiable. This is not an omission; it is clearly stated as a design choice. REMOVED as a strawman.
+
+- **Harsh Critic Claim — proofs absent from main paper:** The paper explicitly defers detailed proofs to the appendix (Appendix A.7 for Theorem 2) while providing a proof sketch in the main text. A proof sketch is the standard for conference paper main texts in this area. REMOVED as a missing-appendix criticism.
+
+- **Harsh Critic Claim — hierarchical minimality condition unclear in relation to basis model:** The condition in Assumption 2(iii) is a direct generalization of Assumption 1(iii), and the paper explains the relationship informally in the Remark following Assumption 2. This is not a structural flaw, at most a minor presentation issue, which is already captured in Trivial.
+
+- **Strength Finder — "the problem is important / broad applicability":** Generic importance framing without specific evidence. REMOVED as generic.
 
 ---
 
 ## Novel Insights
 
-The most genuinely novel observation in this paper — beyond standard identifiability claims — is the precise characterization of *why* the standard experimental practice of pre-specifying the true latent dimension implicitly satisfies a non-trivial theoretical condition. Corollary 5.1 shows that dim(z̃) = IDim(z) is a sufficient substitute for minimality, which explains why minimality has not previously appeared in the literature: prior experiments have enforced it unknowingly. This is a methodological insight with implications for how identifiability experiments should be designed (i.e., using unknown-dimension settings as a harder test). However, the paper identifies this gap without closing it — no dimension-estimation procedure is proposed — so the insight is diagnostic rather than constructive.
+The most genuinely novel conceptual contribution is the minimality condition, which provides a principled explanation for why existing experiments (which always fix latent dimension to ground truth) implicitly satisfy minimality without realizing it. The insight in Proposition 5.1—that a non-minimal shared variable z decomposes into a "true" shared part z₀ and parts z₁, z₂ that absorb private information—gives a clean structural account of why dimension mismatch in the latent space leads to identification failure. This reframes an implicit experimental practice (fix latent dimension = ground truth) as an explicit theoretical assumption, making the identifiability boundary clearer. The SCM-to-PBG reduction is also conceptually clean as a "canonical form" reduction for latent variable identification.
 
 ---
 
 ## Suggestions
 
-1. Extend the experimental section with at least one comparison against a prior single-domain method (e.g., Lachapelle et al. 2024) on a shared dataset, with both methods evaluated at their best configurations.
-2. Correct or qualify the MLP invertibility argument in Section 6.1; consider using normalizing flows or coupling layers where global invertibility is architecturally guaranteed.
-3. Address the differentiability issue with the Split dataset explicitly — either by smoothing max/min with a soft approximation (SoftPlus) or by noting that a.e. differentiability suffices and citing the appropriate theorem.
-4. Strengthen Section 5.2 by moving the topological ordering justification into the main text rather than fully deferring to the appendix.
+1. **Fix the invertibility assumption:** Replace "invertible function g: S → V with differentiable inverse g⁻¹" with "injective function g: S → V with a differentiable left inverse g⁻¹: image(g) → S," and correct the claim that full-rank weight matrices guarantee invertibility of maps between spaces of different dimensions.
+2. **Retitle or reframe "verifiable" conditions:** Either provide an algorithm that estimates IDim from data without oracle knowledge, or relabel Assumptions 1 and 2 as "sufficient conditions" and move the verifiability discussion to Corollary 5.1.
+3. **Add at least one comparative experiment** or a theoretical case study showing concretely when the paper's conditions are met but a specific prior method's conditions are not.
 
 ---
 
 ## Score and Decision
 
-**Calibration anchors reviewed:**
+**Calibration anchors:**
 
-| Paper | Avg Score | Comparison to this paper |
+| Path | Avg. Human Score | Comparison |
 |---|---|---|
-| `2efNHgYRvM` (IDOL, temporal causal representation) | 8.0 | Much stronger: rigorous theory + real-world motion-forecasting benchmarks + addresses practical gap (instantaneous dependencies) |
-| `3cuJwmPxXj` (Intervention extrapolation identifiability) | 8.0 | Much stronger: clean theory + real downstream task validation; comparable theory depth but better empirical scope |
-| `lk2Qk5xjeu` (Unifying CRL with invariance) | 7.0 | Stronger: unifies existing literature under a principled framework with stronger generalizability |
-| `p60Y6o85Cj` (Content-style under unknown latent dimension) | 6.6 | Stronger: directly addresses the key limitation of this paper (unknown latent dimension) with multi-domain data |
-| `v1VvCWJAL8` (Domain counterfactuals for invertible latent models) | 5.75 | Comparable: theory + limited synthetic validation; accepted, but has slightly broader real-world framing |
-| `nzgvkQM3EH` (Nonparametric dynamic causal model) | 5.75 | Comparable: theory paper with limited experiments; rejected |
-| `kkQSwtx0p3` (Task structure identifiability) | 5.25 | Comparable: identifiability theory with narrow experiments; rejected; this paper is slightly cleaner theoretically |
-| `0sO2euxhUQ` (Learning latent SCMs) | 4.0 | Weaker anchor: this paper clearly exceeds it in theoretical rigor and cleanliness |
+| `3cuJwmPxXj.md` | 8.0 | Identifiability for intervention extrapolation — more rigorous math, tighter assumptions, stronger results; clearly above this paper |
+| `lk2Qk5xjeu.md` | 7.0 | Causal representation learning unification — broad framework, real-world validation; stronger than this paper |
+| `6Pz7afmsOp.md` | 6.6 | Temporal latent identification — similar theory-heavy style with synthetic validation, accepted; comparable theoretical novelty |
+| `v1VvCWJAL8.md` | 5.75 | Invertible latent causal models — similar scope and style; accepted, though more complete |
+| `5tSLtvkHCh.md` | 5.5 | Non-invertible generation process identifiability — rejected, weak empirics, mixed quality; similar empirical shortcomings |
+| `0sO2euxhUQ.md` | 4.0 | Learning latent SCMs — rejected for weak theory and missing baselines; this paper's theory is stronger |
+| `ZKRHiu5kE4.md` | 4.25 | Spatio-temporal causal discovery — rejected; weaker overall |
 
-**Assessment:** This paper sits in the 4.5–5.5 range. The PBG reduction and minimality condition are genuinely new and cleanly formulated, placing it above the 4.0-level papers. However, it falls short of the 5.75–6.6 accepted papers in two key ways: (1) the minimality condition requires knowing the true intrinsic dimension — a limitation that the comparable paper p60Y6o85Cj actually resolves — and (2) experiments are purely ablative and toy-scale, with no competitive comparison. The contribution is real but its practical scope is narrow and its experimental support is thin. The paper most closely resembles the borderline-reject zone of the 5.0–5.5 papers. I settle on **4.5**.
+The paper under review sits between the accepted borderline papers (v1VvCWJAL8 at 5.75, 6Pz7afmsOp at 6.6) and the rejected papers (0sO2euxhUQ at 4.0). The minimality condition and SCM reduction are genuinely novel theoretical contributions—stronger than the low-band anchors. However, the significant invertibility/injectivity imprecision in the core stated assumptions, the misleading "verifiable" label, and the absence of any comparison with prior work pull it below the accepted papers in the 6-7 range. The paper reads as a theoretical paper at an early stage: the ideas are interesting and worth developing, but the assumption statements require correction, and the empirical section is thin even by the standards of purely theoretical works in this area. This places it at approximately **5.0**—below acceptance threshold in current form, but with real merit worth developing.
 
-**Originality:** Moderate — the PBG reduction and minimality condition are new, but the setting and assumptions (invertibility + independence) are standard.  
-**Importance:** Moderate — the research question (single-domain identifiability) is important, but the answer only applies when the true latent dimension is known.  
-**Claims well-supported:** Partially — the theory appears formally correct, but experiments are insufficient to support claims of advantage over prior work.  
-**Soundness of experiments:** Weak — toy-scale ablations only; MLP invertibility claim is technically invalid; one dataset violates differentiability.  
-**Clarity:** Good — notation is consistent and the paper is generally readable.  
-**Value to community:** Limited at current stage — the diagnostic insight about minimality is useful, but without an actionable dimension-selection procedure or competitive experiments, the contribution is primarily theoretical/descriptive.
+**Overall evaluation by axis:**
+- *Originality:* Good — minimality condition and SCM reduction are novel
+- *Importance of research question:* High — single-domain identifiability is a well-motivated open problem
+- *Claims well-supported:* Moderate — theory is plausible but assumptions are imprecisely stated; experiments are ablations only
+- *Soundness of experiments:* Weak — synthetic only, no baselines, oracle latent dimensions throughout
+- *Clarity of writing:* Adequate — mostly clear, some imprecision in key definitions
+- *Value to research community:* Moderate — the minimality insight is valuable; the paper needs revision to be fully trustworthy
 
-**Decision: Reject.**
-
-MY FINAL SCORE: <pineapple>4.5</pineapple>
+MY FINAL SCORE: <pineapple>5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

@@ -1,22 +1,24 @@
-Now let me search for calibration papers.Now I have enough information to write the final review.
+Now let me search for calibration anchors.Now I have sufficient calibration data to write the final review.
 
 ---
 
 ## Summary
 
-NFFS (Neural Functional Flow on Surfaces) proposes a neural fluid simulation framework for geometric surfaces that constructs provably divergence-free velocity fields using the Closest Point Method (CPM) and exterior calculus (Theorem 3.1), combined with a covariant-derivative-based advection scheme (Eq. 15). The paper claims this is the first method to simulate incompressible flow on implicitly neural-represented surfaces with guaranteed divergence-free behavior, and demonstrates orders-of-magnitude accuracy improvement over PINN/INSR baselines at comparable memory cost (Table 1).
+NFFS (Neural Functional Flow on Surface) is a neural simulation framework for incompressible fluid flow on geometric surfaces. The core contribution is a provably divergence-free velocity field construction via the Closest Point Method (CPM) and exterior calculus (Theorem 3.1), paired with a covariant-derivative-based advection scheme for energy-preserving vorticity transport. The paper demonstrates results on analytic surfaces (sphere, inclined plane), explicit meshes, and — as a first-of-its-kind claim — implicit neural representation surfaces.
 
 ---
 
 ## Strengths
 
-- **Principled divergence-free construction (Theorem 3.1, Eq. 4)**: The stream-function formulation `v(x) = j*(∇(cp*σ) ∘ j(x)) × n(x)` provides a hard, parameter-free guarantee of divergence-free behavior by construction, unlike PINN/INSR which enforce incompressibility via soft loss penalties that introduce cumulative errors. The proof sketch is coherent and the theoretical grounding is solid.
+- **Theorem 3.1 with CPM-based divergence-free guarantee (Eq. 4):** The construction $v(x) = j^*((\nabla(cp^*\sigma) \circ j(x)) \times n(x))$ provably satisfies the divergence-free constraint by design, rather than penalizing it in a loss. This eliminates pressure-projection error accumulated by PINN and INSR at every time step — a meaningful architectural advantage with a clean theoretical foundation.
 
-- **Quantitatively demonstrated accuracy gains (Table 1)**: On the sphere jet benchmark, NFFS achieves MSE of 2.89e2 versus 8.63e4 (INSR) and 1.73e5 (PINN) at comparable storage (~530KB), and 5× memory savings over the high-resolution GT reference. These are order-of-magnitude improvements that cannot be attributed to framing alone.
+- **Strong quantitative accuracy on analytic surfaces (Table 1, Fig. 5):** At the same storage budget (~530 KB), NFFS achieves an MSE of 2.89e2 on the sphere jet benchmark — approximately 18× lower than Small-F.S. (5.34e3) and ~300× lower than PINN (1.73e5). Fig. 5 shows the same advantage on Taylor vortices on an inclined plane, with NFFS closely matching the reference GT while all baselines show significant vortex dissipation by time step 40.
 
-- **First simulation on implicit neural representation surfaces (Sec. 5.2, Fig. 7)**: The paper demonstrates continuous fluid simulation directly on SDF-based surfaces without marching cubes or meshing—a capability the paper shows classical Functional Fluid on Surfaces fails to achieve (crashes under Newton solver, documented in Appendix E.4). This is a genuinely novel capability.
+- **First demonstration of incompressible surface flow on implicit neural surfaces (Sec. 5.2, Fig. 7):** The framework's CPM-based normal computation avoids marching-cubes meshing entirely, enabling simulation on DeepSDF/SIREN-parameterized Armadillo and Lucy surfaces. The paper substantiates that classical FFS crashes on marching-cubes-derived meshes at multiple resolutions (Appendix E.4), making this a genuine contribution rather than a superficial extension.
 
-- **Practical multi-domain applications**: The framework naturally extends to Helmholtz decomposition of real ERA5 atmospheric wind data (Sec. 5.4, Fig. 8b) and vorticity generation via VAE (Sec. 5.3), demonstrating breadth beyond a purely methodological contribution.
+- **Covariant-derivative advection for energy preservation (Eq. 15):** The implicit symmetric scheme couples forward and backward advection around the midpoint, avoiding the energy drift inherent in operator-splitting approaches. Fig. 5 visually confirms that INSR and PINN dissipate vortex energy over time while NFFS maintains structure comparable to the reference GT.
+
+- **Generality across surface representations (Secs. 5.1–5.2):** The same theoretical framework applies to analytic surfaces, discretized explicit meshes, and INR surfaces without method-specific modifications — a practical breadth advantage.
 
 ---
 
@@ -27,89 +29,87 @@ None.
 
 ### Major
 
-- **The core novelty (INR-surface simulation) is validated purely qualitatively**: Sections 5.2 and Fig. 7 show only rendered velocity/vorticity snapshots for Armadillo and Lucy surfaces. There are no MSE measurements, no divergence-residual checks, no energy-over-time curves, and no comparison with any method (classical FFS is reported to crash, but the crash behavior is only discussed in Appendix E.4 without quantification in the main body). A paper advertising "the first study to present simulation results of incompressible fluid flow on implicitly neural-represented surfaces" as its lead contribution should provide at least one quantitative signal—e.g., a vorticity divergence-residual at each time step, or a kinetic energy plot—to substantiate the claim of "guarantee of divergence-free behavior" and long-term stability in this setting. As written, the most advertised novelty rests entirely on visual plausibility.
+- **No quantitative evaluation for the headlining novel contribution (implicit surface simulation, Sec. 5.2):** The paper's most distinctive claim — first-ever simulation on implicit neural surfaces — rests entirely on qualitative figures (Fig. 7) and a competitor's crash log. No divergence error $\|\nabla \cdot v\|$, no energy trace, no self-consistency measure of any kind is reported for the Armadillo or Lucy experiments. Given that there are no baselines to compare against here (since all competitors fail), some form of self-evaluation (e.g., energy conservation over time, divergence residual on sampled points) is the minimum required to substantiate the claim. Without it, the novel contribution is unverifiable.
+
+- **No ablation separating the two stated contributions:** The paper presents two separable components: (a) CPM divergence-free construction (Theorem 3.1), and (b) covariant-derivative advection (Eq. 15). The quantitative gains in Table 1 and the energy preservation evidence in Fig. 5 could stem from either or both components. All comparative experiments pit full NFFS against PINN and INSR, which differ from NFFS on both dimensions simultaneously. Without a variant that isolates each contribution (e.g., CPM construction + standard semi-Lagrangian advection, or divergence-penalized loss + covariant advection), it is impossible to determine where the gains originate.
 
 ### Minor
 
-- **The Taylor vortex classical baseline comparisons use externally quoted results**: Fig. 5's caption states "HOLA; Pseudospectral; Elcott et al 2007 results are quoted from McKenzie (2007)." This means the mesh resolution, time-step size, and initial condition normalization for these methods are unknown. A visual comparison against competitors run under uncontrolled conditions provides weaker evidence than a controlled re-run. (Note: the main quantitative claim in Table 1 is unaffected, as it compares all methods under controlled conditions.)
+- **Main quantitative benchmark uses FFS-as-GT rather than analytic ground truth:** Table 1 measures MSE against a higher-resolution FFS simulation (5× storage), which shares the same mathematical family as NFFS. This is a common practice for complex flows without analytic solutions, and the sphere jet case may not admit a closed-form GT. Still, this makes the central accuracy claim somewhat self-referential. The inclined plane case does have analytic Taylor vortex solutions, but quantitative results for that case are deferred to Appendix E.2 and not included in the main body. Moving the analytic-GT comparison to the main paper would substantially strengthen the accuracy claim.
 
-- **The "higher-resolution Functional Fluids on Surfaces" used as GT is not an independent reference**: The paper explicitly states it uses a competing solver at 5× storage as ground truth. This is disclosed transparently (Sec. 5.1), and the 15× accuracy headline is correctly framed as comparison to Small-F.S. at the same storage—not absolute error. However, the GT-relative MSE values in Table 1 measure deviation from that solver's discretization, not from physical truth. For the sphere jet, if an analytic vorticity field is not available, the authors could at least discuss this limitation and report the energy/enstrophy evolution alongside the MSE.
+- **Conditioning and Helmholtz decomposition sections lack quantitative evaluation (Secs. 5.3–5.4):** The VAE generation experiment (Fig. 8a) reports no metric (no divergence residual, no FID, no energy check on generated fields). The real-world wind decomposition (Fig. 8b) is purely qualitative. These sections demonstrate framework versatility but do not constitute scientific results in their current form.
 
-- **No ablation decomposing CPM from the advection scheme**: The method has two primary components—the CPM-based divergence-free construction and the covariant-derivative advection. No experiment isolates their individual contributions to accuracy or energy preservation. An ablation (e.g., replacing covariant advection with semi-Lagrangian advection while retaining the CPM construction) would meaningfully strengthen confidence in each design choice.
-
-- **Significant computational overhead is under-discussed**: Table 1 shows NFFS takes 16.5h vs. 0.8h for Small-F.S., approximately a 20× time penalty. The paper acknowledges time efficiency as a limitation in Appendix F but does not provide a time-accuracy tradeoff analysis in the main body, making it harder for readers to judge when the method is practically preferable.
+- **Runtime (16.5 hours) is understated as a limitation:** Table 1 shows NFFS is ~20× slower than Small-F.S. (0.8 h). The discussion acknowledges time efficiency as a limitation but provides no breakdown of where the cost lies, making it hard to assess whether the bottleneck is fundamental to the optimization-per-step design or addressable with engineering improvements.
 
 ### Trivial
 
-- Footnote 2 (Sec. 5.2) excludes PINN and INSR from mesh/surface experiments citing adaptation difficulty, but gives only a brief justification. Even a one-paragraph elaboration on why surface parameterization to ℝ² is required by those methods—and why the CPM approach bypasses this—would strengthen the exclusion rationale.
+- The first-order truncation of the exponential map in Eq. 14–15 introduces truncation error that grows with step size $h$. The paper does not report the time-step size used in experiments, nor analyze the temporal accuracy order. This is acknowledged as a future direction (higher-order approximations), but stating the time-step size in the main experiments would aid reproducibility.
 
 ---
 
 ## Nice-to-Haves
 
-- A kinetic energy or enstrophy-over-time plot for any of the main experiments would directly substantiate the "low energy dissipation" claim more compellingly than visual comparison alone.
-- For the INR-surface experiments, reporting a time-series of the vorticity divergence norm `‖∇·v‖` would quantitatively verify the divergence-free guarantee on implicit surfaces, even in the absence of a classical GT.
-- Higher-order approximation of the advection map (Eq. 14 truncated at first order) is cited as future work; even a brief empirical convergence study (error vs. time-step h) would characterize the method's temporal accuracy.
+- An energy-over-time plot (kinetic energy vs. time step) comparing NFFS, INSR, PINN, and Small-F.S. on the sphere jet flow would directly and quantitatively substantiate the energy preservation claim, complementing the visual evidence in Fig. 5.
+- Even a qualitative demonstration that the harmonic component (handled via the time-invariant residual MLP, Sec. 4.1) contributes meaningfully on a surface with non-trivial topology (e.g., a torus) would help readers assess the completeness of the topological treatment.
 
 ---
 
 ## Removed Points
 
-*These points are flagged to be removed — treat them with caution.*
+*These points are flagged to be removed; treat them with caution.*
 
-- **"Biased GT invalidates the 15× claim" (Harsh Critic #1, framed as structural flaw)**: The paper is entirely transparent that the GT is higher-resolution FFS, and the 15× headline correctly refers to comparison with same-storage Small-F.S. The use of a reference solver as GT is standard practice in CFD. Downgraded to a minor concern about methodology transparency rather than a structural flaw.
+- **"5× memory savings" framing is misleading (Harsh Critic):** The critic argues comparing NFFS (532.8 KB) against GT (2643.0 KB) is unfair because GT runs at 5× resolution. This is removed as a standalone weakness: the paper's claim is not that NFFS matches GT quality for 5× less memory, but that NFFS at budget X achieves higher accuracy than other methods at the same budget X, and that budget X is 5× smaller than the high-resolution reference. The framing is slightly loose but the underlying comparison in Table 1 is clear and legitimate.
 
-- **"PINN/INSR should be adapted to arbitrary surfaces" (Harsh Critic)**: Footnote 2 provides a justification that adapting these methods to arbitrary surfaces requires surface parameterization and pullback that are non-trivial and outside the paper's scope. Excluding a method because it "cannot be simply adopted" to a task is a defensible scope boundary, not a weakness.
+- **Demand for mesh-based baselines on explicit meshes (Harsh Critic, referencing Elcott et al. 2007):** The critic notes that Elcott et al. 2007 could in principle be run on the hand and spot models. Removed because (a) Elcott et al. is included in Fig. 5 for the Taylor vortex case, (b) the explicit mesh section primarily demonstrates generality rather than numerical competition, and (c) INSR/PINN are appropriately excluded by footnote 2 given their architectural limitations on non-parameterized surfaces — this is a reasonable scoping decision, not an unfair omission.
 
-- **"Sphere rotation case should be primary benchmark" (Harsh Critic)**: The sphere rotation (Appendix E.1) is used to validate energy preservation. Moving it to the main body would be a presentation suggestion, but the existing Table 1 benchmark is not invalidated by its location in the appendix. Moved to Nice-to-Have territory.
+- **Non-zero homology is incomplete in main text (Harsh Critic):** Removed. The paper explicitly addresses the harmonic component in Sec. 4.1 with the time-invariant MLP and references Appendix F.1. Per rules, the appendix cannot be penalized for being absent in the extract.
 
-- **Self-contained theoretical exposition (Strength Finder)**: Too generic; every technical paper has background. Removed.
+- **Demand for theoretical convergence/stability analysis (Harsh Critic):** Moved to Nice-to-Haves. The paper is an empirical systems paper; demanding formal convergence proofs is not the norm for this community at ICLR, and the paper already acknowledges this as future work.
 
 ---
 
 ## Novel Insights
 
-The combination of Closest Point Method with exterior calculus to produce a hard-constraint divergence-free neural field (not a soft-penalty one) is conceptually the sharpest contribution here. Prior neural fluid work either requires operator splitting (introducing projection error) or uses soft loss terms (accumulating error across time steps). NFFS removes both error sources simultaneously by building divergence-freedom into the parameterization algebra itself—any function of the form `*dσ` is divergence-free by exactness (`d²=0`), so there is literally no loss term to get wrong. The application of CPM to lift this algebra from flat space to arbitrary embedded surfaces without meshing is an elegant and underexplored approach that this paper successfully operationalizes.
+The most conceptually interesting contribution — not fully explored in either review — is the interplay between CPM and the exterior calculus framework. By pulling back the surface calculation into $\mathbb{R}^3$ via the closest-point map, the method sidesteps the need for surface parameterization entirely, making it geometry-representation-agnostic by construction rather than by engineering. This is in contrast to prior methods that either require explicit parameterization (which distorts) or enforce constraints via loss terms (which drift). The practical consequence — that the same code path works on analytic, mesh, and INR surfaces without modification — is a genuine architectural elegance that the paper itself somewhat undersells by distributing it across sections.
 
 ---
 
 ## Suggestions
 
-1. Add a quantitative divergence-residual or enstrophy-over-time plot to the INR-surface section (Sec. 5.2) to give the paper's main novelty claim at least one quantitative anchor.
-2. Run the classical baselines (HOLA, Pseudospectral, Elcott) from scratch for the Taylor vortex comparison, or at minimum discuss how uncontrolled experimental conditions might affect the visual comparison.
-3. Include an ablation separating the CPM construction from the covariant advection, even on the sphere (where conditions are fully controlled).
+1. **Add a quantitative self-evaluation for INR experiments:** Report (a) mean $\|\nabla \cdot v\|$ on sampled surface points at each time step, and (b) kinetic energy $\frac{1}{2}\|v\|^2$ over time steps, for the Armadillo/Lucy cases. This requires no baselines and directly substantiates the method's physical plausibility on its novel test cases.
+
+2. **Add an ablation run:** One additional experiment — CPM divergence-free construction + standard semi-Lagrangian advection — would resolve the attribution ambiguity between the two contributions and is likely straightforward to implement.
+
+3. **Promote analytic-GT quantitative comparison to main text:** Move the Taylor vortex MSE comparison (Appendix E.2) to Table 1 or a companion table. This grounds the accuracy claim in analytic truth and reduces reliance on FFS-as-GT.
 
 ---
-
-## Calibration
-
-**Anchors examined:**
-
-| Path | Avg Score | Comparison |
-|------|-----------|------------|
-| `8HG2QrtXXB.md` (HelmSim) | 5.0, Reject | Most topically similar: Helmholtz-based fluid sim, rejected for missing related work comparisons and too-short prediction horizons. NFFS has stronger baselines and 100 time steps, but also has the INR-evaluation gap. |
-| `sYAFiHP6qr.md` (Implicit Neural Surface Deformation) | 6.5, Accept | Similar structure: neural implicit surface + physics constraints + theoretical formulation. Accepted despite limited baseline coverage. NFFS is comparable in quality but has the INR quantitative gap. |
-| `uL1H29dM0c.md` (Neural Metriplectic Systems) | 7.0, Accept | Physics-preserving neural ODE with theoretical guarantees; clean quantitative evaluation. Better evaluated than NFFS, sets the high anchor. |
-| `5LvTfc4fBz.md` (Physics-enhanced Neural Operator) | 5.0, Reject | Rejected for unclear novelty and limited experimental validation. NFFS has clearer novelty. |
-| `jIOBhZO1ax.md` (Neural Conservation Laws) | 5.5, Reject | Novel framing but evaluation gaps, similar to NFFS. |
-| `86HwTRg0qh.md` (OneFit garment sim) | 3.75, Reject/Withdrawn | Very weak evaluation; far below NFFS quality. |
-
-**Positioning**: NFFS sits between HelmSim (5.0, rejected for baseline gaps) and sYAFiHP6qr/uL1H29dM0c (6.5–7.0, accepted). The theoretical grounding and strong quantitative gains in Table 1 push it above HelmSim. The lack of quantitative evaluation for the main novelty claim (INR surfaces) keeps it below the clean high-scoring anchors. The paper is borderline, landing closer to the 5.5 range.
-
----
-
-**Originality**: Moderate-to-high — CPM+exterior calculus combination for neural surface simulation is novel.
-**Importance**: Moderate — addresses a real gap (fluid sim on INR surfaces) with practical applications.
-**Claim support**: Partially — strong support for sphere jet claims (Table 1), weak support for INR-surface claims (visual only).
-**Experimental soundness**: Fair — controlled sphere experiments are solid, but INR and Taylor vortex evaluations have gaps.
-**Writing clarity**: Good — the derivation chain is clearly structured and the framework is well-explained.
-**Community value**: Moderate-high — the CPM-based approach may be useful beyond this specific problem.
 
 ## Score and Decision
 
-**Score: 5.5 — Borderline Reject**
+**Calibration Anchors:**
 
-The paper contains a technically sound and novel framework with genuine quantitative improvements demonstrated in controlled settings. However, it advertises INR-surface simulation as its headline contribution while providing only visual evidence for this claim. The gap between the stated novelty and its evidentiary support is the primary reason for borderline rejection — not a fundamental flaw in the framework itself.
+| Path | Avg Score | Comparison |
+|------|-----------|------------|
+| `/human_reviews/kIZcruKmBg.md` | 3.25 | Low anchor: PINNs on manifolds, poor validation, withdrawn. NFFS is clearly stronger with a real theorem and quantitative results. |
+| `/human_reviews/gz8Rr1iuDK.md` | 4.00 | Low anchor: Hard-constraint neural PDE, rejected. Less theoretical depth than NFFS, weaker empirical wins. |
+| `/human_reviews/8HG2QrtXXB.md` | 5.00 | Medium anchor: HelmSim fluid simulation with Helmholtz decomposition, rejected. Similar missing ablations and baseline gaps, but NFFS has stronger theory and better numeric results. |
+| `/human_reviews/5LvTfc4fBz.md` | 5.00 | Medium anchor: Physics-enhanced neural operator for turbulent flow, rejected. Less novelty than NFFS. |
+| `/human_reviews/sYAFiHP6qr.md` | 6.50 | High anchor: Implicit neural surface deformation with velocity fields, accepted poster. Shares the "first-on-INR" flavor; has ablations and quantitative evals that NFFS lacks. NFFS has more theoretical depth but weaker experimental completeness. |
+| `/human_reviews/4yaFQ7181M.md` | 7.60 | High anchor: Space-time continuous physics simulation, accepted spotlight. Substantially stronger empirical validation with comprehensive baselines. |
+
+**Positioning:** NFFS clearly sits above the low anchors (3.25–4.00) due to Theorem 3.1 and solid quantitative results on analytic surfaces. It is roughly comparable to the 5.0 medium anchors but has meaningfully stronger theoretical foundations. It falls below the 6.5 accepted poster (sYAFiHP6qr) because that paper includes ablations and quantitative support for all its claims, whereas NFFS's primary novel contribution (INR surfaces) has zero quantitative validation. The missing ablation further weakens the attributional clarity.
+
+The paper is a genuine contribution — the divergence-free construction is clean, the analytic surface results are compelling, and the INR extension is novel in concept — but the experimental case for the most novel claim is substantially incomplete. This puts it in the borderline zone, landing at **5.5**.
+
+**Axis-by-axis:**
+- *Originality:* Good — CPM + exterior calculus for guaranteed divergence-free surface fields is a novel combination; INR-surface simulation is first-of-its-kind.
+- *Importance of research question:* High — surface fluid simulation is practically relevant for graphics, climate science, and bio-physics.
+- *Claims well supported:* Partially — analytic surface claims are well-supported; INR-surface claims are only qualitatively supported.
+- *Soundness of experiments:* Moderate — strong for analytic surfaces, notably incomplete for the novel INR contribution, missing ablation.
+- *Clarity of writing:* Good — mathematical framework is clearly presented; limitations are acknowledged.
+- *Value to research community:* Moderate-to-High — the unified framework and INR compatibility are practically useful, though the time cost (16.5h) limits immediate applicability.
+
+**Final Score: 5.5 (borderline, leaning toward weak accept)**
 
 MY FINAL SCORE: <pineapple>5.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

@@ -1,17 +1,18 @@
-I'll start by reading the paper and then searching for calibration anchors.Now let me search for calibration anchors.Now I have enough information to write the final review.
+Now let me read the paper carefully and then run calibration searches.Now I have enough information to write the final review. Let me synthesize everything.
 
 ---
 
 ## Summary
 
-This paper applies standard independent Q-learning to the Lowest Unique Positive Integer (LUPI) game, a multiplayer coordination game where participants attempt to choose the smallest number not selected by any other player. The stated contribution is a distribution-free approach to equilibrium learning that removes the Poisson assumption required by prior theoretical work (Östling et al., 2011). The paper compares the learned agent's strategy to the Poisson-Nash equilibrium and evaluates the agent on 49 days of the Swedish Limbo lottery dataset.
+This paper applies textbook tabular Q-learning to the Lowest Unique Positive Integer (LUPI) game—a simple lottery-style game where players pick numbers and the lowest unique selection wins. The stated contributions are: (1) avoiding the Poisson distribution assumption required by prior work, and (2) demonstrating that Q-learning can approximate the Nash equilibrium and outperform the Poisson-Nash strategy on real Limbo lottery data. There is no novel algorithm and no theoretical contribution; the paper is entirely empirical.
 
 ---
 
 ## Strengths
 
-- **Motivating a known limitation of Poisson-Nash**: Section 2 correctly identifies that the Poisson assumption is empirically violated in Limbo data (daily variance in player count greatly exceeds Poisson predictions), providing a genuine motivation for a distribution-free alternative.
-- **Use of real-world public dataset**: The use of the publicly available Östling et al. (2011) Limbo dataset grounds the evaluation in observable phenomena rather than purely synthetic simulations.
+- **Correctly identifies a documented limitation of prior work**: The paper notes that Östling et al. (2011) acknowledged the Poisson assumption is empirically implausible for Limbo data (actual cross-day variance in player count far exceeds Poisson variance). This is a legitimate motivation for a distribution-free approach, confirmed by Section 2's quotation of the original authors.
+
+- **Application to a real dataset**: The paper applies its method to the publicly available Swedish Limbo lottery dataset (Östling et al., 2011), which is at least a concrete empirical testbed.
 
 ---
 
@@ -19,38 +20,38 @@ This paper applies standard independent Q-learning to the Lowest Unique Positive
 
 ### Fatal
 
-- **Central convergence claim is directly contradicted by the paper's own data.** The paper asserts in Section 5 that "Figure 1 demonstrates the robustness of the Q-learning algorithm in converging to the Nash equilibrium" and that "minimal discrepancies" exist. The table embedded in Section 5 shows: at k=1, the agent assigns p=0.17 vs. theoretical 0.13 (~30% relative error); more critically, the theoretical Nash equilibrium correctly predicts p(k)→0.00 for k≥14, while the agent maintains a flat plateau of ~0.04 for all k=8 through k=14 and beyond. This is not a minimal discrepancy — the tail of the distribution is qualitatively wrong, differing by a factor of ~∞ at k=14. For k=1000 (Figure 3), the agent's distribution "exhibits significant fluctuations" with increasing variance at higher k, which the paper re-labels as "exploration finding non-trivial strategies" — this is more accurately described as non-convergence. The core claim that Q-learning converges to Nash equilibrium is not supported.
+- **Data leakage renders the headline win-rate result meaningless**: The central empirical claim—Q-learning achieves 16.33% wins vs. 0% for the Poisson-Nash strategy over 49 Limbo days—is invalidated by the evaluation protocol. Examining Table 2 directly: on *every single day* the agent "wins," the column "Agent Pred." exactly equals "Actual Wins" (e.g., Day 4: 5866 = 5866; Day 7: 6387 = 6387; Day 10: 6518 = 6518; Day 14: 2730 = 2730; Day 30: 4768 = 4768; Day 34: 6082 = 6082; Day 35: 6327 = 6327; Day 37: 3678 = 3678; Day 41: 5212 = 5212; Day 42: 5585 = 5585; Day 45: 6246 = 6246; Day 49: 4871 = 4871). An agent drawing from a learned probability distribution over ~1,000 numbers cannot land exactly on the historical winning number on every win day by chance—the probability is astronomically small (≈(1/1000)^12). This pattern is definitive evidence that either (a) the agent is trained on the very same 49 days it is "evaluated" on (in-sample evaluation), or (b) the simulation retroactively assigns wins based on historical outcomes rather than making prospective predictions. No train/test split is described; the paper only says "over 49 rounds (days), we simulated the agent's participation in the game." This flaw is not a matter of framing—the evaluation must be rebuilt from scratch to produce any valid claim.
 
-- **The Limbo win-rate evaluation is methodologically invalid due to absence of a train/test split.** The paper states it tested the agent by "incorporating its choices into this dataset" of the same 49 days. In every "win" row in Table 2, the Agent Pred. column is numerically identical to the Actual Wins column (e.g., Day 4: both = 5866; Day 7: both = 6387; Day 10: both = 6518; Day 30: both = 4768; Day 34: both = 6082; Day 35: both = 6327; Day 37: both = 3678; Day 41: both = 5212; Day 42: both = 5585; Day 45: both = 6246; Day 49: both = 4871). The agent appears to be trained on the same data against which it is evaluated, making the 16.33% win rate uninterpretable as a measure of strategic generalization. No description of a causal time-ordered train/test split is provided anywhere in the paper. This flaw undermines the applied contribution entirely.
-
-- **The 0% vs. 16.33% comparison is a structural strawman.** The Poisson-Nash equilibrium concentrates almost all probability mass on small numbers (the paper itself states in Section 6: "values greater than 20 are seldom chosen" under the theoretical distribution). Yet actual winning numbers in the Limbo dataset are consistently in the thousands — the first three rows of Table 2 show winning numbers of 7178, 5168, and 5425. The theoretical agent scores 0 wins not because its strategy is poor in game-theoretic terms, but because the realized winning number in each historical round lies entirely outside the support of the Poisson-Nash prediction. This discrepancy is a well-known empirical fact (cited from Östling et al., 2011). Reporting this comparison as "improved accuracy" of Q-learning over Poisson-Nash is therefore misleading: it amounts to comparing an agent fitted to empirical Limbo frequencies against a purely theoretical benchmark that was never designed to predict single-round realized outcomes.
+- **The Nash equilibrium "emulation" claim is directly contradicted by the paper's own data**: The paper states after Figure 1: "The minimal discrepancies observed between the theoretical predictions and the empirical results indicate the high accuracy and reliability of the Q-learning method." This is a factual misrepresentation. From the paper's own Table (Section 5): at k=1 the agent assigns 0.17 vs. theory 0.13 (31% relative error); at k=13 the agent assigns 0.04 vs. theory 0.01 (300% relative error); at k=14 the agent assigns 0.04 vs. theory 0.00 (the theoretical distribution goes to zero while the agent's distribution plateaus at ~0.04 for all k ≥ 10). The qualitative property that the Nash distribution decays to zero for large k—which any Nash-approximating agent must satisfy—is entirely absent from the Q-learning agent. The discrepancies are not "minimal"; they are monotonically growing and qualitatively different.
 
 ### Major
 
-- **Critical experimental parameters are unspecified, making the convergence experiment (Figures 1–3) unreproducible.** The number of agents $n$ used in the convergence experiments (Figures 1, 2, 3) is never stated. The maximum action $K$ for Figure 1's 14-action setup is derivable from the table, but $n$ is not given anywhere. Since the theoretical Nash equilibrium curve is explicitly parameterized by $n$, the theoretical baseline cannot be verified without it. This is not a minor omission: the entire comparison in Section 5 may be confounded if the Q-learning agents were trained with a different $n$ than assumed in the theoretical calculation.
+- **The baseline comparison (Poisson-Nash achieves 0 wins) is structurally uninformative**: The Poisson-Nash equilibrium places nearly all probability mass on integers 1–15 (confirmed by Figure 1 and Figure 2 in the paper), while the empirically observed Limbo winning numbers range from 2,730 to 9,880 (Table 2). That the Poisson-Nash strategy wins zero times is simply because the strategy is known (by Östling et al., 2011 and the authors themselves) to be evaluated under violated assumptions. Beating a baseline that the authors themselves acknowledge is "flawed" and "can only serve as an approximation" (Section 2) is not evidence that Q-learning finds a superior strategic equilibrium. No empirically-calibrated or learning-based baseline is ever compared against.
 
-- **Independent Q-learning has no convergence guarantee to Nash equilibrium in multi-agent settings.** This is a well-established limitation in multi-agent RL: independent learners in normal-form games do not generally converge to Nash equilibrium. The paper applies independent Q-learning (Section 4 explicitly states "each player maintains an individual vector of estimated Q-values and does not utilize any information about other players") and then claims convergence to Nash equilibrium without addressing this fundamental obstacle. No convergence analysis, exploitability measurement, or reference to conditions under which convergence holds is provided.
+- **No theoretical justification for convergence**: The paper claims Q-learning "emulates Nash equilibrium" and gives the agent "flexibility in player count," but provides no convergence theory whatsoever. For independent Q-learning in normal-form repeated games, convergence to Nash equilibrium is not guaranteed in general, and the specific game structure of LUPI (with possibly no winner on a given round) complicates this further. The paper never addresses what equilibrium, if any, independent Q-learning converges to when the player count is not Poisson-distributed.
 
-- **The exploration scheme is internally inconsistent and unexplained.** Section 4 sets ε=0.95 (95% random exploration) combined with softmax at temperature T=0.15 (near-deterministic exploitation) for the remaining 5%. This combination pairs maximal global randomness with maximally concentrated local exploitation, which is unusual and undermines both exploration and exploitation simultaneously. The choice is not justified.
+- **Hyperparameter choices are internally inconsistent and unjustified**: ε = 0.95 means the agent acts randomly 95% of the time, making the learned Q-values almost irrelevant to behavior. Furthermore, the paper describes action selection using both ε-greedy (with argmax) and softmax without clearly explaining when each is used—the formula on lines 97–99 shows argmax for exploitation, but the text says softmax is used. No ablation or sensitivity analysis is provided for any of these choices.
+
+- **The "modified" Limbo experiment (Section 6, Table 3/4) is uninterpretable**: The data is preprocessed by capping at 1,000 numbers, removing the 700 most popular numbers, removing 100 numbers with fewest selections, and artificially inserting a winning number on days where no winner existed. This chain of modifications so thoroughly alters the underlying game that no conclusions about LUPI strategy or real-world applicability can be drawn from it. The same potential data leakage problem applies here as well (the agent wins on days 9, 11, 30, 34, 36, 40, per Table 4, some of which again show Agent Pred. = Actual Wins, e.g., Day 9: 168=168, Day 11: 490=490, Day 30: 284=284, Day 34: 141=141, Day 36: 85=85, Day 40: 485=485).
 
 ### Minor
 
-- **Section 6 data modification procedure is under-specified.** The second Limbo experiment (Tables 3–4) states "we excluded the top 700 most popular numbers, leaving approximately 1,000 potentially winning numbers" and "we removed 100 numbers with the fewest selections." The motivation for cutoffs of 700 and 100 is not given. More importantly, the text states "There was no chance of winning, so we set the best choice to a winning one" — this implies overriding historical outcomes for some days, which further complicates interpretation of Table 4's results.
+- **The paper applies off-the-shelf tabular Q-learning with no adaptation**: The update rule (Section 4) is the standard Bellman equation in a stateless setting. There is no novel methodology, no problem-specific design choice justified by the LUPI structure, and no comparison to other learning-based alternatives (e.g., policy gradient, fictitious play, or cognitive hierarchy models already considered by Östling et al.).
 
-- **No convergence curves across training episodes.** The paper shows only end-state distributions (after 3,000 episodes) but no evolution of the strategy distribution across training. Without this, it is impossible to distinguish a converged agent from one still drifting.
+- **The claim that Q-learning avoids the Poisson assumption is underexplored**: The paper trains the agent for a *fixed* n (e.g., n = 52,982 for the Limbo experiment), which also requires knowing n in advance. The paper does not discuss how to estimate n, handle uncertainty in n, or compare to just plugging the empirical average n into the Poisson-Nash formula (which would actually partially address the distributional mismatch).
 
 ### Trivial
 
-- The paper is extremely short (~9 pages including tables, figures, and references), with Sections 1–3 being mostly background review material with minimal novel framing.
+- None beyond the major methodological problems above.
 
 ---
 
 ## Nice-to-Haves
 
-- A proper temporal train/test split on the Limbo data (train on first 30 days, test on final 19) would provide a meaningful generalization evaluation.
-- Exploitability curves measuring the maximum gain a deviating agent could achieve against the learned strategy would rigorously test the Nash equilibrium convergence claim.
-- A uniform random baseline would contextualize the 16.33% win rate and clarify whether the agent is doing better than chance.
-- Learning curves (agent strategy distribution at episodes 500, 1000, 2000, 3000) would show whether convergence is occurring or the agent is merely drifting.
+- A proper train/test evaluation (e.g., rolling-window cross-validation on the 49 days) would at minimum allow the win-rate claim to be evaluated honestly, though 49 data points total is likely insufficient to draw conclusions.
+- A convergence plot over training episodes showing how the Q-distribution approaches or diverges from the Poisson-Nash reference would help diagnose whether the agent is actually converging.
+- Comparison against an empirically-calibrated baseline (e.g., Poisson-Nash with the observed day-specific n, or a histogram of historical winning numbers) would contextualize what learning actually adds beyond a simple empirical frequency estimate.
+- A theoretical analysis (or even a literature citation establishing) whether independent Q-learning converges to any equilibrium in the LUPI stateless game.
 
 ---
 
@@ -58,52 +59,49 @@ This paper applies standard independent Q-learning to the Lowest Unique Positive
 
 *These points are flagged to be removed; treat them with caution.*
 
-- **"Missing related works"** (Harsh Critic): Removed per hard rules — cannot verify existence of unlisted related works.
-- **Strength: "Distribution-free approach is novel"** (Strength Finder): Partially retained as motivation, but weakened because the paper provides no formal demonstration that the learned strategy is actually distribution-free in practice; it simply omits the Poisson prior without verifying the resulting strategy is robust to varying $n$.
-- **Strength: "Scalability across action spaces k=14,100,1000"** (Strength Finder): Removed as a strength — the three experiments show increasing non-convergence as k grows (Figure 3 shows large variance), so this demonstrates scaling failure, not scaling success.
-- **Strength: "Independent learning framework aligns with realistic decentralised settings"** (Strength Finder): Removed — this is a generic observation about independent Q-learning that is not specific to this paper's contribution and does not constitute evidence for the core claims.
+- **Strength (Strength Finder): "Approximate convergence to Nash equilibrium validates the method"** — This claimed strength directly conflicts with the verified Fatal weakness above. The paper's own Figure 1 and table show systematic, growing divergence from the Nash equilibrium at large k. Removed per the rule that when a strength and weakness conflict, the weakness wins.
+
+- **Strength (Strength Finder): "Connection to RTB applications"** — Generic motivation that is mentioned once in the introduction and never revisited in experiments or conclusions. No RTB-specific experiment or insight is provided. Removed as it is not evidenced in any concrete result.
+
+- **Strength (Strength Finder): "Use of publicly available data enables reproducibility"** — This is a generic observation about data availability, not a strength of the paper's contribution. Removed as generic.
 
 ---
 
 ## Novel Insights
 
-None beyond the paper's own contributions. The observation that empirical Limbo winners consistently choose numbers far above the Poisson-Nash support is interesting but was already documented by Östling et al. (2011) and is not new here. The Q-learning approach does not yield new theoretical insight into why this occurs.
+None beyond the paper's own contributions. The observation that independent Q-learning does not converge to the Poisson-Nash equilibrium in this setting is mildly interesting, but the paper presents it as a strength rather than investigating it analytically, and the flawed evaluation prevents drawing any valid quantitative conclusion.
 
 ---
 
 ## Suggestions
 
-1. Report the $n$ parameter used in all convergence experiments so that the theoretical curve can be verified.
-2. Implement a strict temporal evaluation on the Limbo dataset (train on days 1–30, evaluate on days 31–49) with no data leakage to produce a meaningful win-rate estimate.
-3. Report exploitability of the learned strategy rather than claiming convergence to Nash equilibrium based on visual similarity of distributions.
-4. Add a convergence curve (strategy distribution over training episodes) to diagnose whether convergence is actually occurring.
-5. Provide a principled justification for the ε=0.95 exploration rate; consider standard ε-decay schedules.
-6. Acknowledge the non-convergence of independent Q-learning in general normal-form games and discuss what additional assumptions or modifications might provide guarantees.
+1. **Rebuild the evaluation with strict train/test separation**: Train the agent on days 1–40 (or similar), evaluate on days 41–49 without any data leakage. Report whether the agent's prospective predictions land on the winning number at a rate above chance.
+2. **Diagnose the exact matching**: The authors must explain mechanically how "Agent Pred." comes to exactly equal "Actual Wins" on every win day. If this is expected, it should be explained explicitly; if it reveals an implementation bug, fix it.
+3. **Add a non-trivial empirical baseline**: The empirical winning number distribution (e.g., a histogram of historical winning numbers used as a strategy) is a natural comparison. Beating the Poisson-Nash baseline (which is known to fail) is not a meaningful contribution.
+4. **Provide a convergence study**: Track the KL divergence between the agent's learned distribution and the Poisson-Nash reference over training episodes for fixed n, to assess whether and when convergence occurs.
+5. **Address the theoretical question**: Does independent Q-learning converge to any Nash equilibrium in the LUPI game? This is the core scientific question and the paper does not engage with it.
 
 ---
 
 ## Score and Decision
 
-**Calibration anchors used:**
+**Calibration anchors:**
 
-| Paper | Path | Avg Score | Comparison |
-|---|---|---|---|
-| MARL quantal response equilibria | `/human_reviews/stUKwWBuBm.md` | 8/8 | Rigorous theory, bridging behavioral economics and game theory — vastly stronger than this paper |
-| Dynamic Discounted CFR | `/human_reviews/6PbvbLyqT6.md` | 8/8 | Novel algorithmic contribution with strong theory and empirics — incomparable |
-| Dyna-PSRO for strategic game decision-making | `/human_reviews/TyZhiK6fDf.md` | 5.6 | Medium-scoring, Reject; has at least a novel algorithmic combination, unlike this paper |
-| RegFTRL for Nash equilibria | `/human_reviews/qjFnENGhDE.md` | 5.6 | Medium-scoring, Reject; has last-iterate convergence results that are theoretically grounded |
-| Continual learning on tiny MNIST (weak paper) | `/human_reviews/ZHTYtXijEn.md` | 2.33 | Low-scoring: limited experiments, poor technical presentation, overclaimed contributions — comparable pattern to this paper |
-| Overclaimed visual representation paper | `/human_reviews/3ZdGSTxKuy.md` | 2.0 | Low-scoring: severely overclaimed contributions, small dataset, inadequate methodology — closely comparable |
+| Path | Avg Score | Comparison |
+|---|---|---|
+| `stUKwWBuBm.md` | 8.0 | MARL via behavioral economics — novel theory, strong experiments, rigorous. Far above this paper. |
+| `cc8h3I3V4E.md` | 8.0 | Nash equilibrium via stochastic optimization — novel algorithm + provable guarantees. Far above this paper. |
+| `J2TZgj3Tac.md` | 6.0 | Competitive RL / Nash policy population — novel algorithm, solid empirical work. Far above this paper. |
+| `x36mCqVHnk.md` | 5.5 | Sample efficiency in zero-sum Markov games — incomplete theory but a genuine contribution. Rejected but well above this paper. |
+| `kz78RIVL7G.md` | 2.6 | Adversarial attack detection — near-perfect unverifiable claims, poor baselines, not believable. Similar profile to this paper. |
+| `pNmSGpW0Tp.md` | 2.33 | Batch Bayesian optimization — weak contribution, poor framing. Similar tier. |
+| `5kMwiMnUip.md` | 1.4 | NEMESIS jailbreaking — essentially no scientific contribution. Slightly below this paper, which at least has a coherent motivation. |
 
-**Reasoning:** This paper falls squarely with the low-scoring anchors. Like ZHTYtXijEn (2.33) and 3ZdGSTxKuy (2.0), it presents overclaimed contributions directly contradicted by its own data, a flawed evaluation, and extremely limited experimental scope. The medium-scoring anchors (Dyna-PSRO at 5.6, RegFTRL at 5.6) both have genuine algorithmic novelty and at least some theoretical grounding that this paper entirely lacks. The paper applies unmodified standard Q-learning to a known game, overclaims convergence to Nash equilibrium based on a visually similar (but quantitatively wrong) distribution, and evaluates the agent on the same data it appears trained on. These are not correctable presentation issues — they undermine the entire empirical case made in the paper. The FUNDAMENTAL ISSUES criterion applies. Positioning between 3ZdGSTxKuy (2.0) and ZHTYtXijEn (2.33) given that the flaws here are severe but the paper does at least correctly identify a real limitation of the Poisson-Nash framework: **2.0**.
+This paper's headline empirical result is invalidated by data leakage (exact historical outcome matching on every win day, confirmed from Table 2). The Nash equilibrium convergence claim is directly contradicted by the paper's own Figure 1 data. There is no novel algorithm or theory. The only positive is a sensible problem motivation, which is itself borrowed from Östling et al. (2011). This places the paper clearly below the 4-score range and in the 2–3 range, consistent with anchors kz78RIVL7G (2.6) and pNmSGpW0Tp (2.33). It is somewhat above the completely incoherent 5kMwiMnUip (1.4) since the paper at least addresses a real problem and uses standard methodology coherently, but the fatal experimental flaw makes the core claimed result entirely unreliable.
 
-**Evaluation on stated axes:**
-- *Originality*: Very low — standard Q-learning applied to a known, well-studied game without any methodological innovation.
-- *Importance of research question*: Moderate — LUPI/Limbo has real-world relevance for RTB and auction design.
-- *Claims well-supported*: No — the convergence claim is refuted by the paper's own table; the win-rate claim rests on a methodology with apparent data leakage.
-- *Soundness of experiments*: Very poor — no train/test split, strawman baseline, missing key parameters, no convergence curves.
-- *Clarity of writing*: Adequate for the content presented.
-- *Value to the research community*: Very low in current form; would need fundamental rewriting of the evaluation and much stronger claims to be valuable.
+**Final Score: 2.5 — Reject**
 
-MY FINAL SCORE: <pineapple>2.0</pineapple>
+The FUNDAMENTAL ISSUES rule is triggered: the data leakage flaw invalidates the paper's core empirical claim, and the Nash equilibrium convergence is directly contradicted by the paper's own Figure 1. The experimental design must be rebuilt from scratch; this is not fixable in revision.
+
+MY FINAL SCORE: <pineapple>2.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>
