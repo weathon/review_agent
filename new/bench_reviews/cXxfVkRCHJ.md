@@ -1,60 +1,96 @@
-**Summary**  
-CFDG proposes a conditional diffusion model with classifier-free guidance to generate both offline-style and online-style synthetic data for offline-to-online RL. The method aims to leverage the complementary roles of offline data (diversity, preventing suboptimal convergence) and online data (stability, faster convergence). Experiments on D4RL locomotion and AntMaze show improvements when integrating CFDG with IQL, PEX, and APL, and it outperforms SynthER and EDIS.
+Now let me search for calibration papers.Now I have enough information to write the consolidated review.
 
-**Strengths**  
-- Consistent empirical gains: CFDG improves average returns on most tasks across three O2O RL algorithms, with reported 15% average improvement for IQL/PEX and 11% for APL (Table 1).  
-- Superiority over recent diffusion baselines: Learning curves in Figure 2 show CFDG achieving higher returns faster than SynthER and EDIS across all 12 locomotion tasks.  
-- Ablation evidence for dual augmentation: Figure 3 demonstrates that adding synthetic offline data to online-only augmentation yields further gains, supporting the idea that both types are beneficial.  
-- Broad applicability: Method integrates with both fixed-ratio mixing (IQL, PEX) and online-offline replay buffer (APL) paradigms.  
+---
 
-**Weaknesses**  
+## Summary
+This paper proposes Classifier-Free Diffusion Generation (CFDG), a data augmentation method for Offline-to-Online RL that uses a single conditional diffusion model with classifier-free guidance to simultaneously augment both offline and online data using distinct class labels. The key insight is that offline and online data occupy distinct state-action distributions and should be separately augmented. CFDG is evaluated as a plug-in module on three base O2O RL algorithms (IQL, PEX, APL) across D4RL locomotion and AntMaze benchmarks.
 
-### Fatal  
-None. The paper presents a working method with empirical improvements; no fundamental error invalidates results.
+---
 
-### Major  
-1. **Unvalidated core premise: distinct conditional distributions**. The method hinges on the diffusion model generating offline-style samples when conditioned on the offline label and online-style samples when conditioned on the online label. The paper provides no evidence that these generated distributions differ. No t-SNE, density plots, or statistical tests compare generated-offline vs generated-online samples, nor compare generated-offline to real offline samples to assess novelty. Without this, the claim that separate augmentation for each type is necessary is unsupported.  
-2. **Flawed rationale for synthetic offline data**. The paper argues offline data provides diversity to prevent convergence to suboptimal policies, implying that generating additional offline samples increases this diversity. However, generating from a diffusion model trained on offline data likely yields samples from nearly the same distribution as the offline buffer. The paper never analyzes whether synthetic offline samples meaningfully increase coverage or diversity beyond existing offline data, nor why duplicating such data would help.  
-3. **Incomplete ablation isolating contributions**. Section 4.3’s ablation (Fig. 3) tests only whether adding offline generation to online generation helps, but both conditions use classifier-free guidance. There is no experiment removing classifier-free guidance (e.g., basic conditional diffusion) to measure its isolated effect. Without this, the claim that dual augmentation is the primary driver is not established; the gain could be due to guidance alone.  
-4. **Statistical validity concerns**. Many entries in Table 1 exhibit high standard deviations (e.g., hopper-r-v2: 10±1 vs 16±13; walker2d-r-v2: 18±16 vs 15±8). No statistical tests (e.g., t-tests) are reported to assess significance. The “15% average improvement” aggregates total scores across tasks, obscuring variability and the fact that some tasks show degradation. Learning curves in Fig. 2 lack confidence intervals, making qualitative statements about consistency difficult to verify.  
-5. **Missing critical hyperparameters and details**. The guidance weight `w` and the unconditional training probability `p_uncond` are not reported, even though they affect generation quality. Algorithm 1 does not include them, nor does Section 4’s settings. This hinders reproducibility. For the OORB paradigm (APL), the paper states synthetic data “will be seen as part of online data or offline data” but does not specify which λ (0 or 1) applies to each synthetic buffer, leaving a gap in understanding how BC regularization is applied to synthetic data.
+## Strengths
 
-### Minor  
-1. **Unclear λ handling for synthetic data in APL**. The paper should explicitly state that `D_off_syn` uses λ=1 and `D_on_syn` uses λ=0 to match the respective data types.  
-2. **Questionable positioning**: The claim that CFDG “fully utilizes offline data” (Introduction) is not fully supported given the lack of evidence that synthetic offline data adds value beyond the real offline dataset.
+- **Distributional analysis motivating dual augmentation (Figure 1):** The t-SNE visualization concretely shows that offline data, online data, and EDIS-generated data occupy distinct regions. This is a simple but useful insight that motivates treating the two types of data separately — an observation not prominently made in prior O2O RL work.
 
-### Trivial  
+- **Single-model efficiency:** By assigning distinct labels to offline and online data and using CFG (Algorithm 1, Equation 7), CFDG requires only one training session to sample both offline-like and online-like data, avoiding separate generators.
+
+- **Breadth of evaluation across three algorithms and two paradigms:** Table 1 covers IQL, PEX, and APL across two distinct data-utilization paradigms (50-50 mixing vs. OORB) on 16 D4RL tasks. Aggregate locomotion totals improve from 810→933 (IQL), 890→1024 (PEX), and 972→1081 (APL).
+
+- **Direct comparison with existing diffusion augmentation methods (Figure 2):** CFDG is directly compared against SynthER and EDIS under a shared base algorithm (IQL), providing a concrete head-to-head evaluation of competing augmentation strategies.
+
+---
+
+## Weaknesses
+
+### Fatal
 None.
 
-**Nice-to-Haves**  
-- Include t-SNE or density plots of generated-offline vs real-offline and generated-online vs real-online to validate conditioning.  
-- Add an ablation removing classifier-free guidance (e.g., standard conditional diffusion) to isolate its contribution.  
-- Add an offline-only generation ablation to isolate the effect of synthetic offline data.  
-- Perform statistical significance tests for results in Table 1 and report confidence intervals for learning curves.  
-- Report the values of `w` and `p_uncond`, and optionally analyze their sensitivity.  
-- Clarify the data mixing procedure and λ assignment for each synthetic buffer in the APL experiments.  
+### Major
 
-**Removed Points**  
-No points were removed; all identified weaknesses are considered substantive and are included above.
+- **Ablation does not isolate the CFG mechanism — the paper's primary technical contribution is unverified.** Section 4.3 explicitly states the two key novelties are "(i) the diffusion model utilizes classifier-free guidance and (ii) it performs data augmentation on both offline and online data." However, Figure 3 only compares *CFDG (online only)* vs *CFDG (offline & online)* — both variants already use CFG. The ablation only establishes that augmenting both data types helps over augmenting just online data. It never compares CFG (Eq. 7) against a standard two-class conditional diffusion model *without* the CFG linear combination trick. Because the Figure 2 comparison with SynthER conflates (i) and (ii), one cannot determine whether the gains originate from the CFG mechanism specifically, the dual-data strategy, or their combination. The central technical claim of the paper is thus not experimentally validated.
 
-**Novel Insights**  
-Beyond the paper's own claims, one might hypothesize that CFDG's benefit could stem from the conditional diffusion model synthesizing transitions that serve as a bridge between offline and online distributions, rather than producing purely offline-style data. The improvement from adding both synthetic types suggests that the diffusion model effectively interpolates between the two regimes, yielding samples that regularize the policy in ways that pure offline or online data cannot. This interpretation, however, is not explored in the paper and would require analysis of the generated samples across label conditions.
+- **Multiple regressions in Table 1, no statistical significance testing.** Several individual results show clear regressions under CFDG: hopper-r-v2 with IQL (16±13 → 10±1), antmaze-medium-play-v2 with IQL (82±13 → 76±5), walker2d-me-v2 with PEX (116±1 → 111±4), and hopper-m-v2 with APL (103±2 → 99±11). Additionally, several cells with very high variance (halfcheetah-mr-v2 APL: 76±40; halfcheetah-m-v2 APL: 77±39; hopper-r-v2 APL: 51±30 → 30±40; walker2d-r-v2 APL: 12±11 → 27±42) mean that the reported means are unreliable. The headline "15%/11% improvement" is derived by summing means across tasks without weighting by variance and without any statistical significance testing. The paper's own conclusion acknowledges that "the ratio of offline to online data can significantly impact performance in different environments," which further undermines the robustness of these aggregate numbers.
 
-**Suggestions**  
-- Validate the conditional generation premise directly via visualizations and distributional distances (e.g., MMD) between generated and real data under each condition.  
-- Include a baseline that uses the same conditional model but without classifier-free guidance to measure its isolated impact.  
-- Add an offline-only generation condition to confirm its specific contribution relative to baseline and online-only.  
-- Report all hyperparameters (`w`, `p_uncond`) and the exact λ assignment for synthetic buffers.  
-- Augment the experimental analysis with statistical tests (e.g., paired t-tests) and confidence intervals.
+### Minor
 
-**Score and Decision**  
-I calibrated my assessment against anchor papers from the ICLR review corpus:
+- **Comparison with SynthER and EDIS is limited to one base algorithm (IQL).** Section 4.2 explicitly uses only IQL as the base for Figure 2. Given that CFDG is proposed as a general-purpose augmentation module for three base algorithms covering two paradigms, the head-to-head comparison with the closest competitors should cover at least PEX as well. A single base algorithm is insufficient to establish the claimed superiority of CFDG over SynthER and EDIS broadly.
 
-- **High-scoring** (avg ≥ 7): e.g., *5IkDAfabuo* (7.50) and *6RtRsg8ZV1* (7.50) achieved high scores due to strong novelty, rigorous validation (including distribution-level analysis), and often theoretical grounding. Our paper shares empirical strength but lacks rigorous validation of its core mechanism and theoretical analysis, making it weaker than these anchors.  
-- **Medium-scoring** (≈5): e.g., *1zuJZ1jGvT* (5.00, rejected) and *WNxlJJIEVj* (5.25, rejected) used diffusion models for RL but suffered from missing comparisons, insufficient ablations, and unclear evidence for claims—weaknesses closely mirroring this paper. The former was rejected despite clear improvements, highlighting that solid results alone are insufficient without mechanistic validation.  
-- **Low-scoring** (≤4): e.g., *r27Nwu0t86* (4.00) directly applies conditional diffusion for offline RL augmentation and was rejected, underscoring the community’s caution toward diffusion-based augmentation without thorough proof of intended behavior.
+- **The 8:2 generated-online to generated-offline ratio is unjustified and fixed.** Section 4.1 fixes this ratio "across all tasks, datasets and methods" without any sensitivity analysis. The authors themselves acknowledge in the Conclusion that "the ratio of offline to online data can significantly impact performance in different environments." No sweep over this parameter is provided. Whether 8:2 is principled or cherry-picked cannot be assessed.
 
-Relative to these anchors, this paper demonstrates genuine empirical gains, placing it above the lowest tier. However, the unvalidated core premise, incomplete ablation, and poor statistical reporting align it more with the medium-to-low band and, in some respects, fall below due to the severity of missing mechanistic evidence. Consequently, I assign a score of **4.0**.
+### Trivial
+None.
 
-**MY FINAL SCORE:** <pineapple>4.0</pineapple>  
-**MY FINAL DECISION:** <orange>Reject</orange>
+---
+
+## Nice-to-Haves
+
+- An ablation comparing a simple two-class conditional diffusion (without the CFG guidance interpolation of Eq. 7) against the full CFDG method would cleanly validate whether CFG specifically contributes beyond ordinary conditional generation.
+- Sensitivity analysis over the 8:2 offline/online generated data ratio (e.g., 10:0, 8:2, 5:5, 2:8) on a few representative tasks would help characterize this important hyperparameter.
+- A brief visualization of CFDG-generated samples per class in the t-SNE plot of Figure 1 would confirm that the conditional generation actually produces samples from the intended marginal distributions.
+- Extending the SynthER/EDIS comparison to PEX would substantially strengthen the claim of general superiority.
+
+---
+
+## Removed Points
+*These points are flagged to be removed, treat them with caution.*
+
+- **Harsh Critic: "Section 3.1 — The claim about SynthER vs. EDIS is circular"** — The paper is motivating in Section 3.1 with an observation confirmed later in experiments. This is a presentation choice, not a methodological flaw. Removed.
+- **Harsh Critic: "Section 3.2 — p_uncond is not specified in main text"** — This is a hyperparameter implementation detail not standard to include in a systems paper; it is almost certainly in an appendix or supplementary that was stripped from the parsed version. Removed per the rule about missing appendix details.
+- **Harsh Critic: "No wall-clock comparison"** — The efficiency claim is peripheral to the paper's core thesis and is a standard nice-to-have, not a core flaw. Removed.
+- **Harsh Critic: "Whether EDIS was given same hyperparameter budget"** — The paper describes how SynthER and EDIS work in their original formulation; there is no evidence of unfairness here and the comparison is designed to test augmentation strategies with the same underlying base algorithm. Removed.
+- **Harsh Critic: "Why CFG rather than two separate models"** — The paper does explain: a single model reduces training time. The lack of a "two separate models" baseline is subsumed by the more important missing ablation (CFG vs plain conditional), which is already kept as a major weakness. Redundant as a separate point.
+- **Strength Finder: "Algorithm 1 provides clear pseudocode"** — Generic presentation strength without link to paper's novelty. Removed.
+
+---
+
+## Novel Insights
+None beyond the paper's own contributions. The observation that EDIS-generated data retains primarily offline data characteristics (Figure 1 t-SNE) and the framing of jointly conditioning on both data types are the paper's own contributions; no reviewer independently surfaced a new insight beyond what the paper itself establishes.
+
+---
+
+## Suggestions
+1. Design an ablation that replaces the CFG sampling (Eq. 7) with a standard conditional diffusion model while keeping the dual-label data strategy. This is the single most important experiment to add, as it directly validates or refutes the headline claim about CFG.
+2. Add statistical significance testing (e.g., Welch's t-test per task, or bootstrap intervals following Agarwal et al. 2021) to the main table, especially given the high per-task variances.
+3. Extend the SynthER/EDIS comparison (Figure 2) to at least PEX as a second base algorithm.
+4. Add a sensitivity analysis for the 8:2 generated data ratio.
+
+---
+
+## Score and Decision
+
+**Calibration anchors retrieved:**
+
+| Path | Avg Score | Decision | Notes |
+|---|---|---|---|
+| `r27Nwu0t86.md` (Augmenting Offline RL w/ State-only Interactions) | 4.0 | Reject | Similar diffusion augmentation for RL; rejected because method outperforms baselines in only ~half of tasks — analogous to the multiple regressions here |
+| `wWI1RYngAA.md` (Adaptive Offline Data Replay) | 4.5 | Reject | Plug-in O2O RL method with limited baselines (one algorithm) and missing sensitivity analysis — comparable structural weaknesses |
+| `228XQpErvW.md` (Auto Fine-Tuned O2O RL) | 4.5 | Reject | Similar O2O method with decent experiments, but presentation and significance issues |
+| `sxus3NNiuf.md` (Online Pre-Training for O2O RL) | 6.0 | Reject | More comprehensive evaluation, novel contribution, but still rejected for sample efficiency and complexity concerns |
+| `S77skzM12O.md` (PROTO O2O RL) | 5.75 | Reject | Cleaner theoretical framing and broader evaluation than CFDG; rejected partly over novelty concerns |
+| `tGQirjzddO.md` (Reasoning with Latent Diffusion in Offline RL) | 6.33 | Accept | Stronger theoretical and empirical contribution; latent diffusion provides new capabilities beyond augmentation |
+
+**Positioning:** CFDG sits above the low anchor (r27Nwu0t86, 4.0) because it covers three base algorithms and has positive aggregate results. However, it falls below the medium anchors (5.75–6.0) due to: (1) the critical missing CFG ablation, which means the primary technical contribution is unverified; (2) multiple regressions in Table 1 without significance testing; and (3) the SynthER/EDIS comparison limited to one base algorithm. These are not revision-level issues — the CFG ablation gap and the statistical problems concern the internal validity of the core claims. This places the paper close to wWI1RYngAA and 228XQpErvW (both 4.5), with perhaps slightly more evaluation breadth.
+
+**Score: 4.5 — Reject**
+
+MY FINAL SCORE: <pineapple>4.5</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>
