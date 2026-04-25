@@ -1,12 +1,13 @@
 export OPENAI_DEFAULT_MODEL="glm-5.1"
-export HARSH_MODEL="deepseek-v4-flash" 
-export MERGER_MODEL="deepseek-v4-flash"
-export NEUTRAL_MODEL="deepseek-v4-flash"
+export HARSH_MODEL="gpt-5.4" 
+export MERGER_MODEL="gpt-5.4"
+export NEUTRAL_MODEL="gpt-5.4"
 export CALIBRATION_SET="2025"
 export OUTPUT_CSV="results/bench_scores_2025.csv"
 export MERGE_LOG="results/pipeline_whole_2025.log"
-export SUBAGENT_MODEL="deepseek-v4-flash"
+export SUBAGENT_MODEL="gpt-5.4-mini"
 export CONCURRENCY=20
+export MAX_PAPERS=100
 # rm bench_scores_qwen.log
 ollama serve & 
 git commit -am "run.sh: $(date)"
