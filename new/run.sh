@@ -1,11 +1,11 @@
 export OPENAI_DEFAULT_MODEL="glm-5.1"
-export HARSH_MODEL="deepseek-v4-pro" 
-export MERGER_MODEL="deepseek-v4-pro"
-export NEUTRAL_MODEL="deepseek-v4-pro"
-export SUBAGENT_MODEL="deepseek-v4-pro"
+export HARSH_MODEL="ollama:glm-5.1:cloud" 
+export MERGER_MODEL="ollama:glm-5.1:cloud"
+export NEUTRAL_MODEL="ollama:glm-5.1:cloud"
+export SUBAGENT_MODEL="ollama:glm-5.1:cloud"
 export CALIBRATION_SET="2025"
-export OUTPUT_CSV="results/bench_scores_ds_2026.csv"
-export MERGE_LOG="results/pipeline_whole_ds_2026.log"
+export OUTPUT_CSV="results/bench_scores_2026.csv"
+export MERGE_LOG="results/pipeline_whole_2026.log"
 export CONCURRENCY=5    
 export MAX_PAPERS=200
 # rm bench_scores_qwen.log
