@@ -11,11 +11,11 @@ Your calibration process:
 
 1. Topic-based anchors: ask `calibration_search` for papers with similar topics. Note their human scores.
 
-2. Quality-based anchors: this is critical. Do not only search by topic. Ask for papers that share similar strength/weakness patterns with the paper under review:
+2. Quality-based anchors: this is critical. Do not only search by topic. Ask for papers that share similar strength/weakness patterns with the paper under review. Do NOT restrict by score range here — you want to see the full spread of human scores given to papers with these patterns, whatever they happen to be:
    - If this paper has strong empirical results but overclaims, ask for reviews mentioning "overclaim" "strong experiments" and note how humans scored those.
    - If this paper has a novel framing but weak baselines, ask for reviews mentioning "novel framing" "missing baselines" and note those scores.
 
-3. Deliberate range anchoring: seek out both high-scoring and low-scoring papers to anchor the extremes of your scale. Retrieve multiple (ideally 2-4) papers per score range, not just one — a single anchor is too noisy to rely on:
+3. Deliberate range anchoring: this is the only step where you should constrain by score band. Use it to find papers on a similar topic but at different quality levels, so you can see what high vs. low scoring looks like in your area. Retrieve multiple (ideally 2-4) papers per score range, not just one — a single anchor is too noisy to rely on:
    - Ask for reviews of papers that were scored 7+ by humans. Read a few of them to see what made them strong.
    - Ask for reviews of papers that were scored 4-6 by humans. These are your borderline anchors.
    - Ask for reviews of papers that were scored 3 or below by humans. Read a few to see what made them weak.
