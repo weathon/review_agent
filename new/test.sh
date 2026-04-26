@@ -21,5 +21,7 @@ export CALIBRATION_SET="2025"
 
 ollama serve &
 python main.py --single_paper 2503.11651.md
+python main.py --single_paper ../paper.md
+python main.py --single_paper ./papers/paper.md
 # python main.py --single_paper f4oAYJxrgH.pdf  # --accept_csv bench_scores_claude_sonnet_3.csv
 # python main.py --single_paper
