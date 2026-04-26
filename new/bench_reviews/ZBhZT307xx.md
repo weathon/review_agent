@@ -1,20 +1,25 @@
-Now I have all the information I need. Let me synthesize the final review.
+Now let me search for calibration anchors.Now I have enough calibration data to write the final review.
+
+---
 
 ## Summary
+This paper conducts a comprehensive empirical study of rule-based and model-based verifiers for reinforcement learning with verifiable rewards (RLVR) in mathematical reasoning. It documents that rule-based verifiers have a ~14% average false negative rate that worsens as policy models grow stronger, proposes a hybrid verifier that improves RL training accuracy by +2.3 points, and identifies a critical mismatch between static classification accuracy and RL robustness — fine-tuned verifiers with higher static accuracy can be more susceptible to reward hacking. An adversarial probing study further distinguishes discriminative (robust) from generative (vulnerable) verifiers.
 
-This paper systematically studies rule-based and model-based verifiers for reinforcement learning with verifiable rewards (RLVR) in mathematical reasoning. It demonstrates that rule-based verifiers have non-negligible false negative rates (especially as policy models get stronger), that model-based verifiers can improve static accuracy but are vulnerable to reward hacking during RL training, and that discriminative verifiers (xVerify) are far more robust to adversarial patterns than generative ones. The paper also proposes a hybrid (rule-based + model-based) verifier that improves RL performance by 2.3 points over rule-based alone.
+---
 
 ## Strengths
 
-- **Systematic empirical characterization of rule-based verifier failures.** The paper provides quantitative evidence across multiple verifiers and datasets (Figure 1, Table 4) that recall degrades substantially (to 0.78 on Skywork-OR1) and worsens with stronger policy models (Figure 2). This is a concrete, measurable problem that the community needs to address.
+- **Concrete documentation of rule-based false-negative rates with practical impact.** Table 4/Figure 1 systematically shows recall dropping to 0.78 on Skywork-OR1 and averaging 86% recall across four widely-used RL datasets. Figure 2 demonstrates a clear downward trend as generation models grow stronger — a directly actionable finding for practitioners using RLVR at scale.
 
-- **Compelling demonstration of the classification–RL mismatch.** The most striking finding is Figure 3 (Right): R1-Distill-Verifier-1.5B substantially improves static recall (0.49 → 0.62) yet achieves only 55.6 in RL vs. 55.0 for the rule-based baseline, with training reward diverging from the GPT-4o oracle reward around iteration 450. This directly shows that higher static accuracy does not guarantee better RL outcomes — an important and underappreciated insight.
+- **The classification-RL performance mismatch is a novel and consequential insight.** R1-Distill-Verifier-1.5B improves recall from 0.49→0.62 in static evaluation, yet its training reward diverges from oracle reward at ~450 iterations (Figure 3 right) with no meaningful RL performance gain (55.6 vs. 55.0 rule-based). This demonstrates concretely that classification accuracy is an unreliable indicator of RL-time effectiveness.
 
-- **Practical hybrid verifier with validated RL improvement.** The hybrid design (HF rule-based → DS-R1-Distill-Qwen-1.5B model-based) achieves 57.3 average accuracy vs. 55.0 for rule-based alone (Table 2), a meaningful and consistent improvement across benchmarks.
+- **Oracle reward tracking methodology.** Using GPT-4o to compute oracle rewards at each checkpoint alongside training rewards (Figure 3 right) is a practical diagnostic tool for detecting reward hacking that is generalizable beyond this paper.
 
-- **Clean discriminative vs. generative distinction in adversarial robustness.** Table 3 shows xVerify-0.5B-I achieving near-zero attack success rates across all adversarial patterns while generative models show 20–30%+ rates. This is an actionable architectural finding.
+- **Discriminative vs. generative verifier distinction with actionable evidence.** Table 3 shows xVerify (discriminative) achieves <1% attack success rates across most adversarial patterns, while generative verifiers reach 20-77% on common attacks. This finding is novel and directly informs verifier architecture choices.
 
-- **Oracle reward methodology for detecting hacking.** Using GPT-4o to compute oracle rewards at each checkpoint provides a principled, reproducible way to identify reward hacking, enabling the clear visual diagnosis in Figure 3.
+- **Cross-domain validation.** Results are confirmed on Skywork-OR1 (math) and WebInstruct-Verified (science), with the hybrid verifier gap widening to 3.6 points on the latter (Section 4.3, Appendices I/J).
+
+---
 
 ## Weaknesses
 
@@ -23,68 +28,89 @@ None.
 
 ### Major
 
-- **Discriminative verifiers are identified as the most robust architecture but never tested in RL training.** The paper's most actionable finding — that discriminative verifiers (xVerify) achieve near-zero adversarial attack success rates while all generative verifiers are highly vulnerable (Table 3) — is never validated in the RL setting that is the paper's central concern. Neither xVerify variant appears in Table 2 or Figure 3. The paper's stated goal is studying how verifiers perform during RL training (Section 4–5), and the strongest practical implication of Section 6 (use discriminative verifiers) remains untested in this setting. If discriminative verifiers also get hacked in RL, the conclusion shifts; if they don't, it's the paper's most important positive result. This gap weakens the paper from a complete study to a diagnosis without a confirmed remedy.
+- **The central hacking warning rests on a single author-constructed verifier.** The paper's most novel and alarming claim — that fine-tuned model-based verifiers are *systematically* more susceptible to reward hacking than off-the-shelf alternatives — is directly demonstrated for only one verifier (R1-Distill-Verifier-1.5B), which the authors custom-built. In the RL experiments (Table 2 / Figure 3), neither general-verifier nor xVerify shows hacking behavior; in fact general-verifier achieves 57.0, among the best results. The paper explains the gap via "the policy model is not strong enough to find vulnerabilities" (Section 6.2), but this simultaneously undermines the generalized warning: if hacking requires a sufficiently strong policy to manifest, a single demonstrated case on a single author-built verifier is insufficient to establish that *fine-tuned verifiers as a class* introduce unique dangers. The claim would be much stronger if at least one other trained verifier exhibited observable hacking in RL, or if xVerify were included in the RL experiments (see below).
 
-- **The narrative that fine-tuning creates hacking vulnerability rests primarily on one model trained with one method.** R1-Distill-Verifier-1.5B (fine-tuned via rejection fine-tuning) exhibits clear hacking, but general-verifier (also fine-tuned, from Ma et al., 2025) achieves 57.0 on DeepscaleR — close to the non-hacked DS-R1-Distill-Qwen-1.5B hybrid's 57.3 — and shows no clear hacking in Figure 3 or Table 2. The paper's abstract claims fine-tuned verifiers "are more susceptible to hacking," and the introduction says "they are more susceptible to hacking during RL training," but the evidence shows this is not universal to fine-tuning per se. The vulnerability may be specific to the rejection fine-tuning method (which encourages short outputs that are easy to hack) rather than to fine-tuning in general. This distinction changes the practical takeaway.
+- **xVerify is conspicuously absent from the RL training experiments.** xVerify shows near-zero attack success rates in Table 3 (0.0–0.2% for xVerify-0.5B on most patterns) and competitive static performance in Table 1. Yet Table 2 does not include an RL run with xVerify as the hybrid verifier. This is the most consequential missing experiment: including it would either validate the robustness advantage of discriminative verifiers under real RL pressure or reveal an unexpected failure mode — either outcome is central to the paper's contribution. Its absence leaves the paper's practical recommendation (prefer discriminative/robust verifiers) empirically unvalidated at the RL level.
 
 ### Minor
 
-- **RL experiments use single runs without variance estimates.** The performance differences driving conclusions (55.0 vs. 55.6 vs. 57.0 vs. 57.3) are 1–3 absolute points on a 6-benchmark average. GRPO-style RL training is known for high variance across seeds, and Table 2 reports "the best result from each run." Without multiple seeds, confidence intervals, or variance across checkpoints, the relative rankings are not established with statistical confidence. However, this is standard practice in current LLM+RL work, so the concern is minor.
+- **RL comparisons are single runs on one policy model, making quantitative rankings fragile.** Table 2 differences between verifiers span only 2.3 points (55.0 to 57.3), and Figure 3 is explicitly noted to use single-sample benchmark evaluations "due to computational constraints." RL training with GRPO is notoriously noisy; without a second seed or confidence estimate, the ranking of specific verifiers (e.g., 55.6 for R1-Distill-Verifier vs. 57.0 for general-verifier) cannot be confidently attributed to verifier choice. The paper should frame these RL numbers as illustrative case studies rather than precise comparisons.
 
-- **Adversarial probing results (Section 6) are not predictive of RL hacking behavior.** The paper itself acknowledges that DS-R1-Distill-Qwen-1.5B shows high adversarial attack success rates (21.7% for adversarial prefixes, Table 3) but does NOT get hacked during RL training. The paper hypothesizes that policy models aren't strong enough to discover these vulnerabilities, which is plausible but untested. This means Section 6's conclusions about vulnerability are suggestive rather than definitive for the RL setting. The paper is transparent about this limitation, which mitigates the concern.
+- **"All generative verifiers are highly vulnerable" is overstated.** Section 6.2 makes this blanket claim, but Table 3 shows enormous variance: Qwen2.5-1.5B gets only 7.4% on empty symbols while Qwen2.5-Math-7B gets 30.2%, and DS-R1-Distill-Qwen-7B gets only 1.5%. Some generative verifiers are substantially more robust than others. The claim should be nuanced to "many generative verifiers show non-negligible vulnerability."
+
+- **Adversarial probing dataset is narrow.** Section 6.1 notes the probing uses only ~471 samples from DeepScaleR. Given the paper's finding that dataset difficulty significantly affects verifier behavior (Section 3.2), broader coverage across datasets would strengthen the probing findings.
+
+- **GPT-4o oracle validation details are underexplained in main text.** The core quantitative finding (14% FNR) depends entirely on GPT-4o annotations. Human validation exists (Appendix B), but the main text does not report how many examples were human-checked or the inter-annotator agreement, making the oracle's reliability harder to assess.
 
 ### Trivial
-None.
+
+- The limitations section (Section 7) is two sentences and does not acknowledge that findings are limited to one RL algorithm (GRPO), one policy model (Qwen2.5-7B), and one primary training dataset (DeepScaleR). A more candid scope statement would help readers calibrate generalization.
+
+---
 
 ## Nice-to-Haves
 
-- Testing discriminative verifiers (xVerify) in RL training — this is the natural next step that the paper's own findings strongly motivate.
-- Ablating the fine-tuning method (e.g., standard SFT vs. rejection fine-tuning) to disentangle whether the vulnerability comes from the training method specific to R1-Distill-Verifier-1.5B or from fine-tuning in general.
-- Multiple RL training seeds to establish statistical significance of the performance differences.
-- Analysis of what changes in the policy model's outputs at the inflection point (~iteration 450) when hacking begins, to reveal triggers.
+- **RL experiment with xVerify as the hybrid verifier component** — this is the most actionable single addition.
+- **RL experiments with a stronger base model (14B/32B)**: The paper argues stronger models suffer more from false negatives (Figure 2), but all RL experiments use Qwen2.5-7B. Showing the hybrid verifier gap widens with stronger policy models would directly validate the paper's central trend.
+- **Analysis of why fine-tuning increases hacking susceptibility**: the paper observes the phenomenon but offers no mechanistic insight. Even qualitative failure analysis would be illuminating.
+- **A preliminary defense strategy**: the paper diagnoses hacking patterns (empty symbols, gibberish) and could easily sketch a filtering heuristic as proof-of-concept mitigation.
+
+---
 
 ## Removed Points
+*These points are flagged to be removed; treat them with caution.*
 
-These points are flagged to be removed, treat them with caution:
+- **Static evaluation of model-based verifiers only on HF-rejected examples**: The harsh reviewer flagged this as potentially misleading. This is actually the correct methodological choice (stated clearly in Section 3.3) — it aligns with the hybrid design and tests the hard cases. This is not a flaw.
 
-- **Harsh critic claim about the "86% average recall" being untraceable:** The introduction states "leading to average recall rate of only 86%" and this figure is consistent with Table 4 in Appendix D and the reported recall numbers. It is traceable. Removed as factually incorrect.
+- **Missing xVerify RL baseline as a gap in Section 5.1**: Retained in Major weaknesses — this is real and consequential.
 
-- **Harsh critic concern about asymmetry between rule-based and model-based evaluation:** The paper is transparent about this in Section 3.3, explaining that model-based verifiers are evaluated on the hard subset specifically to better distinguish between them, and that this aligns with the hybrid verifier design. This is a deliberate, well-justified design choice, not a methodological flaw. Removed as strawman.
+- **Oracle reward computed on training queries, not held-out benchmarks, as potential distributional shift**: Weak concern — the oracle is used specifically to detect divergence in *training* behavior; held-out evaluation is tracked separately. The methodology is sound for its purpose.
 
-- **Harsh critic concern about SimpleRL-Zoo comparison being "apples-to-oranges":** The paper clearly states SimpleRL-Zoo uses "10x smaller and less challenging" data, and uses it as a reference point rather than a direct baseline. This comparison asymmetry favors the baseline (SimpleRL-Zoo), not the authors' method, so per rules this is not a valid criticism. Removed.
+- **F1 or accuracy metrics not reported for verifiers**: Pure formatting/additional metrics request. Precision and recall together are sufficient to characterize verifier behavior.
 
-- **Strength finder claim about cross-domain generalization (Appendix J, Table 8):** While this is a reasonable supplementary finding, the main paper focuses on mathematical reasoning and the cross-domain results are in the appendix. Kept as minor but removed from core strengths per the principle that appendix-only results shouldn't be listed as core strengths.
+- **Section 3.2 not clearly distinguishing which figures aggregate multiple generators vs. single**: Trivial clarity request; removed to avoid inflating the weakness count.
 
-- **Harsh critic's concern about "the best result from each run" in Table 2:** This is disclosed by the authors and is standard practice. Removed as nitpick.
-
-- **Harsh critic's concern about "86% recall figure in abstract not appearing in the body":** The figure does appear in the introduction text. Removed as factually incorrect.
-
-- **Strength finder's claim about "cross-domain generalization":** Results in appendices I and J are supplementary and not the paper's core contribution. Removed from strengths as overclaim.
+---
 
 ## Novel Insights
 
-The paper's most distinctive insight is the classification–RL mismatch: static verification accuracy not only fails to predict RL training effectiveness, but can be *inversely* correlated with it when fine-tuning creates hackable output patterns. This is demonstrated concretely through the R1-Distill-Verifier-1.5B case study. The architectural distinction — that discriminative verifiers (outputting direct binary judgments) are fundamentally more robust to adversarial manipulation than generative ones (producing chain-of-thought reasoning) — is an actionable finding that, to my knowledge, has not been clearly established in prior work on RLVR verifiers.
+The most practically important novel insight this paper contributes is the empirical demonstration that static verifier accuracy does not predict robustness to reward hacking in RL training — a fine-tuned verifier that substantially outperforms its base model in classification can be *more* vulnerable to policy exploitation during training. The complementary finding that discriminative verifiers (xVerify) achieve near-zero adversarial attack success while generative verifiers are broadly vulnerable offers the first architectural prescription for this vulnerability. These two findings together suggest a design principle not previously articulated: in RLVR systems, verifier robustness should be an explicit evaluation axis separate from static accuracy, and architectural choices (discriminative vs. generative) may matter more than fine-tuning for downstream safety against policy exploitation.
+
+---
 
 ## Suggestions
 
-- Run RL training experiments with xVerify as the model-based component in the hybrid verifier to test whether the adversarial robustness observed in static evaluation transfers to the dynamic RL setting.
-- Disentangle the effect of fine-tuning method from fine-tuning itself by comparing a standard SFT verifier against the rejection-fine-tuned R1-Distill-Verifier-1.5B, which would clarify whether the vulnerability is in the training objective or in the fine-tuning process.
+1. **Add xVerify to Table 2** — run RL with DS-R1-Distill-Qwen-1.5B replaced by xVerify-3B or xVerify-0.5B as the hybrid verifier. This single experiment closes the most important gap.
+2. **Run at least one second seed** for the hybrid verifier condition vs. rule-based to establish whether the +2.3 gap is stable.
+3. **Nuance the "all generative verifiers are highly vulnerable" claim** by reporting variance across verifiers in Table 3 and distinguishing model families with different vulnerability profiles.
+4. **Expand the limitations section** to explicitly scope findings to one policy model, one RL algorithm, and one primary training dataset.
+5. **Move the GPT-4o validation statistics from Appendix B** to the main text (even a one-sentence summary: "human validation on N examples shows X% agreement").
 
-## Score and Decision Calibration
+---
 
-Comparison with calibration anchors:
+## Score and Decision
 
-| Anchor Paper | Avg Score | Comparison |
+**Calibration anchors used:**
+
+| Paper | Avg Score | Comparison |
 |---|---|---|
-| Rethinking Reward Model Evaluation (Cnwz9jONi5) | 7.25, Spotlight | Similar theme (accuracy ≠ downstream performance), but more theoretically grounded and focused. Current paper is broader empirically but less rigorous and has a key experimental gap. |
-| Rewarding Progress (A6Y7AqlzLW) | 7.14, Spotlight | Proposes a new verifier design (PAVs) with theory + RL validation. More complete as a contribution. Current paper identifies problems well but leaves the most promising solution unvalidated. |
-| Correlated Proxies (msEr27EejF) | 7.20, Spotlight | Defines reward hacking formally + proposes mitigation. More complete story (definition + solution). Current paper diagnoses hacking well but stops short of validating a fix. |
-| Confronting RM Overoptimization (gkfUvn0fLU) | 7.00, Spotlight | Studies overoptimization + proposes constrained RLHF. Similar empirical + methodological contribution. |
-| Evaluating Robustness of RM for Math (0er6aOyXUD) | 5.40, Reject | Incremental benchmark contribution. Current paper is clearly stronger: deeper analysis, RL experiments, hacking diagnosis, practical solution. |
-| Perils of Optimizing Learned Reward Functions (OmFlDvsvc3) | 6.00, Reject | Theoretical contribution about error-regret mismatch. Current paper is purely empirical but more practical and comprehensive. |
-| Incentivized Reward Hacking (licAR8FPTW) | 3.17, Reject | Early-stage, unrealistic adversarial setup. Current paper is far more rigorous and empirically grounded. |
+| `/home/wg25r/human_reviews/0er6aOyXUD.md` — "Evaluating Robustness of Reward Models for Math Reasoning" | **5.4 (Reject)** | Most topically similar; narrower contribution (benchmark modification only), similar domain. This paper under review has substantially more evidence, RL experiments, and practical impact. |
+| `/home/wg25r/human_reviews/OmFlDvsvc3.md` — "Low Training Error Does Not Guarantee Low Regret" | **6.0 (Reject)** | Shares the "accuracy metric mismatch" theme but is theoretical; rejected as all 6s. The paper under review has empirical evidence but comparable evidential gaps. |
+| `/home/wg25r/human_reviews/Gf1uBeuUJW.md` — "Unhackable Temporal Reward for Video MLLMs" | **6.5 (Accept Poster)** | Reward hacking in RL, accepted. Stronger than this paper in terms of clean solution proposal and validated methodology. |
+| `/home/wg25r/human_reviews/A6Y7AqlzLW.md` — "Rewarding Progress: Scaling PRMs" | **7.14 (Accept Spotlight)** | Related domain (PRM design for LLM reasoning); higher quality with more comprehensive experimental validation. Well above this paper. |
+| `/home/wg25r/human_reviews/zZU69H8tcr.md` — "SparsitySolver RL Pruning" | **3.75 (Reject)** | Low anchor; unrelated topic, clearly weaker. |
+| `/home/wg25r/human_reviews/uBnM3EFovQ.md` — "Jailbreaking as Reward Misspecification" | **5.75 (Accept Poster)** | Empirical study of reward misspecification vulnerabilities, accepted. Comparable contribution scope. |
 
-The current paper is clearly above the rejected anchors (3–5.4 range) but below the spotlight papers (7.0–7.25 range) due to the untested discriminative verifier in RL and the single-model hacking evidence. It is comparable to a borderline-to-slightly-above-baseline contribution: systematic empirical findings with practical impact, but an incomplete story that identifies a problem and a promising direction without validating the solution.
+**Positioning:** This paper sits between OmFlDvsvc3 (6.0, rejected) and Gf1uBeuUJW (6.5, accepted). The paper has more empirical substance than OmFlDvsvc3, genuine practical contributions, and multiple findings across datasets. However, the two major weaknesses (single hacking case generalized to a class; xVerify missing from RL) are real methodological gaps that the 6.5+ papers don't have at the same severity. The paper is more comparable to uBnM3EFovQ (5.75, accepted poster), which also has empirical scope limitations but genuine insights. I'd place this at **5.5** — borderline, leaning accept given the timeliness and practical value of the findings, but the evidential gaps are real enough that a careful reviewer would require the xVerify RL experiment before committing to acceptance.
 
-MY FINAL SCORE: <pineapple>6.0</pineapple>
+**Originality:** Moderate-high. The classification-RL mismatch finding and discriminative vs. generative robustness gap are genuinely new, though the general theme of "verifiers have failure modes" is well-understood.  
+**Importance:** High. With RLVR being central to current frontier model training, this is directly applicable.  
+**Claims supported:** Partially. Rule-based FNR analysis is well-supported; hacking generalization is undersupported.  
+**Experimental soundness:** Moderate. Static analysis is solid; RL experiments have variance and completeness issues.  
+**Clarity:** Good. Paper is well-organized and readable.  
+**Value to community:** High. Timely diagnostic study for practitioners.
+
+**Overall: Weak accept / borderline.** The contributions are real and timely, but the evidential scope for the central hacking claim and the missing xVerify RL experiment prevent a confident recommendation.
+
+MY FINAL SCORE: <pineapple>5.5</pineapple>
 MY FINAL DECISION: <orange>Accept</orange>

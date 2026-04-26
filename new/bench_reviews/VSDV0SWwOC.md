@@ -1,20 +1,28 @@
-Now I have a thorough understanding of the paper and calibration anchors. Let me synthesize the final review.
+Now let me search for calibration papers.Now I have sufficient information to write the consolidated review. Let me synthesize everything.
+
+---
 
 ## Summary
 
-LS-Merge proposes merging large language models in a learned latent space rather than weight space. A transformer-based VAE encodes model weights into a compact latent representation; a two-stage curriculum (deterministic pretraining then KL fine-tuning) stabilizes training on heavy-tailed weight distributions; and an OT-based alignment step maps cross-architecture latent distributions onto a shared manifold, enabling interpolation between heterogeneous models. Experiments cover self-merging, LoRA expert merging, and cross-architecture merging (intra-family and cross-family), with a strong ablation showing PCA fails catastrophically where the VAE succeeds.
+LS-Merge proposes encoding LLM weights into a learned latent space via a transformer-based VAE and performing merging (interpolation, expert fusion) in that latent space rather than directly in weight space. The framework introduces Optimal Transport (OT) alignment to handle heterogeneous architectures (different sizes or families) by registering their latent distributions before interpolation. The paper further provides a two-stage curriculum to stabilize VAE training on heavy-tailed weight distributions, and demonstrates three modes of use: self-merging, expert merging, and cross-architecture merging.
+
+---
 
 ## Strengths
 
-- **Weight statistics analysis (Table 1) is a genuine empirical contribution.** Concrete kurtosis measurements (up to ~15 in self-attention, ~9 in MLP) across Gemma and LLaMA families directly motivate non-linear encoding and the two-stage curriculum. This is useful, reproducible data.
+- **Decisive VAE vs. PCA ablation (Table 8):** The paper provides clean, compelling evidence that LLM weights lie on a *non-linear* manifold. PCA collapses functional performance to near-random (MMLU ≈ 25%) even at mild compression (r=1.6), while the transformer-VAE retains 96% of base MMLU at r=1.6. This is a principled negative result that validates the geometric necessity of non-linear encoding.
 
-- **PCA vs. VAE ablation (Table 8) convincingly demonstrates the necessity of non-linear encoding.** PCA-reconstructed models collapse to near-random MMLU accuracy (~25.5%) even at mild compression (r=1.6), while the VAE preserves 96% of base performance. This validates the core premise that the weight manifold is non-linear.
+- **Strong LoRA expert merging results (Table 3):** LS-Merge(soup) substantially outperforms all weight-space baselines including Greedy Soup (56.0 vs. 50.8 MMLU, 60.1 vs. 54.6 HellaSwag), establishing the latent-space approach as clearly superior in the homogeneous expert fusion setting. This is the paper's most credible and self-contained empirical contribution.
 
-- **Expert merging results (Table 3) are strong.** LS-Merge(soup) achieves 56.0 MMLU vs. 50.8 for the best weight-space baseline (Greedy Soup) on Gemma-7B LoRA expert merging — a meaningful gap. The latent-space approach genuinely outperforms weight-space methods in this setting.
+- **OT alignment demonstrated as essential, not cosmetic (Table 5):** The ablation decomposes contribution from dimensionality matching alone ("OT only": MMLU degrades 49.07→48.50) vs. OT alignment + interpolation ("OT + interp.": 50.10), cleanly showing that geometric alignment is necessary for cross-architecture merging to be beneficial.
 
-- **The overall framework is conceptually clean and novel.** Encode → align → decode, with principled OT alignment for distributional matching, is a well-motivated pipeline for enabling cross-architecture operations.
+- **Layer-type ablation reveals non-obvious asymmetry (Table 6):** Merging attention layers alone degrades performance, while MLP-only merging provides modest gains, and joint merging is optimal. This is a practically informative finding about complementary functional encoding across layer types.
 
-- **OT alignment ablation (Table 5) confirms alignment is essential.** Without OT alignment, cross-family merging degrades dramatically (WinoGrande: 56.83 → 51.13), while OT-aligned interpolation improves it (56.83 → 57.75).
+- **Weight distribution analysis (Table 1):** Quantifying heavy-tailed, leptokurtic weight distributions (kurtosis up to ~15 in self-attention layers) provides empirical grounding for the VAE design choices and two-stage curriculum, connecting analysis to architecture decisions.
+
+- **Two-stage curriculum for stable VAE training:** Training a deterministic autoencoder first, then enabling KL, is a practical and replicable stabilization technique for heavy-tailed weight distributions.
+
+---
 
 ## Weaknesses
 
@@ -23,88 +31,84 @@ None.
 
 ### Major
 
-- **Overclaimed cross-architecture merging: only small λ values work, with marginal gains.** The paper frames "robust cross-scale and cross-family model merging" as a central contribution (Abstract, Conclusion), but the evidence shows viable merging only at λ ∈ [0.05, 0.2] (intra-family) and λ = 0.1 (cross-family). At λ = 0.1 in the cross-family setting, the improvements over the target model are small: +0.92 WinoGrande, +0.56 ARC-C, +1.03 HellaSwag (Table 5). These are barely above noise, and no comparison to alternative transfer methods (e.g., fine-tuning on source model outputs, knowledge distillation) is provided. The result demonstrates that a small, OT-aligned perturbation is tolerable — not that meaningful knowledge transfer across architectures is achieved. The framing should be scaled back to match the evidence.
+- **Inconsistent evaluation protocols across experiments make cross-table claims untenable.** Tables 2–3 use a custom subset evaluation pipeline (from Feng et al., 2024b), while Tables 4–8 switch to `lm-eval`. The paper itself acknowledges the switch ("due to some issues with llama model when using the previous evaluation code"). The numerical consequence is severe: Gemma-3-1B-it MMLU is 32.20 in Table 2 but 41.44 in Table 8 (Table 7: base MMLU is 40.76); HellaSwag is 28.70 in Table 2 but 49.07 in Table 7—a gap of ~20 percentage points. These are incompatible evaluation setups (likely different few-shot counts, prompt formats, or normalization). This means the self-merging claims (Table 2) and the expert merging claims (Table 3) cannot be compared to the cross-architecture and ablation results (Tables 5–8). The paper's umbrella claim of "consistently more robust than direct weight-space averaging" cannot be assessed globally when the evidence base is this fragmented.
 
-- **Self-merging is a VAE denoising artifact, not genuine merging.** Self-merging encodes a single model, samples multiple latent codes, averages, and decodes. This is a variational smoothing operation on reconstructed weights, not the composition of distinct capabilities. The paper's own data shows the improvement from base → VAE is 32.20 → 32.60 (Table 2), and VAE → LS-Merge is 32.60 → 35.13 on MMLU. The "merging" label is misleading; this is testing whether posterior-sample averaging improves over single-sample reconstruction — an expected property of VAEs. Furthermore, this experiment uses r=2 compression (Section 4.1), which Table 7 shows causes substantial degradation to the base model (MMLU dropping from ~41 to 32), raising further questions about what baseline the improvement is measured against.
-
-- **Evaluation protocol inconsistency across tables hampers cross-experiment comparison.** Table 2 (self-merging, expert merging) appears to use a different evaluation harness from Tables 5–8 (which use lm-eval, as stated in Sections 4.3, 4.4, and 5). This produces dramatically different base model scores: Gemma-3-1B-it MMLU is 32.20 in Table 2 but 40.76–41.44 in Tables 7–8; HellaSwag is 28.70 vs. ~49. Within each table the comparisons are internally fair, but the self-merging claim of "≈4% average improvement" cannot be contextualized against the more standard lm-eval baseline, and the paper does not provide any cross-table normalization or a clear statement of which protocol each table uses. While the paper mentions the switch to lm-eval for some experiments, the Table 2 protocol remains unspecified.
+- **Cross-family merging demonstrated only at λ=0.1, insufficient to support headline "robust cross-family merging" claim.** The paper's Conclusion states: "enables robust cross-scale and cross-family model merging for the first time." Table 5 supports this only at λ=0.1, meaning 10% of the source model's latent is injected. Figure 4a shows a λ-sweep for intra-family, but no analogous sweep is shown for cross-family (LLaMA→Gemma). At λ=0.1, it is unclear whether the gain reflects meaningful knowledge transfer or just a mild perturbation that the decoder can tolerate. A λ-sweep for cross-family is necessary to establish that the method transfers capacity at non-trivial mixing ratios, not just that small perturbations do not catastrophically degrade performance.
 
 ### Minor
 
-- **Gaussian OT assumption contradicts the weight distribution analysis.** Section 3.1 establishes that LLM weights are heavy-tailed and non-Gaussian, motivating the VAE design. Yet Section 3.3 uses a closed-form Gaussian approximation for the OT alignment (Eq. 2), assuming the latent distributions are Gaussian. The paper does not discuss or evaluate how much alignment quality suffers from this assumption, nor compare against a non-parametric OT method (e.g., Sinkhorn). This is an important ablation that would strengthen the work.
+- **Self-merging lacks the deterministic posterior-mean baseline.** The paper's Table 2 compares LS-Merge (average of k latent samples) against "VAE" (single stochastic sample). As k→∞, the average of i.i.d. samples from N(μ,σ²I) converges to the posterior mean μ—which is identical to deterministic decoding of the posterior mode. The missing ablation is simply decoding the posterior mean directly (zeroing the stochastic reparameterization). Without it, it is impossible to distinguish whether the Table 2 gains (e.g., MMLU 32.20→35.13 for Gemma-1B) reflect "exploration of the learned parameter distribution" (as claimed) or merely variance reduction in the stochastic forward pass. This does not invalidate the results, but it leaves the self-merging mechanism unsubstantiated as a distinct contribution.
 
-- **Split baselines across Tables 3 and 4 prevent unified comparison.** Table 3 (LoRA expert merging on Gemma-7B) compares against weight-space methods but not Task Arithmetic or AIM. Table 4 (Llama-2-13B) compares against Task Arithmetic and AIM but not weight-space methods. A single unified table with all methods on the same setup would give a clearer picture of LS-Merge's relative standing.
+- **Table 7 vs. Table 8 apparent inconsistency is not explained.** Table 7 (out-of-distribution VAE, trained on Gemma-4B, evaluated on Gemma-1B) shows MMLU collapsing to 32.22 at r=2. Table 8 (in-distribution VAE, trained on Gemma-1B, evaluated on Gemma-1B) shows MMLU stable at 39.80 at r=2. The difference is in-domain vs. out-of-domain VAE training, which is a substantively important distinction. The paper discusses the trade-off in Section 5.2 but does not explicitly resolve the apparent contradiction between the two tables. Readers may incorrectly conclude that the VAE used in Section 4.1 (self-merging) was broken, because Table 7 uses a cross-model VAE, while the self-merging VAE in Section 4.1 was trained jointly on both models.
 
-- **Task Arithmetic result in Table 4 looks anomalously low.** Task Arithmetic achieves exactly the base model's MMLU (52.18), suggesting a potentially misconfigured baseline. The paper does not discuss this apparent failure mode or verify the implementation.
+- **Task Arithmetic baseline behavior in Table 4 is unexplained.** Task Arithmetic achieves MMLU=52.18 and IFEval=25.10, identical to the base model on those tasks, while improving MBPP (27.80→34.40) and HumanEval (17.07→26.83). The MMLU/IFEval stagnation is consistent with task vectors for code and instruction following cancelling each other on general language understanding tasks. The paper does not discuss this, making it unclear whether the baseline was correctly configured, and leaving the LS-Merge vs. Task Arithmetic comparison partially ambiguous.
 
-- **Self-merging and cross-architecture experiments use r=2 compression, but Table 7 shows r=2 causes substantial degradation.** The self-merging experiment (Section 4.1) uses "compression ratio held constant at 2." Table 7 shows that r=2 on unseen models causes MMLU to drop from 40.76 → 32.22 (Gemma-3-1B-it). The relationship between VAE quality and merging effectiveness at this compression level should be discussed more explicitly.
+- **OT Gaussian approximation not validated.** The OT alignment approximates each latent distribution as a Gaussian (closed-form affine map). For cross-family merging (LLaMA vs. Gemma), the latent distributions may have non-ellipsoidal structure. The paper does not check whether the Gaussian assumption holds (e.g., via visualizations beyond Figure 3, or quantitative distribution overlap diagnostics).
 
 ### Trivial
-None.
+
+- The "≈4% average improvement" claim for self-merging (Section 4.1) is imprecise: the absolute gains in Table 2 are mostly 1–3pp, and the relative improvement varies substantially across tasks and model sizes. The claim is misleading without qualification.
+
+---
 
 ## Nice-to-Haves
 
-- A comparison against knowledge distillation or fine-tuning on source model outputs for the cross-architecture setting, to establish whether λ=0.1 injection is competitive with standard transfer learning.
-- Analysis of which capabilities are actually transferred at λ=0.1 in cross-family merging (e.g., probing for source-model-specific knowledge).
-- An ablation of the Gaussian OT assumption versus a non-parametric alternative.
-- A unified evaluation table with all methods on the same model, tasks, and harness.
+- Re-run Tables 2 and 3 with `lm-eval` to produce a unified benchmark for all experiments; this alone would substantially strengthen the paper's ability to support cross-experiment claims.
+- Extend Figure 4 to include a λ-sweep for cross-family merging (LLaMA→Gemma), analogous to Figure 4a for intra-family.
+- Add an ablation comparing LS-Merge self-merging against deterministic posterior-mean decoding (single-line change: set σ=0 during decoding).
+- Report wall-clock or FLOP overhead of encoding+OT+decoding vs. weight-space methods; this is a practical consideration for LLMs with billions of parameters that the paper currently sidesteps.
+- Explicitly discuss in-domain vs. out-of-domain VAE behavior when presenting Tables 7 and 8 side-by-side, to prevent confusion about why r=2 appears both stable and collapsed depending on the table.
+
+---
 
 ## Removed Points
 
-These points are flagged to be removed; treat them with caution.
+*These points are flagged to be removed, treat them with caution.*
 
-- **"Inconsistent baseline numbers invalidate all quantitative claims" (Harsh Critic #1)** — The inconsistency is real, but the paper explicitly acknowledges using different evaluation protocols (Sections 4.3, 4.4, 5 state they use lm-eval). Within each table, comparisons are fair. The issue is that cross-table comparisons are difficult and a unified protocol would be preferred, not that all results are invalid. Demoted from Fatal to Major since it concerns interpretability of relative gains, not fabrication.
+- **"Self-merging is theoretically vacuous"** (Harsh Critic, Critical Issue 1 framing as Fatal): Partially valid as a Minor weakness (the paper lacks a deterministic decoding baseline), but framing it as fatal or as making the contribution "meaningless" is an overstatement. The Table 2 gains are real numbers; the open question is only whether they arise from "merging" or variance reduction. Kept as Minor.
 
-- **"Unified comparison missing across Tables 3 and 4"** — Valid as a minor concern about ease of comparison, but both tables provide meaningful standalone comparisons. A unified table would strengthen but not invalidate the existing evidence. Demoted to Minor.
+- **"Task Arithmetic baseline is broken / comparison is unfair"** (Harsh Critic, Critical Issue 4): Task Arithmetic does improve coding benchmarks in Table 4, so it is not completely broken. The paper compares LS-Merge against both Task Arithmetic and AIM; LS-Merge outperforms both when considering all five tasks (MMLU: 55.07 vs. 54.18 vs. 52.18; IFEval: 36.41 vs. 32.00 vs. 25.10). The comparison is not rendered invalid. Kept as a Minor unexplained-behavior note rather than a methodological flaw.
 
-- **"Comparison against distillation/transfer baselines for cross-architecture"** — Important for establishing the value proposition of cross-architecture merging, but the paper's stated scope is merging, not transfer learning. This is a legitimate gap that weakens the overclaimed cross-architecture results, so it's reflected in the Major weakness about overclaiming. Moved to Nice-to-Have as a specific suggestion.
+- **"Section 3.1 and Section 5.3 are internally contradictory"** (Harsh Critic, Section notes): Section 5.3 explicitly pre-empts this: "Although Section 3.1 showed that LLM weight matrices exhibit low-rank structure, this does not imply that the space of functional parameters forms a linear subspace." The paper is aware of the distinction between statistical variance and functional linearity. The critic identifies a presentation clarity issue, not a logical error. Removed as a weakness; absorbed into the Trivial note.
 
-- **"Chunk size c and two-stage curriculum not ablated"** — Valid but standard in ML papers; design choices like chunk size are set without exhaustive ablation. Not a core flaw. Removed as minor.
+- **"LoRA weight encoding regime not discussed"** (Harsh Critic): The critic asks whether the VAE was trained on full weights and applied to LoRA deltas. However, the paper says "Training data consist of pretrained weight snapshots for Gemma-3-1B-it and Gemma-3-4B-it, *plus* LoRA experts from Feng et al. (2024b)," suggesting LoRA experts were included in training data. The appendix likely contains more detail (stripped by parser). Removed per the rule on missing appendix content.
 
-- **"The paper is vague about how many weight snapshots are used for VAE training"** — This is a minor reproducibility concern. The paper states training data comes from "pretrained weight snapshots for Gemma-3-1B-it and Gemma-3-4B-it, plus LoRA experts" (Section 4). Removed as trivial.
-
-- **"Task Arithmetic baseline may be misconfigured"** — Kept as Minor since it concerns a potentially anomalous result that the paper should address.
-
-- **Strength: "Self-merging enables single-model augmentation"** — This claimed strength is in tension with the verified weakness that self-merging is functionally VAE denoising, not genuine merging. Removed from Strengths since the weakness takes precedence.
-
-- **Strength: "Cross-architecture merging capability"** — Partially removed/downweighted. The capability is demonstrated in form (λ≤0.2 interpolation), but the gains are marginal, so this can only be listed as a proof-of-concept strength, not as strong evidence.
+---
 
 ## Novel Insights
 
-The most interesting insight from the reviews and paper combined is the tension between the paper's two strongest empirical results. The PCA vs. VAE comparison (Table 8) powerfully demonstrates that weight manifolds are genuinely non-linear and require expressive encoders — this is a clean, convincing result. But the downstream merging experiments, especially cross-architecture, operate at such small interpolation weights (λ ≤ 0.1–0.2) that the non-linear manifold structure is barely exploited: the decoder is receiving a near-identity perturbation of the target model's latent code. The irony is that the most compelling motivation for the method (non-linear manifold structure) and its most novel application (cross-architecture merging) are only loosely connected in the empirical evidence — the latter only works in a regime where linearity would likely suffice. Additionally, the Gaussian OT assumption for alignment sits in direct tension with the paper's own motivation about non-Gaussian weight distributions, representing an underexplored design gap.
+The paper's most genuinely novel insight is not the merging itself but the empirical demonstration that the **functional geometry of pretrained LLM weights is non-linear in a practically severe way**: PCA fails catastrophically (MMLU collapses to 25%) even at mild compression, while a nonlinear VAE maintains 96% accuracy at the same compression ratio. This is not merely a design preference—it is a quantitative finding that has implications for any parameter-space operation (compression, interpolation, search) on pretrained models. Combined with the OT alignment approach, this frames heterogeneous model merging as a manifold registration problem rather than a dimensionality-matching problem, which is a conceptually useful reframing even if the empirical cross-family results are currently narrow.
+
+---
 
 ## Suggestions
 
-- Scale back the cross-architecture merging claim from "robust" to "preliminary" or "proof-of-concept," and acknowledge that meaningful knowledge transfer beyond λ ≤ 0.2 remains an open challenge.
-- Re-run self-merging experiments with the lm-eval harness and at compression ratios where reconstruction fidelity is preserved (e.g., r=1.6), so the results can be compared on the same scale as the ablation tables.
-- Add at least one comparison against a non-merging transfer baseline (e.g., fine-tuning on generated data) for cross-architecture settings, to contextualize the small λ=0.1 gains.
+1. **Unify evaluation frameworks.** Re-run self-merging and expert merging under `lm-eval` so all tables can be compared on the same scale. This is the single most impactful revision.
+2. **Add the deterministic-decoding ablation to Table 2.** A single row with σ=0 decoding would resolve the self-merging mechanism question definitively.
+3. **Add a full λ-sweep for cross-family merging.** Show the analogous Figure 4a for LLaMA→Gemma; if the method only works at λ<0.2, say so honestly and discuss why.
+4. **Discuss in-domain vs. out-of-domain VAE explicitly** when presenting Tables 7 and 8 together, and note that the self-merging experiment uses an in-domain VAE.
+5. **Report computational overhead** (encoding + OT + decoding time) relative to weight-space methods for a concrete model size.
 
-## Evaluation
-
-**Originality:** The idea of merging LLMs in VAE latent space with OT alignment is novel. The weight statistics analysis and the decisive PCA vs. VAE comparison add genuine contributions. However, the self-merging claim repackages a well-known VAE property, and the cross-architecture claim is overclaimed relative to the evidence.
-
-**Importance of research question:** Model merging is an active area; enabling cross-architecture merging would be high-impact if the evidence were stronger.
-
-**Claims well supported:** Expert merging and PCA vs. VAE are well-supported. Self-merging and cross-architecture merging claims are overstated relative to evidence.
-
-**Soundness of experiments:** Evaluation protocol inconsistency across tables is a real problem. The split baselines make unified assessment difficult, though within-table comparisons are fair.
-
-**Clarity:** Writing is generally clear. The algorithm specification is precise. The evaluation protocol issue (which harness for which table) could be more explicit.
-
-**Value to community:** The weight statistics analysis and the PCA vs. VAE comparison have lasting value. The cross-architecture framework is a useful starting point but needs substantially stronger evidence.
+---
 
 ## Score and Decision
 
-Calibration anchors:
-- **ParamΔ** (6.5, Accept Poster): Simple but effective weight-delta transfer. Strong empirical results across many models. Less novel but more solid evidence.
-- **Transformer Fusion with OT** (6.5, Accept Poster): Similar OT-based cross-architecture fusion on smaller models. Well-executed with clear contributions.
-- **WIDEN** (5.67, Reject): Overclaimed gains relative to Task Arithmetic, narrow experimental scope. Novel method but inconsistent evidence.
-- **CABS** (4.75, Reject): Marginal improvements overclaimed as surpassing "ideal model." Methodologically sound but overclaimed.
-- **Collective Model Intelligence** (3.4, Reject): Limited novelty, GPT-2 only, no significant practical contribution.
+**Calibration anchors:**
 
-LS-Merge is more novel than WIDEN (latent-space merging for LLMs is genuinely new), has some strong empirical results (Table 3 expert merging, Table 8 PCA vs. VAE), but shares WIDEN's pattern of overclaiming (cross-architecture merging is "robust" when gains are marginal at small λ). It's below the Transformer Fusion paper (which had similar scope but stronger evidence) and below ParamΔ (which had simpler claims with better support). It's above the low-scoring papers (which had fundamental methodology or novelty issues).
+| Path | Avg Score | How it compares |
+|---|---|---|
+| `/home/wg25r/review_agent/human_reviews/LjeqMvQpen.md` | **6.5** (Accept) | Transformer fusion with OT for heterogeneous architectures — directly analogous topic and similarly strong novelty; LS-Merge matches in concept but has worse experimental coherence (two evaluation frameworks) |
+| `/home/wg25r/review_agent/human_reviews/iX7eHHE5Tx.md` | **6.25** (Accept) | Model merging in large vision-language models with strong empirical results; similar scope and quality |
+| `/home/wg25r/review_agent/human_reviews/2pvMZKGYDR.md` | **5.67** (Reject) | Extending LLM merging to pre-trained models — comparable scope, rejected due to incomplete experiments and inconsistent gains across settings; LS-Merge is stronger in novelty (cross-architecture OT alignment) but shares the "inconsistent gains" concern |
+| `/home/wg25r/review_agent/human_reviews/GOwNImvCWf.md` | **4.25** (Reject) | Weight-space autoencoder for reconstruction — lower novelty and weaker experiments; LS-Merge is clearly stronger with its OT alignment and cross-architecture merging |
+| `/home/wg25r/review_agent/human_reviews/VMV8gefvq8.md` | **6.0** (Accept) | Manifold-constrained neural compression for LLMs — similar theme of learning a weight manifold; LS-Merge has more ambitious goals (merging, not just compression) with comparable experimental rigor |
+| `/home/wg25r/review_agent/human_reviews/XVHXVdoV11.md` | **3.4** (Reject) | Model merging with compatible specialization — weak contribution and poor experiments; used as low anchor |
 
-A score around 5.0 captures: real novelty in framing, strong expert merging and PCA/VAE results, but significantly overclaimed cross-architecture and self-merging contributions, evaluation inconsistency, and the conceptual weakness that self-merging is VAE denoising.
+**Calibration reasoning:** The Transformer Fusion with OT paper (6.5) is the closest analog and was accepted with a strong score. LS-Merge covers comparable conceptual ground (OT alignment for heterogeneous model merging) and has genuinely strong results in expert merging (Table 3) and the VAE vs. PCA ablation (Table 8). However, unlike the accepted 6.5 paper, LS-Merge has a structural evaluation problem: two incompatible benchmarking frameworks are used across its key experiments, preventing unified conclusions. The WIDEN paper (5.67, rejected) shared a similar "inconsistent gains across settings" weakness. Given that LS-Merge's strongest results (Table 3, Table 8) are compelling and its novelty (OT alignment for cross-architecture latent merging, non-linear manifold finding) is genuine, but the evaluation fragmentation is a real barrier to confident acceptance, I place it below the 6.5 anchor and slightly above the 5.67 reject anchor.
+
+**Score: 5.0 — Marginal Reject**
+
+The paper has a genuinely novel core idea and two strong empirical contributions (LoRA expert merging and VAE vs. PCA ablation), but the inconsistent evaluation frameworks across experiments make the central comparative claims hard to accept, and the cross-family merging headline is overclaimed at the current demonstration level (λ=0.1 only). A revision unifying the evaluation frameworks and adding a λ-sweep for cross-family merging would likely push this to acceptance.
 
 MY FINAL SCORE: <pineapple>5.0</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

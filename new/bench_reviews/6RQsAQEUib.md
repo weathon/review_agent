@@ -1,16 +1,22 @@
-Now I have a thorough understanding of the paper. Let me compile the final review, carefully verifying each claimed weakness and strength against the actual paper text.
+Now let me search for calibration papers.Now I have sufficient calibration material. Let me write the final review.
+
+---
 
 ## Summary
 
-GHPO proposes an adaptive difficulty-aware reinforcement learning framework for LLMs that addresses reward sparsity in GRPO training. When all G sampled responses for a prompt yield zero reward (indicating the problem is too hard for the current policy), GHPO switches from on-policy RL to guided imitation learning by appending partial ground-truth solution traces to the prompt. This combines RL for solvable problems with SFT-style guidance for currently unsolvable ones, dynamically adapting as the model's capabilities evolve. Experiments across six math benchmarks on two model families show consistent improvements over GRPO baselines.
+GHPO (Guided Hybrid Policy Optimization) is a difficulty-aware RL framework for LLM training that addresses reward sparsity in GRPO-based RLVR. The core idea is to detect "difficult" queries online (all G rollouts receive zero reward) and switch to guided imitation learning by injecting partial ground-truth solution traces into the prompt for those queries. The paper demonstrates 3–5% average gains over GRPO on six mathematical reasoning benchmarks using two model families.
+
+---
 
 ## Strengths
 
-- **Rigorous identification and quantification of the reward sparsity problem in GRPO**: The paper provides a clear mathematical analysis of why zero-reward groups yield vanishing advantages (Â_i,t = 0 when all rewards are zero), and empirically quantifies that 52% of NuminaMath-1.5 yields zero reward for Qwen2.5-7B-Instruct. This is a concrete, well-diagnosed problem (Section 2.3).
+- **Well-motivated problem diagnosis**: The paper provides a concrete, quantified characterization of the reward sparsity problem — 52% of NuminaMath-1.5 problems yield zero reward for Qwen2.5-7B-Instruct, directly supporting the need for adaptive guidance. The mechanistic explanation (zero group rewards → zero advantages → zero gradient) is crisp.
+- **Adaptive switching versus static/manual methods**: Table 2 shows that GHPO (avg 0.442) outperforms both GRPO-CL (0.415) and the fixed-hint GRPO-CL-H(0.5) baseline (0.422), providing evidence that the adaptive switching mechanism — not merely providing hints — accounts for the improvement.
+- **Two-model-family evaluation**: Testing on both Qwen2.5-Base-7B and Qwen2.5-Math-7B provides some evidence that gains are not specific to a single pretraining regime. Both show consistent improvement over vanilla GRPO.
+- **Informative training dynamics analysis**: Figure 4's joint tracking of format reward, accuracy reward, response length, and gradient norm across training provides diagnostic value beyond just reporting final benchmark numbers.
+- **Computationally lightweight design**: GHPO uses only the ground-truth solution traces already present in the training data and a simple group-level reward check, adding negligible overhead compared to off-policy approaches requiring auxiliary LLMs.
 
-- **Practical and effective adaptive mechanism**: The adaptive difficulty detection and prompt refinement strategy is simple, requires no auxiliary models or additional training data beyond what's already available (ground-truth solutions in math datasets), and consistently outperforms both vanilla GRPO and GRPO with curriculum learning. The comparison against GRPO-CL-H0.5 (fixed 50% hint ratio + curriculum learning) in Table 2 (0.422 vs. 0.442) demonstrates that the adaptive switching provides genuine value over static hint injection.
-
-- **Consistent empirical improvements across benchmarks and model families**: GHPO improves average accuracy from 0.398→0.442 on Math3to5 (+4.4%) and 0.409→0.442 on NuminaMath-S (+3.3%), with particularly notable gains on AIME24 (0.122→0.163, +34% relative on NuminaMath-S). The gains hold across both Qwen2.5-Base-7B and Qwen2.5-Math-7B (0.4728→0.5076).
+---
 
 ## Weaknesses
 
@@ -19,74 +25,81 @@ None.
 
 ### Major
 
-- **Ambiguous algorithm specification — distributional mismatch in the importance ratio**: The paper states (Section 3.2) that GHPO "first samples a group of G individual responses" from πθ_old(·|q), then modifies the prompt to q* based on difficulty detection. However, the importance ratio in Equation 1 conditions both the numerator and denominator on q*: r_{i,t}(θ) = πθ(o_{i,t} | q*, o_{i,<t}) / πθ_old(o_{i,t} | q*, o_{i,<t}). Since the responses were sampled under the original prompt q, the old policy πθ_old was never conditioned on q*. This creates a distributional mismatch — the denominator should arguably be πθ_old(o_{i,t} | q, o_{i,<t}). If the method re-samples responses after modifying the prompt to q*, this must be stated explicitly, and the computational cost of the second generation round should be discussed. Without this clarification, the method as written is not reproducible and may be mathematically incorrect. This is the core algorithmic claim of the paper.
+- **Algorithmic description is internally inconsistent and ambiguous.** The objective in Eq. 1 shows rollouts {o_i} sampled from π_{θ_old}(·|**q**), but the IS ratio in the constraint uses **q*** = **q** + ω·h (the hint-augmented prompt) in *both* the numerator and denominator. These two are equal only when **q*** = **q** (non-difficult case). For difficult samples where **q*** ≠ **q**, using π_{θ_old}(o_{i,t}|**q***, o_{i,<t}) in the denominator while the generating distribution is π_{θ_old}(·|**q**) produces an invalid importance weight. The only coherent interpretation is that when difficulty is detected, a *new* set of rollouts is drawn from π_{θ_old}(·|**q***) and used in the update — but the paper never states this explicitly, and the objective's expectation annotation still points to **q**. If re-sampling occurs, the method works correctly (responses come from q*, IS ratio denominator uses q*, advantages are non-zero if hints help). If it does not occur, the "guided imitation" claim is empty — all-zero-reward groups have Â_{i,t} = 0, so the guided update reduces to pure KL regularization. This ambiguity cannot be resolved without a pseudocode or explicit clarification, and in its current form the algorithm description does not accurately convey what the method does.
 
-- **Missing comparisons to directly relevant baselines (DAPO, LUFFY)**: The Related Work section (Section 5) explicitly discusses DAPO (which filters easy/hard prompts via dynamic sampling) and LUFFY (which balances imitation and exploration via off-policy demonstrations) as methods addressing the same reward-sparsity problem. Neither appears in the experimental tables. The claim in the abstract that GHPO "consistently outperform[s] strong on-policy reinforcement learning and curriculum learning baselines" is incomplete without comparing to the most directly competing methods. The 3.3–4.4% gains over vanilla GRPO may not hold against DAPO or LUFFY.
-
-- **Confounded mechanistic interpretation of training stability**: Section 4.4 argues that GHPO's smaller gradient norms indicate "a smoother and more stable optimization process." However, GHPO's task is made easier by providing partial solutions — lower gradient norms on an easier, hint-augmented task do not demonstrate inherently better optimization dynamics. They may simply reflect that the model is being asked to do something less difficult. The paper provides no control that distinguishes "better optimization dynamics" from "easier task," making this key mechanistic claim unconvincing.
+- **Absence of DAPO and LUFFY baselines.** The paper explicitly positions GHPO against DAPO (dynamic sampling to discard zero-reward problems) and LUFFY (hybrid on-policy RL + off-policy demonstrations) in Related Work, citing them as the most relevant prior methods. Neither appears in any experimental table. The baselines used (vanilla GRPO and GRPO-CL) predate the targeted reward-sparsity literature. Without showing GHPO's advantage over DAPO in particular — which also addresses zero-reward prompts but by filtering rather than guiding — the central claim of superiority over "existing reward-sparsity-aware" methods is unsubstantiated.
 
 ### Minor
 
-- **Overclaimed "approximately 5%" average gain**: The abstract claims "an average performance gain of approximately 5%," but the actual numbers are 4.4% (Table 1: 0.398→0.442) and 3.3% (Table 2: 0.409→0.442). The OlympiadBench score in Table 2 actually decreases from 0.396→0.389, which contradicts the claim of "consistently outperforming" — the paper correctly notes "five of the six benchmarks" in the body text but the abstract is misleading.
+- **No variance estimates on small benchmarks.** AIME2024 contains 30 problems; the reported improvement 0.122 → 0.163 (Table 2) corresponds to roughly 1–2 problems. OlympiadBench shows a small *regression* for GHPO vs. GRPO (0.396 → 0.389), which the paper covers with "five of the six benchmarks." Without multi-seed runs or at least confidence intervals, the aggregated ~5% gain claimed in the abstract could partially reflect variance on small-N benchmarks. A table reporting the same runs from multiple seeds would resolve this and is standard practice in RLVR evaluation.
 
-- **No variance statistics reported**: None of the results include standard deviations, confidence intervals, or information about whether multiple seeds were run. Given the small absolute differences on some benchmarks (e.g., AIME24: 0.098 base, with improvements of 0.002–0.071), reproducibility and statistical significance are uncertain.
+- **Multi-stage hint ratio ω schedule entirely deferred to appendix.** The multi-stage guidance mechanism is described as a core component of GHPO, but no formula, schedule, or stage count is given in the main text. Section 3.4 only says "details provided in Appendix B.3." Readers cannot assess how the schedule interacts with difficulty detection or judge its sensitivity from the main paper alone.
 
-- **Assumption 1 not validated in isolation**: The assumption that training with ground-truth traces on failing problems improves OOD generalization (rather than simply providing more training signal) is stated but never isolated in an ablation. The overall GHPO results are consistent with this assumption, but also consistent with the simpler explanation that more learning signal → better performance, regardless of OOD transfer.
-
-- **Core hyperparameter ω deferred to unavailable appendix**: The hint ratio ω schedule is central to the method but described only as "adjusted by stages" in the main text, with details in Appendix B.3 (stripped from the submission). The group size G for difficulty detection is also unspecified, and no analysis of how G affects the false-positive rate of difficulty detection is provided.
+- **Qwen2.5-Math-7B comparison is weakened by absent curriculum learning baselines.** Section 4.3 shows Qwen2.5-Math-7B-GRPO vs. GHPO but omits the GRPO-CL and GRPO-CL-H(0.5) baselines present for the base model. The comparison for the math-specialized model thus regresses to the weakest baseline only.
 
 ### Trivial
 
-- **The "Automated Difficulty Detection Module" is an if-condition**: Section 3.3 presents a "module" that is simply checking whether all G rewards equal zero. While functionally adequate, the framing inflates the sophistication of this component beyond its actual complexity.
+- The abstract claims "approximately 5%" gain but the improvement on MATH-500 is ~0.2% (0.774 → 0.776 in Table 2). The 5% figure is driven largely by GPQA-Diamond and a small-N benchmark; calling it a "mathematics benchmark" average requires at minimum noting GPQA-Diamond's broader scope.
+
+---
 
 ## Nice-to-Haves
 
-- Comparisons to DAPO and LUFFY would substantially strengthen the empirical evaluation and clarify GHPO's relative contribution.
-- An ablation on group size G would reveal how sensitive difficulty detection is to sampling noise.
-- Testing on non-mathematical domains where ground-truth traces may be less readily available (e.g., code generation with test cases) would help assess generality.
-- Qualitative examples showing what the model sees at different ω values would clarify whether the guidance constitutes meaningful hints versus near-complete solution leakage.
-- Multiple seeds with confidence intervals would strengthen the reliability of the reported improvements.
+- An explicit pseudocode block for the full training loop — including whether rollouts are re-sampled after difficulty detection — would make the algorithm reproducible and resolve the IS validity ambiguity.
+- A direct ablation: apply the same partial hints at test time (not just training) to verify that the learned skill transfers to hint-free inference, validating Assumption 1 more directly.
+- Scaling to 14B/32B models to assess whether reward sparsity (and GHPO's remedy) persists at larger capacity.
+- Figure 4's gradient-norm interpretation should acknowledge that smaller norms could indicate reduced update informativeness rather than purely "stability" — both readings should be discussed.
+
+---
 
 ## Removed Points
 
-These points are flagged to be removed, treat them with caution:
+*These points are flagged to be removed; treat them with caution.*
 
-- **Table 1 vs Table 2 labeling confusion**: The harsh critic noted different numbers for "Qwen2.5-7B-GRPO" across tables. However, the tables explicitly use different training datasets (Math3to5 and NuminaMath-S, as stated in the text). Different datasets naturally produce different numbers. This is not a contradiction but rather reflects the experimental design, and the text does reference both tables. Removed as a weakness since it's not an error — it's intentional experimental design.
+**Strength Finder — "consistent gains across all six benchmarks"**: The paper itself acknowledges only five of six benchmarks improve (OlympiadBench shows a small regression in Table 2: 0.396 → 0.389). This strength was weakened, not fully removed, but the unqualified form is inaccurate.
 
-- **Cold-start N=20 lacks justification**: While the choice of N=20 could benefit from ablation, this is a hyperparameter choice, not a methodological flaw. The paper explains the rationale (preventing misclassification due to formatting failures). Moved to trivial/nice-to-have territory.
+**Harsh Critic — "advantage collapse makes guided imitation inert"**: This is partially valid but only under the literal reading of the equations (no re-sampling). If re-sampling occurs (the sensible interpretation), advantages are non-zero and the method works. The underlying concern about algorithmic clarity is kept as a Major weakness; the "inert guidance" framing is too strong as an absolute claim and is removed.
 
-- **Formatting issues**: Various formatting artifacts (parser errors) are removed per instructions.
+**Harsh Critic — criticism of gradient norm interpretation as evidence of less-informative updates**: This is a reasonable interpretive nuance but speculative and not backed by evidence from this paper. Retained only as a nice-to-have.
 
-- **52% statistic inference chain**: The critic claimed the inference from Instruct model to Base model is "sloppy," but the paper clearly uses the Instruct model as an upper bound on the Base model's capability, which is a reasonable (even conservative) argument. Removed.
+**Harsh Critic — Section 3.5 cold-start ablation demand (N=20 steps)**: The absence of an ablation for a fixed 20-step warm-up is a nitpick unlikely to affect core claims. Demoted to out-of-scope.
 
-- **Claims about "not yet released" baselines**: Removed per instructions — if the paper cites DAPO and LUFFY, they are treated as real.
+**Harsh Critic — Figure 3 "60% difficult" implies model not learning via RL**: The inference that persistent difficulty means the model "is spending most of its training in guided mode" is itself an argument for why GHPO is needed, not a flaw. Removed as a misreading.
+
+---
 
 ## Novel Insights
 
-The most interesting tension in this paper is the tradeoff between data efficiency and difficulty adaptation: DAPO discards hard data to avoid reward sparsity, while GHPO retains all data by injecting hints. This is a genuine and underappreciated design dimension in RLVR. However, the paper would be significantly stronger if it evaluated whether the model genuinely learns transferable reasoning from hinted traces, or merely pattern-matches against solution formatting — an ablation testing held-out problems that received hints during training vs. those that didn't would address this.
+The paper's online difficulty detection criterion (all-zero group rewards as the trigger signal) is notably simple and requires no external oracle or separate difficulty model. This makes it more practical than curriculum-based methods that require offline dataset partitioning. The empirical evidence in Figure 3 — showing ~60% of batches require guidance even in late training — is a striking observation that challenges the common assumption that models "grow into" harder training data over time. This persistence of difficulty has implications beyond GHPO: it suggests that reward-sparsity-aware methods may need to remain active throughout training, not just in early stages.
 
-## Suggestions
+---
 
-- Explicitly state in Section 3.2 whether responses are re-generated after modifying the prompt to q*. If re-sampled, provide the computational overhead. If not, explain how the distributional mismatch in the importance ratio is handled.
-- Add comparisons to DAPO and LUFFY, since the paper itself identifies them as addressing the same problem. At minimum, include DAPO since it directly addresses reward sparsity in GRPO training.
-- Report results with standard deviations across multiple seeds to establish statistical robustness, especially given the small absolute improvements on some benchmarks.
-- De-confound the training stability claim: compare gradient norms on the same set of un-hinted prompts between GHPO and GRPO, rather than comparing GHPO's gradient norms on a mix of hinted and un-hinted prompts against GRPO's on only un-hinted prompts.
+## Calibration
+
+| Paper | Avg Score | Comparison |
+|---|---|---|
+| Auto-CEI (`3ogIALgghF`) | 7.0 (Accept) | Curriculum expert iteration for LLM reasoning; clearer algorithmic description, broader task evaluation, comparable scope. GHPO has similar motivation but weaker experimental rigor and unclear algorithm. |
+| mmSmQ0gNyZ (Contrastive Curriculum) | 4.0 (Reject) | Curriculum learning for LLM alignment; rejected for lack of novel contribution and scattered focus. GHPO has more algorithmic novelty but comparable evaluation weaknesses. |
+| DQO (`k2q0rUX2lx`) | 3.5 (Reject) | RL for LLM reasoning with algorithmic ambiguity and unfair comparisons. GHPO's missing baselines and IS ambiguity parallel this, but GHPO's empirical consistency is stronger. |
+| WizardMath (`mMPMHWOdOy`) | 8.0 (Accept Oral) | Strong math LLM training; comprehensive experiments, clear algorithm, fair comparisons. GHPO falls substantially below this bar on experimental rigor. |
+
+GHPO's quality places it between the Auto-CEI paper (7.0) and the curriculum curriculum paper (4.0). The algorithmic ambiguity and the missing DAPO/LUFFY comparisons are genuine major weaknesses that would weigh against acceptance at a top venue. The paper is closer to the 4.0–4.5 range than to 6–7, primarily because the two major weaknesses (IS consistency and missing contemporaneous baselines) are both things a reviewer should require to be fixed before acceptance. The empirical gains are modest on most benchmarks, and the one result that drives the headline "5%" number (GPQA-Diamond improvement) is on a benchmark that is not primarily mathematical.
+
+Final score: **4.5** — the paper has a real, practical idea and consistent (if modest) improvements, but the incoherent IS formulation and absence of comparison to the two most relevant contemporary baselines prevent acceptance in current form.
 
 ## Score and Decision
 
-**Calibration anchors:**
+**Originality**: Moderate. The idea of injecting hints when reward is sparse is natural, and similar ideas appear in LUFFY and curriculum work. The online detection trigger is clean but not deeply novel.
 
-| Paper | Avg Score | Comparison |
-|-------|-----------|------------|
-| WizardMath (8.0) | 8.0 | Much stronger methodological novelty and evaluation; GHPO is far below this bar |
-| Rewarding Progress (7.14) | 7.14 | Novel PAV framework with theory and strong experiments; GHPO is simpler and less rigorous |
-| Auto-CEI (7.0) | 7.0 | Adaptive curriculum for LLM reasoning with stronger evaluation |
-| MA-RLHF (6.2) | 6.2 | Addresses sparse rewards in RLHF; comparable domain, stronger methodology |
-| IBRL (5.5) | 5.5 | Hybrid IL+RL with distribution shift issues; similar structural weakness to GHPO |
-| Math for AI (4.25) | 4.25 | Limited scope math reasoning; GHPO has more complete evaluation |
-| Simple ICC curriculum (4.0) | 4.0 | Very simple method, marginal improvements, missing baselines; GHPO is comparable in novelty but has more thorough evaluation |
+**Importance**: The research question (reward sparsity in RLVR) is timely and important.
 
-GHPO identifies a real and important problem and proposes a reasonable solution, but the contribution is incrementally built (binary difficulty check + hint injection). The missing baselines to directly competing methods (DAPO, LUFFY), the ambiguous core algorithm specification, and the confounded stability claims prevent confidence in the claimed advantages. The method is close in spirit to the simple curriculum paper (avg 4.0) but has a more thorough evaluation and a clearer problem motivation, placing it slightly above. Relative to IBRL (5.5) which has distribution shift issues similar to GHPO's importance ratio problem, GHPO lacks the formal analysis but has more practical impact. The evaluation is more complete than the low-scoring anchors but the core contribution is similar in magnitude.
+**Claims supported**: Partially. Consistent gains over vanilla GRPO are shown, but the headline claim of outperforming "strong" reward-sparsity-aware baselines is unsupported since DAPO and LUFFY are not evaluated.
 
-MY FINAL SCORE: <pineapple>5.0</pineapple>
+**Soundness of experiments**: Weak for small benchmarks without variance estimates; adequate for MATH-500 and OlympiadBench trends.
+
+**Clarity of writing**: Adequate in most places; the algorithm section is unclear on the re-sampling question, which is the core mechanism.
+
+**Value to community**: Positive if the implementation is clarified and the baseline comparisons are added.
+
+MY FINAL SCORE: <pineapple>4.5</pineapple>
 MY FINAL DECISION: <orange>Reject</orange>

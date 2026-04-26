@@ -1,12 +1,12 @@
 export OPENAI_DEFAULT_MODEL="glm-5.1"
-export HARSH_MODEL="ollama:kimi-k2.6:cloud" 
-export MERGER_MODEL="ollama:kimi-k2.6:cloud"
-export NEUTRAL_MODEL="ollama:kimi-k2.6:cloud"
+export HARSH_MODEL="step-3.5-flash" 
+export MERGER_MODEL="step-3.5-flash"
+export NEUTRAL_MODEL="step-3.5-flash"
 export CALIBRATION_SET="2025"
-export OUTPUT_CSV="results/bench_scores_kimi2.6_2026.csv"
-export MERGE_LOG="results/pipeline_whole_kimi2.6_2026.log"
-export SUBAGENT_MODEL="ollama:kimi-k2.6:cloud"
-export CONCURRENCY=2
+export OUTPUT_CSV="results/bench_scores_step_2026.csv"
+export MERGE_LOG="results/pipeline_whole_step_2026.log"
+export SUBAGENT_MODEL="step-3.5-flash"
+export CONCURRENCY=2    
 export MAX_PAPERS=100
 # rm bench_scores_qwen.log
 ollama serve & 
