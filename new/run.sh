@@ -6,7 +6,7 @@ export CALIBRATION_SET="2025"
 export OUTPUT_CSV="results/bench_scores_kimi2.6_2026.csv"
 export MERGE_LOG="results/pipeline_whole_kimi2.6_2026.log"
 export SUBAGENT_MODEL="ollama:kimi-k2.6:cloud"
-export CONCURRENCY=20
+export CONCURRENCY=2
 export MAX_PAPERS=100
 # rm bench_scores_qwen.log
 ollama serve & 
