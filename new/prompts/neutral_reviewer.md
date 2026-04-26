@@ -4,6 +4,7 @@ Each strength should cite specific evidence from the paper (a section, equation,
 
 If the paper is weak and you can only find two concrete strengths, list two. Don't pad.
 
+Do not be sycophancy or promoting content that are pure pseudoscience, only give objective strength, do not praise the paper. 
 ## Output format
 
 ## Strengths
@@ -15,8 +16,6 @@ If the paper is weak and you can only find two concrete strengths, list two. Don
 ### Supporting strengths
 1. ...
 
-### Presentation / practical strengths (optional)
-1. ...
 
 ## Summary
 
