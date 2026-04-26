@@ -22594,3 +22594,1526 @@ MY FINAL DECISION: <orange>Reject</orange>
 
 --- Decision ---
 Reject
+
+============================================================
+Paper: ../iclr2026_cspaper/papers/MwuSvrthXq.txt
+Timestamp: 2026-04-25T17:45:34
+
+--- Token Usage ---
+  Harsh Critic: N/A (claude_sdk path)
+  Strength Finder: input=13898 (cached=0) output=1395 (reasoning=0) total=15293 requests=1 duration=n/ams
+  Merger: N/A (claude_sdk path)
+  TOTAL: input=13898 output=1395 total=15293
+
+--- Claude SDK Usage ---
+  [Harsh Critic]
+    Model: claude-sonnet-4-6
+    Session ID: ad35a44f-96c2-45a8-b128-571ea10cbad6
+    Cost (USD): 0.15934665
+    Turns: 4
+    Duration: total=116464ms api=113944ms
+    Tokens: input=8 output=5454 cache_read=18338 cache_creation=19203
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  [Merger]
+    Model: claude-sonnet-4-6
+    Session ID: 53ad4f1e-0b8c-4219-8b8a-22eb1a1bb7df
+    Cost (USD): 0.3387906
+    Turns: 12
+    Duration: total=185543ms api=177162ms
+    Tokens: input=19 output=7586 cache_read=251262 cache_creation=39884
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  TOTAL Claude SDK cost (USD): 0.4981
+
+--- Merged Inputs ---
+
+### Harsh Critic
+I'll start by reading the paper end-to-end before writing the review.Now I have a thorough understanding of the paper. Let me write the review.
+
+---
+
+# Review: "Reinforcement Learning For Heterogeneous DAG Scheduling With Weighted Cross-Attention" (WeCAN)
+
+---
+
+## Critical Issues
+
+### 1. Missing directly relevant RL baselines — **Evidential**
+
+The paper claims to outperform "state-of-the-art methods" for heterogeneous DAG scheduling, yet two directly relevant RL baselines cited in Section 2's literature review — Zhadan et al. (2023) ("Multi-agent reinforcement learning-based adaptive heterogeneous DAG scheduling") and Wang et al. (2025) ("Deep reinforcement learning-based continuous workflows scheduling in heterogeneous environments") — are conspicuously absent from Tables 1 and 2. These are not tangentially related works; they are characterized in the paper itself as RL methods handling compatibility coefficients in heterogeneous environments, i.e., the exact problem setting of this paper. Their omission means the empirical claim of state-of-the-art RL performance is unsubstantiated. The paper's comparison is limited to PPO-BiHyb (a bi-level homogeneous DAG scheduler from 2021 adapted to this setting) and One-Shot (which the paper explicitly acknowledges does not model compatibility coefficients). The "7.7% improvement over the best neural baseline" headline result is therefore against competitors that are either solving a different/easier problem (One-Shot lacks compatibility modeling) or use a significantly different inference paradigm (PPO-BiHyb with beam search at 20–180 seconds vs. WeCAN at sub-5 seconds).
+
+### 2. Non-auto-regressive decoder's fundamental constraint is unacknowledged as a quality–speed tradeoff — **Structural**
+
+The WeCAN decoder produces all action scores in a single forward pass from the *initial* state only: the paper states in Section 3.2 that "the action probability pθ(πt|st, π<t) depends only on the initial state s1." This means the network assigns fixed compatibility-weighted scores to all (task, pool) pairs at the start, before seeing any actual scheduling decisions unfold. The generation map then uses those fixed scores plus masking to produce a schedule. This is not just an implementation detail — it structurally prevents the network from adapting to the dynamic state of the schedule (e.g., which pools are currently busy, which dependencies have just been unlocked). The skip mechanism's learned coefficients ua, ub, uc are similarly computed once and produce a monotonically decreasing function of the number of steps taken (Section 3.2), which cannot adapt to the current resource state. The paper includes a comparison with the auto-regressive version only in Appendix B (not presented in the main text), making it impossible to evaluate the quality cost of this design choice. The paper should either acknowledge this as a core limitation affecting claim scope, or provide the auto-regressive comparison in the main body with discussion of where the tradeoff lies. As written, the architecture's fundamental constraint on expressiveness is mischaracterized as a pure engineering win.
+
+### 3. Skip-action ablation is tested only in a narrowly constructed synthetic scenario — **Evidential**
+
+The theoretical contribution in Section 4 — that skip actions close the optimality gap of list scheduling — is validated experimentally only by artificially replacing 1% of tasks with "heavy tasks" in TPC-H-30 and TPC-H-50 (Section 5.3). This is a setting deliberately engineered to exhibit the failure mode of list scheduling. In the main experiments (Tables 1 and 2), there is no ablation showing the gain from skip versus no-skip on the standard datasets. It is therefore impossible to evaluate whether skip actions contribute meaningfully in typical scheduling scenarios, or whether the improvement in Tables 1 and 2 over One-Shot comes primarily from the WeCA architecture. The claim that skip "closes the optimality gap" in practice — not just theoretically — requires evidence across the full benchmark, not only in a contrived 1%-heavy-task modification.
+
+---
+
+## Section-by-Section Notes
+
+**Section 2.1 (Related Work):** The paper fairly characterizes the limitations of One-Shot (no compatibility handling), Zhou et al. (2022) (averaging compatibility coefficients), and Zhadan et al. (2023) (fixed-dimension representations). However, it then does not include Zhadan et al. (2023) or Wang et al. (2025) in the experimental comparison, which is inconsistent — if these methods have the limitations described, the paper should demonstrate quantitatively that WeCAN overcomes them.
+
+**Section 3.1 (WeCA Layer):** The justification for placing Kacc outside softmax (rather than inside in log form) is illustrated with a two-pool, two-task example. The argument is intuitive and the ablation in Table 3 confirms the design choice matters. This is the paper's most concrete and well-supported methodological contribution.
+
+**Section 3.2 (Decoder / Skip Score):** The skip score formula `u_πskip = ua(1 − k/2n)^ub + uc` is introduced without derivation or formal justification beyond the claim that it prevents endless idling while retaining single-pass efficiency. The formula has three learned scalar parameters globally applied across all scheduling steps, which seems like a coarse approximation of what would ideally be a state-dependent decision. No sensitivity analysis or ablation on this formula's form is provided.
+
+**Section 4 (Skip Gap Analysis):** Theorem 2 and the surrounding analysis correctly establish that list scheduling can miss optimal solutions, and the construction of Sn and the skip-based map S is theoretically sound as described. The theoretical contribution is meaningful. However, the gap between "the optimal solution lies in the image of S" (Theorem 1(ii)) and "the trained policy will find or approximate it" is large and not addressed. REINFORCE training toward this expanded space has no convergence guarantee, and the high variance concern mentioned in passing ("the mapping Sn allows arbitrary idle time, resulting in large variance of makespan, hindering training") is dismissed with the heuristic that large-ua, large-uc solutions cluster together — this is asserted, not proved.
+
+**Section 5.1 (Experimental Setup):** All main experiments use exactly 3 resource pools. This is a narrow instantiation of the "heterogeneous" setting the paper targets. The "varying environment" generalization experiments (Figure 2) evaluate different pool counts, but: (a) the range tested is not specified in the main text; (b) only relative improvement over heuristics is reported, not absolute comparisons to RL baselines under distribution shift; and (c) the number of test instances for Figure 2 is not stated. The large-scale results referenced in "Appendix F" are not visible in this submission but are not flagged as absent.
+
+**Section 5.2 (Results):** Table 1 has an incomplete row for One-Shot — only S(256) is reported, not greedy. This makes it hard to assess whether the gap between WeCAN-Greedy (0.15s) and One-Shot-S(256) (2.26s) reflects a legitimate quality difference or just a sampling advantage. The observation that "in heterogeneous environments, the generation map's runtime dominates for both WeCAN and One-Shot" is plausible but would benefit from a profiling breakdown.
+
+**Section 5.3 (Ablation):** Only 10 test problems are used per ablation condition on TPC-H-30/50. Given the reported standard deviations, the small sample size raises concerns about whether differences between, e.g., WeCA+GAT(forward) (10.5%) and WeCA+LDDGNN (14.0%) are statistically robust. A paired test or larger test set would be appropriate.
+
+---
+
+## Strengths
+
+1. **The WeCA layer design is technically clean.** The placement of Kacc as a multiplicative weight outside softmax, rather than as a log-inside term, is a specific and justified design decision. The example distinguishing identical-attribute tasks with different compatibility profiles (full paper Section 3.1) is a compact and convincing argument. The ablation in Table 3 ("WeCA-final-only" degrades to near-heuristic performance, +0.5%) demonstrates this component's importance empirically.
+
+2. **The optimality gap analysis for list scheduling is a genuine contribution.** The formal characterization of list scheduling's failure mode (Section 4, Theorem 2, Assumption 1) provides a principled framework that prior neural scheduling work lacked. The constructive proof that the skip-augmented map satisfies the surjection condition is a useful theoretical result, regardless of whether the experiments fully validate the practical impact.
+
+3. **The non-auto-regressive single-pass architecture achieves practical speed.** WeCAN-Greedy runs in 0.15–1.72 seconds across TPC-H datasets, comparable to pure heuristics and 2 orders of magnitude faster than PPO-BiHyb (20–179s). For time-sensitive applications, this is a real operational advantage — though the quality cost relative to auto-regressive methods needs main-paper quantification.
+
+4. **LDDGNN is a well-motivated choice.** Using the longest directed distance rather than simple graph distance for the attention bias is a targeted design for DAGs with asymmetric dependency structure. The ablation showing LDDGNN > GAT(forward) > GAT(bidirectional) is consistent with the intuition.
+
+---
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+
+1. **Include Zhadan et al. (2023) and Wang et al. (2025) as baselines.** Without these, the "state-of-the-art" claim for RL in heterogeneous DAG scheduling is not demonstrated. If these methods cannot be reproduced, provide evidence and discuss the gap.
+
+2. **Skip ablation on standard (unmodified) datasets.** Add a WeCAN-no-skip row to Tables 1 and 2 so readers can disentangle the contribution of WeCA+LDDGNN from the skip mechanism under typical conditions, not just in the engineered heavy-task scenario.
+
+3. **Larger pool-count experiments in the main body.** The adaptability claim is central to the paper. Main experiments with 3 pools are insufficient; show results at, e.g., 5 and 10 pools to support the scalability argument with actual quality and runtime data against RL baselines (not just relative-to-heuristic improvement).
+
+### Deeper Analysis Needed
+
+1. **Training convergence and variance with skip.** The paper claims skip-augmented training clusters poor solutions and reduces variance, but provides no training curves. Show loss/makespan curves with and without skip to substantiate this claim, which is central to the practical viability of the mechanism.
+
+2. **Quantify the auto-regressive vs. non-auto-regressive quality gap.** The comparison is in Appendix B but should be in the main paper with clear numbers, since the non-auto-regressive design is the paper's core speed advantage and also a fundamental expressiveness limitation.
+
+### Visualizations & Case Studies
+
+1. **Concrete schedule comparison on a heavy-task instance.** Show a DAG instance, the schedule produced by list scheduling, the schedule produced by HEFT, and the schedule produced by WeCAN with and without skip. This would make the gap analysis in Section 4 concrete and verifiable.
+
+### Obvious Next Steps
+
+1. **Extend to online/dynamic settings.** The conclusion mentions "more complicated settings" generically. The most natural extension — online arrivals of DAG tasks — would directly test whether the single-pass design's fixed-state scores are adequate. This should have been discussed as a limitation, even if not implemented.
+
+---
+
+## Overall Assessment
+
+WeCAN makes two genuine contributions: a technically motivated cross-attention architecture for embedding task-pool compatibility, and a theoretical framework exposing the optimality gap of list scheduling along with a mechanism to close it. The paper is clearly written, and the LDDGNN and WeCA designs are supported by ablations.
+
+However, the paper's central empirical claim — that WeCAN outperforms state-of-the-art RL methods for heterogeneous DAG scheduling — is not established. The two most directly relevant RL competitors cited in the related work (Zhadan et al., 2023; Wang et al., 2025) are absent from all comparison tables, and the included RL baselines either solve a structurally easier version of the problem (One-Shot, which ignores compatibility) or use a radically different and slower inference budget (PPO-BiHyb). The skip action's practical benefit — the paper's other headline claim — is demonstrated only in a 1%-heavy-task setting constructed specifically to exhibit list scheduling's failure. Without skip ablations on the main benchmarks and without comparison to the omitted RL baselines, the paper cannot support its claims of state-of-the-art performance. The paper should not be accepted in its current form.
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+
+1. **Weighted cross-attention mechanism that handles compatibility coefficients while maintaining adaptability to varying environment sizes**: The WeCA layer multiplies compatibility coefficients outside the softmax (Eq. in Section 3.1), which avoids fixed-dimensionality constraints on task types or pool counts that plague prior work (e.g., one-hot embeddings, averaged coefficients). The ablation in Table 3 validates this decisively: WeCA + LDDGNN achieves 14.0% improvement over Tetris on TPC-H-30, while the inside-placement variant drops to 10.5%, and removing WeCA entirely (WeCA-final-only) collapses to 0.5%. The illustrative example in Section 3.1 further provides clear intuition for why outside placement preserves distinguishability of tasks with different overall compatibility profiles.
+
+2. **Theoretical analysis proving list scheduling's optimality gap and that skip action closes it**: Theorem 1 (parts ii and iii) formally establishes that without the skip action, the generation map cannot represent all optimal solutions for some problems, while with skip it can. Theorem 2 shows that a generation map satisfying the surjection property can reach the optimum. This analysis goes beyond empirical observation by identifying the root cause (T∘S_list is not surjective) and providing a constructive fix.
+
+3. **Novel skip-action mechanism adapted for single-pass inference**: The paper designs a parametric skip score u_skip = u_a(1 - k/(2n))^u_b + u_c (Section 3.2/Algorithm 1) that enables the skip action within a single-pass network, whereas prior work (Mao et al., 2016) required multi-round processing. The key insight is that the (1 - k/(2n))^u_b factor naturally diminishes skip probability as scheduling progresses, preventing endless idling without needing per-step network evaluation. Figure 3 empirically confirms that this mechanism yields substantial gains in heavy-task scenarios where list scheduling's optimality gap is largest.
+
+### Supporting strengths
+
+1. **Strong empirical performance across multiple benchmarks**: WeCAN-S(256) achieves 7.0% lower makespan than One-Shot-S(256) on TPC-H-30 (18964 vs 20399 in Table 1) and 8.8% on Computation Graphs Erdős-Rényi (10083 vs 11071 in Table 2), while WeCAN-Greedy runs in 0.15s vs PPO-BiHyb's 20.48s on TPC-H-30 — matching heuristic speed while outperforming neural baselines.
+
+2. **Generalization to unseen environment configurations**: Figure 2 demonstrates that a model trained on one environment configuration maintains strong improvements over heuristics when evaluated with varying pool numbers, pool features, task numbers, and task types, validating the architecture's adaptability claim.
+
+3. **LDDGNN outperforms standard GNN baselines**: Table 3 shows that replacing LDDGNN with a forward GAT drops improvement from 14.0% to 10.5%, and a bidirectional GAT drops to 9.9%, confirming that longest-directed-distance-aware attention biases better capture DAG dependency structure than standard message-passing.
+
+## Summary
+
+The paper introduces WeCAN, an RL framework for heterogeneous DAG scheduling that uses weighted cross-attention to embed task-pool compatibility coefficients adaptively and introduces a skip-action mechanism for single-pass inference to close the optimality gap of list scheduling. The single most important piece of evidence is the ablation study in Table 3, which demonstrates that the WeCA layer's outside-softmax placement is essential (14.0% vs 0.5% improvement without it) while Figure 3 confirms that the skip action provides substantial benefits in heavy-task scenarios where list scheduling provably fails — together validating both core technical contributions.
+
+--- Merged Review ---
+Now I have enough information to write the final review. Let me synthesize.## Summary
+WeCAN is an end-to-end reinforcement learning framework for heterogeneous DAG scheduling with task-pool compatibility coefficients. The paper makes two primary technical contributions: (1) a weighted cross-attention (WeCA) layer that embeds compatibility coefficients multiplicatively outside the softmax, enabling adaptable environment-aware task embeddings; and (2) a theoretical analysis of the optimality gap in list scheduling, paired with a parametric skip-action mechanism adapted for single-pass inference to close that gap. Evaluations on TPC-H and Computation Graphs benchmarks show 7–18% gains over heuristics and 7–9% gains over included neural baselines, with competitive inference speed.
+
+---
+
+## Strengths
+
+- **WeCA outside-softmax design is technically well-justified and empirically validated.** The paper provides a crisp two-pool, two-task example showing why placing Kacc inside the softmax collapses embeddings of tasks with different compatibility profiles. Table 3 confirms this is not a minor detail: "WeCA-final-only" drops to +0.5% over Tetris on TPC-H-30, while WeCA+LDDGNN achieves +14.0%. The ablation decisively supports the design.
+
+- **Formal optimality-gap analysis is a genuine contribution.** Theorems 1 and 2 establish that list scheduling's generation map is not surjective over the optimal solution space, and that the skip-augmented map closes this gap. The constructive proof and the criterion (Assumption 1) provide a principled framework that prior neural scheduling work lacked.
+
+- **LDDGNN outperforms standard GNN alternatives on directed dependency structure.** Table 3 shows a systematic ordering: WeCA+LDDGNN (14.0%) > WeCA+GAT(forward) (10.5%) > WeCA+GAT(bidirectional) (9.9%), consistent across both TPC-H-30 and TPC-H-50. The LDD-based attention bias is a targeted design for DAGs.
+
+- **Practical inference speed is a real advantage.** WeCAN-Greedy runs at 0.15–1.72s across TPC-H datasets, comparable to heuristics and orders of magnitude faster than PPO-BiHyb (20–179s), while producing better makespan. For time-sensitive scheduling, this tradeoff is operationally meaningful.
+
+- **Generalization to varying environments is demonstrated.** Figure 2 shows sustained improvement over best heuristics under variation in pool number, pool type, task number, and task type at test time — supporting the adaptability claim of the WeCA architecture.
+
+---
+
+## Weaknesses
+
+### Fatal
+None.
+
+### Major
+
+- **Two directly relevant RL baselines are absent from all comparison tables.** Section 2.1 explicitly characterizes Zhadan et al. (2023) and Wang et al. (2025) as RL methods for heterogeneous DAG scheduling that use averaging of compatibility coefficients — the exact limitation WeCAN claims to address. Yet neither appears in Tables 1 or 2. The included RL baselines, PPO-BiHyb (Wang et al., 2021) and One-Shot (Jeon et al., 2023), either solve a structurally easier problem (One-Shot ignores compatibility coefficients entirely, as the paper itself notes) or use a radically different and slower inference paradigm (PPO-BiHyb with beam search at 20–179s vs. WeCAN at sub-5s). The headline "7.7% improvement over the best neural baseline" is therefore against competitors that do not operate in the same problem setting. Without Zhadan et al. (2023) and Wang et al. (2025), the claim of state-of-the-art RL performance for heterogeneous DAG scheduling is not established.
+
+### Minor
+
+- **Skip action's practical benefit on standard benchmarks is not isolated.** The skip ablation (Figure 3) uses a dataset specifically modified to contain 1% heavy tasks — a setting engineered to exhibit list scheduling's failure mode. Tables 1 and 2 have no "WeCAN-no-skip" row, making it impossible to quantify how much the skip mechanism contributes under typical (unmodified) scheduling conditions versus how much comes from the WeCA+LDDGNN architecture. Given that the skip analysis is one of the paper's two headline contributions, this gap is worth addressing.
+
+- **Ablation sample size is small.** Table 3 reports results from 10 test problems per condition. With standard deviations on the order of 0.2%, differences of 0.5–4% between ablation variants may not be statistically robust. A modest increase in test set size or a paired significance test would strengthen these comparisons.
+
+- **Main experiments use only 3 resource pools.** The heterogeneous scheduling setting the paper targets is motivated by environments with varying pool counts, but all Tables 1 and 2 results use exactly 3 pools. The generalization experiment in Figure 2 tests varying pool counts but only reports relative improvement over heuristics, not absolute comparisons to RL baselines. This limits the scope of empirical evidence for the scalability claim.
+
+### Trivial
+None beyond the usual.
+
+---
+
+## Nice-to-Haves
+
+- Move the auto-regressive vs. non-auto-regressive quality comparison from Appendix B into the main paper, with a table showing numbers. The non-AR design is the core speed-quality tradeoff of the approach; quantifying the quality cost would help readers understand where the design lands in the Pareto frontier.
+- Provide training convergence curves with and without skip to substantiate the variance-reduction claim ("clusters poor solutions in high-ua, high-uc region") made in Section 4.
+- A concrete schedule visualization on a heavy-task DAG instance would make the theoretical gap analysis in Section 4 tangible.
+
+---
+
+## Removed Points
+*These points are flagged to be removed, treat them with caution.*
+
+- **Non-AR decoder "mischaracterized as pure engineering win"** (Harsh Critic, structural point): The paper explicitly states in Section 3.2 "comparison with auto-regressive one in Appendix B" and discusses the tradeoff. The appendix exists even if not parsed. The concern about missing main-body quantification is a presentation preference, not a factual mischaracterization. Downgraded to Nice-to-Have.
+- **Formula for skip score lacks formal derivation** (Harsh Critic): The formula uπ_skip = ua(1 − k/2n)^ub + uc is a parametric design choice for a learned module. Demanding a formal derivation for a neural architecture component is outside community norms for empirical RL papers; the paper provides intuitive justification and empirical validation (Figure 3).
+- **REINFORCE convergence guarantee absent** (Harsh Critic): Demanding convergence proofs for REINFORCE in an empirical systems paper is not standard in this community. Moved to Nice-to-Have.
+- **Small test set for Figure 2** (Harsh Critic): The generalization experiment is presented as a robustness check, not a primary result. Criticizing its sample size without evidence of instability is insufficient to sustain as a weakness.
+- **Large-scale results in Appendix F** (Harsh Critic): Per rules, appendix content exists in the original submission. Not a valid criticism.
+
+---
+
+## Novel Insights
+
+The most non-obvious insight in this paper is the combination of a **surjectivity criterion** (Assumption 1) as the formal condition for a generation map to guarantee access to the optimal solution, together with the observation that the naive surjective map (Sn) concentrates training variance badly while the skip-augmented list scheduling map clusters poor solutions in a identifiable region of the parameter space. This framing converts what is usually treated as an engineering heuristic (adding skip/wait actions) into a theoretically grounded design decision. The characterization is crisp and more actionable than prior work on the subject.
+
+---
+
+## Evaluation on Key Axes
+
+**Originality:** Moderate-to-good. The WeCA outside-softmax placement and the skip-augmented surjection analysis are specific and motivated innovations, not incremental variations on known architectures. The LDDGNN is an application of known ideas (Graphormer-style biases) to a new domain.
+
+**Importance of research question:** Good. Heterogeneous DAG scheduling is practically important, and the gap between current RL methods and heuristics in this space is real.
+
+**Claim support:** Partially strong. The WeCA design and LDDGNN contributions are well-supported by ablations. The "state-of-the-art RL" claim is not adequately supported given the absence of Zhadan et al. (2023) and Wang et al. (2025).
+
+**Experimental soundness:** Adequate for the included comparisons; limited by the missing baselines and the skip ablation being restricted to an engineered scenario.
+
+**Clarity:** Good. The paper is clearly written with well-structured technical content.
+
+**Value to community:** Moderate. The theory of optimality gaps in list scheduling is a useful framework; the WeCA design and LDDGNN are reusable components.
+
+---
+
+## Calibration Anchors
+
+| Paper | Avg Score | Comparison |
+|---|---|---|
+| jsWCmrsHHs (DRL improvement heuristic for JSSP) | 7.5 | Stronger: comprehensive baselines vs. all state-of-the-art DRL methods, clean claim support. WeCAN is weaker on baseline coverage. |
+| Aly68Y5Es0 (L-RHO for FJSP) | 6.75 | Comparable in methodology quality; WeCAN slightly weaker on breadth of experimental validation. |
+| z2z9suDRjw (GOAL generalist CO) | 6.25 | Comparable; GOAL's generalist scope is broader, WeCAN's theory is deeper. |
+| VIEbRFp6s3 (MARL datasets) | 5.8 | WeCAN is technically more novel. |
+| ziB549CQ30 (Fuzzy JSSP) | 3.5 | WeCAN is clearly superior: real architecture novelty, theoretical analysis, solid ablations. |
+| bntJK4NyIW (Decentralized training) | 2.0 | WeCAN is significantly stronger in every dimension. |
+
+WeCAN's technical quality places it above the 5.0–5.8 cluster but below the 6.75–7.5 band due to the missing RL baseline comparisons (the exact gap that separates incomplete from comprehensive empirical validation in this subfield). A score of **5.5** is appropriate, reflecting real contributions constrained by a significant experimental gap.
+
+## Score and Decision
+
+**Score: 5.5**  
+**Decision: Reject (Borderline)**
+
+The paper has real technical contributions — the WeCA design, LDDGNN, and the optimality-gap framework are all concrete and well-supported. However, the absence of Zhadan et al. (2023) and Wang et al. (2025) as baselines — methods the paper itself characterizes as the closest prior RL work for the exact problem setting — prevents verification of the central empirical claim. Addressing this gap in a revision would likely bring the paper into acceptance range.
+
+MY FINAL SCORE: <pineapple>5.5</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>
+
+--- Scorer Output ---
+5.5
+
+--- Decision ---
+Reject
+
+============================================================
+Paper: ../iclr2026_cspaper/papers/4S5x8yhJ5H.txt
+Timestamp: 2026-04-25T17:46:07
+
+--- Token Usage ---
+  Harsh Critic: N/A (claude_sdk path)
+  Strength Finder: input=12464 (cached=0) output=1219 (reasoning=0) total=13683 requests=1 duration=n/ams
+  Merger: N/A (claude_sdk path)
+  TOTAL: input=12464 output=1219 total=13683
+
+--- Claude SDK Usage ---
+  [Harsh Critic]
+    Model: claude-sonnet-4-6
+    Session ID: 33f51f92-ae68-40f8-b08b-7f851a0d4e82
+    Cost (USD): 0.1340265
+    Turns: 4
+    Duration: total=105647ms api=103338ms
+    Tokens: input=8 output=4371 cache_read=18775 cache_creation=16748
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  [Merger]
+    Model: claude-sonnet-4-6
+    Session ID: eed550fa-347d-4bce-9dcb-9e7389aa8913
+    Cost (USD): 0.3290313
+    Turns: 15
+    Duration: total=199971ms api=187135ms
+    Tokens: input=19 output=7992 cache_read=225581 cache_creation=37712
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  TOTAL Claude SDK cost (USD): 0.4631
+
+--- Merged Inputs ---
+
+### Harsh Critic
+I'll start by reading the paper end-to-end before writing the review.Now I have a complete picture of the paper. Let me write the review.
+
+---
+
+# Review: VIBEFACE — Video and Image Biometric Dataset for Evaluation of Faces
+
+## Critical Issues
+
+**1. The face verification benchmark is structurally invalid. [Section 4.2, Table 4]**
+**Classification: Structural.**
+
+The verification experiment evaluates only genuine pairs — each subject's query frames are matched against that same subject's reference image. No impostor pairs are included. Without a set of cross-subject (impostor) comparisons, it is impossible to compute any meaningful verification metric: no False Match Rate (FMR), no False Non-Match Rate (FNMR), no Equal Error Rate (EER), no ROC curve, no TAR@FAR. The paper measures "percentage of frames in which the face was correctly authenticated," which is just genuine-match recall at a single operating point. This is not face verification performance — it conflates detection rate (is the face visible and localisable?) with identity discrimination (can the system distinguish this person from others?). A system that always outputs a high similarity score above 0.5 would score 100% by this metric while being useless for security. This is not a matter of adding experiments; the evaluation framework does not measure what the paper claims it measures. The verification benchmark cannot be used as a biometrics benchmark without impostor pairs.
+
+**2. A single, arbitrary, model-agnostic threshold is used for both models. [Section 4.2]**
+**Classification: Structural.**
+
+Both ArcFace and MagFace are evaluated at a fixed threshold of τ = 0.5, regardless of each model's score distribution. ArcFace uses cosine similarity after L2-normalization on a hypersphere; MagFace uses the same backbone architecture but with magnitude-aware margin, producing different score distributions. The same absolute threshold 0.5 corresponds to different operating points (different FMR/FNMR tradeoffs) for the two models. The reported comparison — "ArcFace consistently outperformed MagFace" (Section 4.2) — is therefore comparing the two models at non-equivalent operating points. Any conclusion about which model is better cannot be drawn from this design. Standard biometric evaluation compares models at matched operating points (e.g., both at FMR=0.001) or via the full ROC curve.
+
+**3. "Realistic/unconstrained" motivation directly contradicts controlled studio collection. [Abstract, Section 1 vs. Section 3]**
+**Classification: Structural.**
+
+The abstract and introduction repeatedly motivate VIBEFACE by the need for data that reflects real-world eKYC conditions: "users recording short videos under unconstrained conditions — at home, in variable lighting, and across heterogeneous mobile devices." Section 3 then states: "Data acquisition was conducted in a controlled studio environment, each session in a separate room specifically arranged to ensure consistent experimental conditions … participants received standardized instructions and were continuously supervised by trained operators." The diversity of lighting is entirely simulated (cool LED / warm tungsten / softbox / flash / partially covered window), not captured in naturalistic environments. The claim that VIBEFACE reflects "realistic authentication scenarios" is structurally contradicted by its collection protocol. This cannot be fixed by adding text; the data itself was collected in controlled conditions.
+
+---
+
+## Section-by-Section Notes
+
+**Abstract / Introduction:** The claim "to the best of our knowledge, there are no publicly available datasets that include authentic eKYC-style facial videos alongside still images" is the central novelty claim. It may be true in a narrow sense, but the distinction from existing mobile biometric video datasets (MOBIO, Replay-Mobile, SOTERIA) is a matter of the specific action scripts (blinking, head turning, mouth opening), not a fundamentally different data modality. The introduction should make this narrower distinction explicit rather than framing it as an absence of any prior work on real-world video biometrics.
+
+**Section 3 — Dataset scale:** 50 subjects is extremely small. At 12–13 subjects per racial group and roughly 17 per age group, within-cell sample sizes cannot support any statistically meaningful demographic bias analysis. No variance, confidence intervals, or significance tests are reported anywhere. All numerical differences between demographic groups in Tables 3 and 4 are presented as if they are reliable findings when they are based on 12–13 subjects per subgroup. This concern carries over to every demographic comparison in the paper.
+
+**Section 3.3 — Reference sample choice:** The verification reference is a flash-session image (Scenario 3, Session B), which is the only scenario captured with the back-facing camera. Every query sample uses the front-facing camera. This front-to-back camera asymmetry introduces a systematic domain gap (focal length, sensor, image geometry) between the reference and all query samples. The paper does not acknowledge or discuss this confound. It also means that "emulating a typical document-based authentication setup" is somewhat misleading, since ID document images are typically scanned documents, not flash selfies.
+
+**Section 4.1 — Face detection:** The detection rate metric (fraction of frames with a detected face) is reasonable and well-defined for this task, and the breakdown across sessions and demographic groups is informative. However, sessions B (flash, back camera only, standardized photos) are excluded from the detection benchmark entirely, which is appropriate but not flagged explicitly. RetinaFace achieves 1.000 across nearly all cells, making it uninformative for discriminating conditions. The more interesting comparison is between MTCNN and MediaPipe, which shows genuine differentiation.
+
+**Section 5 — Conclusions and scope:** The paper mentions at the end that VIBEFACE "holds potential for broader applications" including presentation attack detection (PAD) and deepfake injection detection. Given that the dataset contains only bona fide samples — no attacks, no spoofs, no deepfakes — it can only serve as the bona-fide half of a PAD or anti-spoofing benchmark. This severely limits its applicability in those areas and the claim is oversold.
+
+---
+
+## Strengths
+
+- The eKYC action protocol (Section 3.2, scenarios 12–18) is well-specified and carefully designed to cover the range of liveness prompts used in real deployments. The distinction between blinking, mouth opening, expression change, head rotation, and occlusion scenarios is more granular than comparable datasets.
+- The ethical and legal framework is thorough: GDPR and EU AI Act compliance, informed consent, anonymized identifiers, controlled-access licensing. For a biometric dataset, this is genuinely above average.
+- Using three different consumer smartphones (Xiaomi Redmi Note 13, iPhone 13, Samsung Galaxy A35) and converting across formats provides some meaningful cross-device variability for a 50-subject collection.
+- The comparison table (Table 1) provides a clear positioning relative to existing datasets.
+
+---
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+
+1. **Include impostor pairs in the verification benchmark.** Without genuine/impostor score distributions, Table 4 measures nothing about verification. The minimal fix is to run all 50 × 49 = 2,450 impostor pairs alongside the 50 genuine pairs and report EER and TAR@FAR=0.01. Without this, the verification benchmark cannot be used.
+
+2. **Model-normalized thresholds or ROC-based comparison.** To fairly compare ArcFace and MagFace, find each model's threshold at a target FMR on a calibration partition, then report performance at matched operating points, or report full ROC curves. The current single-threshold comparison is uninformative.
+
+3. **Statistical uncertainty for demographic analysis.** With 12–13 subjects per subgroup, all demographic comparisons need bootstrap confidence intervals or permutation tests. Without them, it is impossible to know whether any observed difference is signal or noise.
+
+### Deeper Analysis Needed
+
+1. **Source of verification errors in video scenarios.** ArcFace OAV (off-angle views) achieves only 0.509 in session A (Table 4), barely above the threshold. Understanding whether failures are due to pose, motion blur, or identity ambiguity would make the benchmark interpretable and actionable.
+
+2. **Cross-device analysis.** Three devices were used but device identity is never reported as an analysis axis in Tables 3 or 4. This is a missed opportunity; cross-device variability is one of the stated motivations for the dataset.
+
+### Visualizations & Case Studies
+
+1. **Score distributions for genuine vs. impostor pairs (once added)** — histograms per model per session would reveal where thresholds should be set and whether demographic groups have different separation quality.
+2. **Failure frame examples** — qualitative examples of frames where detection or verification fails (not just the eKYC action examples in Figure 3) would help users understand dataset challenges.
+
+### Obvious Next Steps
+
+1. **Increase subject count to at least 200–300** before making demographic fairness claims. At 50 subjects, statistical power is insufficient to draw conclusions about race- or age-group differences. This is not a revision request for the current submission — it is a precondition for the fairness claims to be credible.
+
+---
+
+## Overall Assessment
+
+The paper introduces a well-motivated dataset with careful ethical handling and a clear eKYC scenario design. However, the verification benchmark — which is one of the two experiments that constitute the paper's demonstration of dataset utility — is structurally broken: it tests only genuine pairs, uses a fixed arbitrary threshold, and reports a metric that does not measure verification discrimination. This is not a gap that can be filled by adding a discussion section; the experimental results in Table 4 do not show what the paper claims they show. Compounding this, the motivation (unconstrained real-world eKYC) is contradicted by the collection protocol (controlled studio with simulated lighting), and the 50-subject scale means no demographic analysis reaches statistical credibility. The contribution is a dataset, not a method, and the dataset's utility cannot be established without a valid evaluation. The paper should not be accepted at ICLR in its current form; it requires a substantially revised evaluation protocol (impostor pairs, standard biometric metrics, calibrated thresholds) and either a larger-scale collection or substantially reduced claims about demographic fairness. Even with those fixes, the venue fit for ICLR — which centers on machine learning methodology — is questionable; the appropriate venue would be a biometrics conference such as IJCB or ICB.
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+1. **First publicly available dataset with eKYC-style video verification scenarios**: The paper identifies a genuine gap—no existing public dataset combines still images with authentic eKYC video workflows—and fills it. Section 3.2 defines 7 distinct verification video scenarios (scenarios 12–18) that directly map to real eKYC procedures (circular head rotation, blinking, expression changes, mouth opening, face occlusion, face touching), which no dataset in the comparison (Table 1) provides.
+
+2. **Rigorous demographic balance across three axes**: The dataset achieves exact 50:50 gender balance (25 female, 25 male; Figure 1a), near-balanced race distribution (13 African, 13 Caucasian, 12 East Asian, 12 South Asian; Figure 1b), and age coverage from 18–69 following ISO 27553:2011 standards (Section 3.1). This goes beyond prior datasets like SOTERIA, which the authors note underrepresents middle-aged and older individuals (Section 2).
+
+3. **Benchmark evaluation reveals actionable fairness disparities**: The face detection results (Table 3) show MTCNN's detection rate drops to 0.610 for African descent subjects versus 0.984 for East Asian subjects on frontal views—a substantial fairness gap that existing datasets would not surface. Similarly, face verification (Table 4) shows the youngest age group (18–30) yields lowest verification rates for both ArcFace and MagFace, a non-obvious finding that demonstrates the dataset's utility for bias auditing.
+
+### Supporting strengths
+1. **Systematic multi-session design isolating environmental factors**: The five sessions (A–E; Table 2) separately control for lighting type (artificial, flash, natural, weak natural) and eyeglasses presence, enabling targeted analysis of these factors. The benchmark results confirm sessions C (eyeglasses) and E (weak natural light) are the most challenging, validating this design choice (Tables 3–4).
+
+2. **Ethical and legal compliance with controlled access**: The dataset was collected under GDPR and EU AI Act compliance, with informed consent, anonymized identifiers, and a restricted non-commercial research license (Section 3.4–3.5). This addresses a well-known problem with legacy datasets like MS-Celeb-1M and VGGFace2, which were retracted over consent concerns (Section 2).
+
+3. **Cross-device capture reflecting real deployment**: Data was collected on three consumer-grade smartphones (Xiaomi Redmi Note 13, iPhone 13, Samsung Galaxy A35 5G) with device randomly assigned per session (Section 3), ensuring the dataset captures the cross-device variability present in actual mobile authentication deployments.
+
+### Presentation / practical strengths
+1. **Multiple benchmark tasks with per-demographic breakdowns**: Tables 3 and 4 provide results broken down by scenario, session, gender, age group, and race category for all three detectors and two verifiers, offering an immediately usable fairness evaluation baseline.
+
+## Summary
+
+The paper introduces VIBEFACE, the first publicly available dataset combining still images and eKYC-style verification videos with balanced demographics across gender, race, and age. The single most important piece of evidence that it delivers on this contribution is the benchmark evaluation (Tables 3–4), which demonstrates that the dataset's controlled variability in lighting, occlusion, and pose—combined with its demographic balance—reveals concrete fairness gaps in existing systems, such as MTCNN's 37 percentage-point disparity in detection rates between African and East Asian subjects.
+
+--- Merged Review ---
+Now let me search for calibration anchors.Now I have enough information to write the consolidated final review.
+
+---
+
+## Summary
+
+VIBEFACE is a multimodal biometric dataset of 50 participants, comprising 2,250 still images and 1,550 short videos, captured under five session conditions designed to mimic eKYC (electronic Know Your Client) authentication workflows. The dataset emphasizes demographic balance across gender, race, and age, and demonstrates dataset utility via face detection and face verification benchmarks evaluated across three detectors and two verifiers with per-demographic breakdowns.
+
+---
+
+## Strengths
+
+- **Well-specified eKYC action protocol**: Scenarios 12–18 (circular head rotation, blinking, mouth opening, face occlusion, sequential face touching, expression changes) directly map to real eKYC liveness prompts with a granularity that exceeds existing datasets in Table 1. This is a concrete and original design contribution.
+- **Detection benchmark reveals genuine fairness gaps**: Table 3 shows MTCNN's detection rate falling to 0.610 for African-descent subjects vs. 0.984 for East Asian subjects on frontal views — a 37 pp disparity that is actionable and non-trivial, providing real evidence of dataset utility.
+- **Above-average ethical and legal compliance**: Explicit GDPR and EU AI Act adherence, informed consent, anonymized identifiers, controlled-access non-commercial licensing, and zero personally identifiable metadata constitute a genuinely thorough framework, especially relevant for biometric data.
+- **Cross-device capture**: Three distinct consumer smartphones (Xiaomi Redmi Note 13, iPhone 13, Samsung Galaxy A35 5G), randomly assigned per session, provide meaningful device variability matching real mobile deployment conditions.
+- **Demographic balance**: Exact 50:50 gender split, near-balanced four-way racial distribution (13/13/12/12), and ISO 27553:2011-compliant age structure are implemented carefully and exceed comparable datasets.
+
+---
+
+## Weaknesses
+
+### Fatal
+
+None that fully invalidate the dataset itself, but see the Major section — one flaw fatally undermines the verification benchmark specifically.
+
+### Major
+
+- **The verification benchmark contains only genuine pairs (no impostors), rendering Table 4 metrics uninterpretable as verification performance.** Section 4.2 states: "Verification was considered successful when the similarity score exceeded a fixed threshold of 0.5. Performance was measured as the percentage of frames in which the face was correctly authenticated." Every query frame is from the *same* subject matched against their own reference. No cross-subject (impostor) comparisons are run. As a result, the metric is simply genuine-match recall at a single operating point — not verification discrimination. A system that always outputs a similarity score of 0.6 would score ~100% by this metric while being completely useless at distinguishing identities. Standard biometric evaluation requires genuine/impostor score distributions to compute EER, TAR@FAR, or any meaningful ROC. The claim "ArcFace consistently outperformed MagFace across scenarios, sessions, and demographic groups" cannot be supported by this data, since only the genuine-side score distribution is characterized. This is the most severe flaw in the paper, as it invalidates one of the two benchmark tasks used to demonstrate dataset utility.
+
+- **Single fixed threshold τ = 0.5 is used for both ArcFace and MagFace without normalization.** ArcFace and MagFace use the same cosine-similarity range in principle, but magnitude-aware margin training in MagFace produces different score distributions. Applying the same absolute threshold compares models at non-equivalent operating points (different implicit FMR/FNMR tradeoffs). Even the model-level comparison — and all the demographic-level findings in Table 4 — are confounded by this. This cannot be fixed by discussion alone; calibrated thresholds or ROC curves are required.
+
+- **The "realistic/unconstrained" framing of the introduction directly contradicts the controlled studio collection.** The introduction motivates VIBEFACE by describing eKYC "users recording short videos under unconstrained conditions — at home, in variable lighting, and across heterogeneous mobile devices." Section 3 then discloses that "Data acquisition was conducted in a controlled studio environment, each session in a separate room specifically arranged to ensure consistent experimental conditions ... participants received standardized instructions and were continuously supervised by trained operators." The variability comes from scripted lighting manipulations, not from naturalistic capture. This is a legitimate methodological constraint (consent and control were necessary), but the abstract and introduction repeatedly claim the data "reflects realistic authentication scenarios" in ways that are not accurate given the collection protocol. The framing should be corrected to: the dataset *simulates* key variability factors rather than capturing them naturalistically.
+
+### Minor
+
+- **Front-facing vs. rear-facing camera asymmetry in the reference image is unacknowledged.** The reference (Session B) is captured with the rear-facing camera under flash (back camera, as noted in Table 2), while all query samples use the front-facing camera. This introduces a systematic domain gap (sensor, focal length, image geometry) between reference and query that is not mentioned in the paper. This is a confound that users of the dataset need to know about.
+
+- **50 subjects is too small for the demographic claims made.** With 12–13 subjects per racial group and roughly 17 per age group, all differences in Tables 3 and 4 across demographic subgroups are based on single-digit to low-double-digit sample counts. No confidence intervals, bootstrap estimates, or significance tests are reported. Demographic findings should be presented as preliminary observations rather than reliable empirical conclusions.
+
+### Trivial
+
+- RetinaFace achieves 1.000 in all image-based cells and near-perfect scores in video cells (Table 3), making it uninformative for discriminating conditions. This could be noted briefly to save space for the more informative MTCNN/MediaPipe comparison.
+
+---
+
+## Nice-to-Haves
+
+- **Include impostor pairs in the verification benchmark** (50×49 = 2,450 cross-subject pairs minimum) and report EER and TAR@FAR=0.01; this would convert Table 4 from descriptive recall into a real biometric evaluation.
+- **Cross-device analysis axis**: The three smartphones used are randomized per session but never broken out as an analysis dimension in Tables 3 or 4; this is one of the stated motivations and would add value.
+- **Failure case analysis**: Qualitative examples of frames where detection or verification fails would help users understand dataset challenges beyond aggregated numbers.
+- **Calibrated model comparison**: Plot ROC curves or find threshold at a target FMR for each model separately, allowing a fair ArcFace vs. MagFace comparison.
+
+---
+
+## Removed Points
+
+*These points are flagged to be removed; treat them with caution.*
+
+- **Harsh critic's suggestion that this venue is wrong (ICLR)**: Removed as an editorial judgment. Dataset papers with benchmark contributions are within scope for ICLR, even if infrequent.
+- **PAD/deepfake application claim is "severely oversold"**: The paper is explicit that it provides "high-quality bona fide samples" and frames PAD as a "potential" future direction, not a demonstrated capability. This is reasonable hedging, not a factual overclaim. Removed.
+- **Strength: "37 pp MTCNN disparity proves dataset utility"**: Kept — this is grounded in Table 3 data.
+- **Strength Finder's point about youngest age group yielding lowest verification**: Technically true per Table 4 (ArcFace OAV: 18–30 = 0.466 vs. 31–50 = 0.469 vs. 51–70 = 0.519) but the differences in the genuine-recall metric are not interpretable as verification discrimination without impostor pairs. Retained only in the detection context.
+
+---
+
+## Novel Insights
+
+The most important observation surfacing from synthesis is that the verification benchmark as designed measures only one side of the biometric operating characteristic (genuine recall) while presenting it as verification performance. This is a subtle but consequential error: dataset papers in the biometric domain are evaluated in part by whether their benchmark protocol is sound enough for others to adopt. Because VIBEFACE's verification protocol lacks impostor pairs, a practitioner replicating Table 4 cannot extract any of the standard biometric metrics (EER, ROC, TAR@FAR) that would actually let them compare systems or assess demographic fairness in verification. The detection benchmark (Section 4.1) is entirely sound and reveals a real fairness gap — the pity is that the verification benchmark, which is more directly relevant to eKYC authentication, is not.
+
+---
+
+## Suggestions
+
+1. **Immediately**: Add all 50×49 impostor pairs to the verification experiment and replace Table 4 with EER/TAR@FAR breakdown; this single change rescues the paper's core benchmark claim.
+2. Adopt model-specific thresholds (derived from a calibration subset or a published operating point) rather than a single τ = 0.5 for ArcFace and MagFace comparison.
+3. Revise introduction/abstract framing from "unconstrained/realistic" to "controlled simulation of real-world variability" to be accurate.
+4. Add a short discussion of the front-to-back camera domain gap in the reference sample, and consider adding a front-camera frontal reference alternative.
+5. Flag all demographic group comparisons as preliminary and underpowered (n ≈ 12–13 per group) pending future data collection.
+
+---
+
+## Score and Decision
+
+**Calibration anchors:**
+
+| Paper | Path | Avg Human Score | Comparison |
+|---|---|---|---|
+| VIBeID (biometric dataset, 100 subjects, valid benchmark) | `/home/wg25r/review_agent/human_reviews/2d734s2WDb.md` | 5.75 (Reject) | Most comparable: biometric dataset paper with valid benchmark, 2× more subjects; no broken evaluation |
+| Person Detection Bias (dataset bias analysis, weak methodology) | `/home/wg25r/review_agent/human_reviews/tC1b9DBWww.md` | 2.50 (Reject) | Low anchor: has dataset + bias analysis but fundamentally insufficient analysis of results |
+| NeuFace (face video dataset + method) | `/home/wg25r/review_agent/human_reviews/E6EbeJR20o.md` | 5.50 (Reject) | Medium anchor: face video dataset with methodological contribution, valid benchmark |
+| Face Recognition ROC Fairness | `/home/wg25r/review_agent/human_reviews/lAhQCHuANV.md` | 6.33 (Accept) | High anchor: face recognition + fairness, theoretical soundness, valid evaluation |
+| F3Set (video benchmark, large scale) | `/home/wg25r/review_agent/human_reviews/vlg5WRKHxh.md` | 7.00 (Accept) | High anchor: strong benchmark paper with comprehensive evaluation |
+
+**Reasoning**: VIBeID (5.75, Reject) is the best analog — a biometric dataset with a valid benchmark at a methods venue. VIBEFACE falls below VIBeID on every dimension: half the subjects, a broken verification benchmark, and a framing inconsistency. The detection benchmark is solid but accounts for only one of two demonstrated uses. The broken verification benchmark is a concrete methodological flaw that a practitioner would immediately encounter when attempting to use Table 4, putting VIBEFACE in the 4.0 range — meaningfully below VIBeID (5.75) and above the genuinely weak papers like tC1b9DBWww (2.50). The paper's strong ethical scaffolding and eKYC design are real contributions, but they do not compensate for the evaluation flaw in the context of demonstrating benchmark utility.
+
+**Originality**: Moderate — the eKYC scenario design is novel; the dataset-plus-benchmark format is standard.
+**Importance of research question**: Moderate — eKYC fairness is a real applied problem.
+**Claims well-supported**: Partially — detection claims hold; verification claims do not.
+**Soundness of experiments**: Detection: sound. Verification: structurally flawed.
+**Clarity of writing**: Generally clear with some framing inconsistencies.
+**Value to community**: Genuine potential, but only if the verification protocol is corrected.
+
+**Final Score: 4.0**
+
+MY FINAL SCORE: <pineapple>4.0</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>
+
+--- Scorer Output ---
+4.0
+
+--- Decision ---
+Reject
+
+============================================================
+Paper: ../iclr2026_cspaper/papers/b6qQmQ2F13.txt
+Timestamp: 2026-04-25T17:46:49
+
+--- Token Usage ---
+  Harsh Critic: N/A (claude_sdk path)
+  Strength Finder: input=9956 (cached=0) output=1532 (reasoning=0) total=11488 requests=1 duration=n/ams
+  Merger: N/A (claude_sdk path)
+  TOTAL: input=9956 output=1532 total=11488
+
+--- Claude SDK Usage ---
+  [Harsh Critic]
+    Model: claude-sonnet-4-6
+    Session ID: 9dbfc65e-d662-48d7-a058-59c264a2164a
+    Cost (USD): 0.16098780000000001
+    Turns: 5
+    Duration: total=138027ms api=135642ms
+    Tokens: input=9 output=6210 cache_read=33336 cache_creation=15416
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  [Merger]
+    Model: claude-sonnet-4-6
+    Session ID: 75324742-f3da-4ae3-9982-35d69046f905
+    Cost (USD): 0.36664094999999997
+    Turns: 15
+    Duration: total=260695ms api=249887ms
+    Tokens: input=19 output=9701 cache_read=240834 cache_creation=39685
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  TOTAL Claude SDK cost (USD): 0.5276
+
+--- Merged Inputs ---
+
+### Harsh Critic
+I'll start by reading the paper end-to-end before writing the review.Now I have read the full paper. Let me write the review.
+
+---
+
+# Review: "Not All Bits Are Equal: Scale-Dependent Memory Optimization Strategies For Reasoning Models"
+
+---
+
+## Critical Issues
+
+### 1. The headline "8-bit 4B threshold" is internally inconsistent across the paper's own findings — *Structural*
+
+The paper organizes five findings around a single unifying scale threshold, but the threshold is not actually consistent. Findings 1, 2, and 3 use **"effective size smaller than 8-bit 4B"** (≈ 4.2 GB), while Finding 5 (KV eviction vs. quantization) uses a different threshold: **"effective size smaller than an 8-bit 8B model"** (~9 GB). These are not the same boundary, and the paper provides no explanation for why the optimal compression strategy transitions at a different scale than the KV-vs-weights allocation strategy. The central claim that a single scale-dependent inflection point unifies these trade-offs is undermined by the paper's own evidence. The framing of "one threshold to rule them all" is marketed in the abstract, introduction, and conclusion, but the experimental results do not support it.
+
+This is not a presentational issue. If the eviction/quantization threshold is at 8B and the weights/KV-cache threshold is at 4B, the practitioner needs two separate decision rules, not one. The claimed unification is false.
+
+### 2. The entire analysis is predicated on single-request inference; for batched deployment the prescribed strategy may reverse — *Structural*
+
+The core memory equation is M = M\_weights + M\_kv, where both weights and KV cache are charged to a single request. This framing is appropriate for personal-device inference (a single user running a single query). But the paper's introduction explicitly motivates the work with serving scenarios ("in batched inference: with model weights amortized…the aggregated KV cache becomes the primary memory constraint"). In batched serving, weights are amortized across B concurrent requests, fundamentally changing the balance: even for a small model, the KV cache dominates per-request memory as soon as batch size exceeds a small number.
+
+The paper's main prescription for small models—"allocate memory to weights, not KV cache"—is derived entirely in the single-request regime. In a serving regime with batch sizes of 4–8, the break-even point shifts substantially and the advice could reverse. Appendix C.3 exists but the paper never reconciles this tension with the main findings or states the regime of validity for its recommendations. A practitioner reading the abstract or findings would be misled if they are deploying a batched inference server (the stated motivating use case).
+
+### 3. Statistical reliability of Pareto frontier comparisons on AIME25 is not established — *Methodological gap*
+
+AIME25 contains 30 problems. Pass@1 accuracy is reported to the nearest percentage point, meaning a swing of ±1 problem corresponds to ±3.3% accuracy. Yet differences of this magnitude or smaller are used to position configurations as "on" or "below" the Pareto frontier. The paper reports accuracy averaged over 32 generations per instance but provides no confidence intervals, standard deviations, or significance tests anywhere in the main body. With 30 problems and high variance in reasoning model outputs, multiple configurations whose frontiers are compared could be statistically indistinguishable. This is especially problematic for Finding 2 (8-bit vs. 16-bit preferences on math tasks), where the claimed differences between configurations are small and the benchmark is small.
+
+---
+
+## Section-by-Section Notes
+
+**Abstract and Introduction.** The abstract states the threshold "also determines when parallel scaling becomes memory-efficient and whether KV cache eviction outperforms KV quantization." As noted above, the two thresholds cited in the paper are different (4B vs. 8B effective size). This is overclaimed.
+
+**Section 3 (Experimental Setup), Table 1.** A notable architectural feature of the Qwen3 family is that Qwen3-0.6B and Qwen3-1.7B have **identical** KV cache memory (0.21 GB at 2k, 1.92 GB at 18k, 3.20 GB at 30k), and similarly Qwen3-4B and Qwen3-8B share identical KV cache sizes. This means these model pairs have the same KV head configuration despite having different numbers of parameters. This architectural idiosyncrasy of Qwen3 means the memory curves are not smooth in parameter count—there are discrete jumps. The threshold finding (the 4B/8B boundary) may be an artifact of this architecture rather than a general principle. The paper does not discuss this.
+
+**Section 4 (Serial Scaling).** Finding 2 claims 4-bit is broadly memory-optimal for knowledge-intensive tasks and that higher precision is required for math/code. This is an interesting result but the causal mechanism proposed ("mathematical reasoning may rely on numerical precision within the weights") is speculative and not tested. An alternative and arguably more parsimonious explanation—4-bit degrades general reasoning capability—would have been distinguishable by testing on tasks with logical (non-numerical) multi-step reasoning. The cited Feng et al. (2025) paper on numerical precision is not directly about weight quantization effects, so the causal story is not established.
+
+**Section 4.1 (PRM Analysis).** The PRM comparison uses ActPRM-X (7B, 13.28 GB). This is a single PRM and a relatively large one. The finding that "self-contained majority voting is preferable to external verifiers" may not generalize to lighter-weight PRMs (e.g., 1–2B). The limitation is briefly noted in Section 7 but the finding is stated without qualification in the body.
+
+**Section 5 (KV Cache Compression).** The threshold for eviction-vs-quantization preference is stated as "effective size smaller than an 8-bit 8B model" in the text, but Figure 9's analysis treats the 4B model in full precision as the boundary example. The paper uses "8B" in one place and the figure demonstrates it at 4B. This should be clarified.
+
+**Section 6 / Limitations.** The paper acknowledges its Qwen3 focus appropriately and the limitation section is honest. However, it does not acknowledge the single-request vs. batched-inference tension, which is the more significant gap.
+
+**Generalization experiments.** DeepSeek-R1-Distill (Figure 6) and OpenReasoning-Nemotron (Figure 16) experiments are largely relegated to the appendix. For a paper whose central claim is generality of a threshold across model families, these should appear in the main body with quantitative threshold comparisons, not just qualitative shape agreement.
+
+---
+
+## Strengths
+
+1. **Scale of empirical coverage.** Over 1,700 configurations spanning six model sizes, three weight precisions, five token budgets, four group sizes, and multiple KV strategies is a genuinely large and systematic investigation.
+
+2. **Actionable practical framework.** Reformulating test-time scaling as a memory allocation problem, and quantifying the trade-offs through Pareto frontiers, is a principled and useful way to present deployment guidance.
+
+3. **Cross-quantizer validation.** Verifying that AWQ and FP8 yield nearly identical memory-accuracy curves to GPTQ (Appendix C.2) meaningfully strengthens the conclusion that findings are not quantization-scheme-specific.
+
+4. **KV cache compression analysis.** The finding that KV cache compression consistently advances the Pareto frontier even on top of aggressively quantized weights (Finding 4) is clean and practically important.
+
+5. **Task-type differentiation.** The distinction between math/code tasks (where 4-bit degrades memory efficiency) and knowledge tasks (where 4-bit is optimal) is novel relative to prior quantization literature and is substantiated across multiple benchmarks.
+
+---
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+
+1. **Cross-architecture threshold validation.** The paper needs to show that the 8-bit 4B threshold holds for at least one model family with a qualitatively different KV cache architecture (e.g., different head counts or head dimensions). Without this, the threshold is a Qwen3 property. This directly bears on the generality claim in the abstract.
+
+2. **Batched inference analysis in the main body.** The key finding for small models ("allocate memory to weights, not KV cache") needs to be evaluated at batch sizes of 2, 4, and 8 in the main body, not only the appendix. Without this, the serving-scenario recommendation is unsupported and potentially backwards. The claim requires knowing at what batch size the prescription flips.
+
+3. **Statistical uncertainty quantification.** Error bars or confidence intervals on the key Pareto frontier comparisons (especially on AIME25) are needed to establish that the stated hierarchy of configurations is reliable, not within noise.
+
+### Deeper Analysis Needed
+
+1. **Why does the threshold exist?** The paper shows *that* there is a scale transition but provides no theoretical or mechanistic account of *why* it occurs at this specific scale. Even an information-theoretic argument about KV cache content relative to model capacity would substantially strengthen the contribution.
+
+2. **Reconciling the two different thresholds.** The paper needs to explicitly address why weights-vs-KV transitions at 8-bit 4B while eviction-vs-quantization transitions at 8-bit 8B. If these are distinct phenomena, the unified "scale governs all" framing is misleading and should be corrected.
+
+### Visualizations & Case Studies
+
+1. **Per-model KV cache contribution as a fraction of total memory across token budgets.** A figure showing how the KV fraction grows with token budget for each model size would directly illustrate the regime where each recommendation applies and make the threshold more intuitive.
+
+### Obvious Next Steps
+
+1. **Training-time interaction.** All experiments use off-the-shelf models. Models trained with KV cache compression in mind (e.g., GQA-heavy or linear attention) would shift the trade-offs; acknowledging this and scoping the findings to post-training deployment explicitly would sharpen the contribution.
+
+---
+
+## Overall Assessment
+
+This paper addresses a timely and genuinely useful question—how to optimally allocate limited GPU memory across the various knobs available when deploying reasoning models. The empirical scale is impressive and several individual findings (e.g., task-type-dependent weight precision optimality, KV compression universally advancing the Pareto frontier) are credible, novel, and practically relevant. However, the paper's most prominent claim—that a single scale threshold at 8-bit 4B governs all the identified trade-offs—is falsified by the paper's own results, which use a different threshold (8-bit 8B) for the eviction-vs-quantization finding. Additionally, the entire analysis is conducted in a single-request inference frame while the paper's stated motivation is batched serving, and the paper does not resolve whether its prescriptions hold in the motivated deployment scenario. These are not fixable by adding text: the unified threshold story should either be corrected to acknowledge multiple thresholds or the threshold consistency should be demonstrated, and the batched-vs-single-request regime of validity must be explicitly delineated. Statistical uncertainty is absent where it matters most (AIME25 at 30 problems). The paper is publishable once these issues are addressed, but the current draft overstates both the cleanliness of the threshold finding and the generality of its recommendations.
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+
+1. **Identification of a clear scale-dependent threshold governing memory-optimal strategy**: The paper discovers that the 8-bit 4B effective size (~4.2 GB) demarcates when memory should be allocated to model weights vs. longer generation. Figure 2 demonstrates this concretely: below 8 GB, the Pareto frontier is advanced by increasing model size (e.g., 1.7B 8-bit at 6k tokens outperforms 0.6B 8-bit at 18k tokens), while above 10 GB, configurations with token budgets >20k dominate. This directly challenges the universal 4-bit prescription from Dettmers & Zettlemoyer (2023).
+
+2. **Task-dependent precision analysis with clear empirical evidence**: The paper shows that 4-bit quantization, while memory-optimal for knowledge-intensive tasks (GPQA-Diamond, Figure 4), is consistently memory-inefficient for mathematical reasoning (AIME25, Figures 1–2) and code generation (LiveCodeBench, Figure 3). The 32B 4-bit model is strictly dominated by 14B 8-bit and 8B 16-bit on AIME25 — a striking result that quantifies the precision-sensitivity of different task types.
+
+3. **Systematic comparison of KV cache compression strategies establishing eviction vs. quantization trade-offs**: Section 5 and Figures 8–9 show that eviction is superior for small effective sizes (preserving full precision of critical tokens) while quantization becomes competitive at larger scales. The full-precision 4B model with R-KV eviction at 8k token budget maintains near-lossless accuracy at substantially reduced memory (Figure 9), whereas 4-bit KV quantization causes significant accuracy drops for small models.
+
+4. **Massive and well-structured experimental scope covering 1,700+ configurations**: The study spans five model families (Qwen3 0.6B–32B, DeepSeek-R1-Distill, OpenReasoning-Nemotron), four benchmarks, three weight precisions, seven token budgets (2k–30k), group sizes up to 16, and multiple KV compression methods — enabling the cross-cutting analysis that reveals the scale-dependent thresholds.
+
+### Supporting strengths
+
+1. **Parallel scaling analysis revealing when majority voting is memory-efficient**: Figure 5 shows that parallel scaling is memory-inefficient below the 8-bit 4B threshold but improves the Pareto frontier above it, with the optimal group size *increasing* with the memory budget (G ≥ 8 for budgets >28.9 GB). This is validated across model families (Figures 6 and 16 for DeepSeek-R1-Distill and OpenReasoning-Nemotron).
+
+2. **Demonstrating external verifiers are memory-inefficient under tight budgets**: Section 4.1 and Figure 7 show that a 7B PRM (13.28 GB overhead) provides only marginal accuracy gains relative to its substantial memory cost, and can even underperform serial scaling in low-memory regimes — a practical finding for deployment.
+
+3. **Robustness of findings across quantization methods and batched settings**: Appendix C.2 confirms that AWQ and FP8 yield nearly identical memory–accuracy curves to GPTQ (Figure 12), and Appendix C.3 analyzes batched inference where KV cache dominance is amplified.
+
+### Presentation / practical strengths
+
+1. **Clear, actionable guidelines summarized as five numbered findings**: The paper provides concrete, non-obvious recommendations (e.g., "prioritize model capacity over test-time compute for small reasoning models") tied directly to the empirical evidence, making the work immediately useful for practitioners deploying reasoning models under memory constraints.
+
+## Summary
+
+The paper demonstrates that memory optimization for reasoning models cannot follow the scale-agnostic strategies established for non-reasoning models, identifying an 8-bit 4B effective-size threshold below which memory should be allocated to model weights and above which it should be allocated to longer generation, with additional task-dependent precision and KV compression trade-offs. The single most important piece of evidence is Figure 2, which shows that for AIME25, small models below the threshold (e.g., 0.6B 8-bit with long generation) are strictly dominated by configurations with larger effective size at similar memory (e.g., 1.7B 8-bit with shorter generation), while large models above the threshold benefit from maximal test-time compute — directly overturning the prior universal 4-bit prescription.
+
+--- Merged Review ---
+Now let me search for calibration papers.Now let me read one high-scoring anchor paper for comparison:Now I have all the information I need to write the final review. Let me synthesize:---
+
+## Summary
+
+This paper investigates how to optimally allocate limited GPU memory across five dimensions—model size, weight precision, token budget, parallel sampling, and KV cache compression—when deploying reasoning models. Through systematic experimentation covering 1,700+ configurations of the Qwen3 family (0.6B–32B) with cross-validation on DeepSeek-R1-Distill and OpenReasoning-Nemotron, the authors identify a scale-dependent threshold around the effective size of an 8-bit 4B model that governs whether memory is better spent on weights or KV cache. They also find that weight precision optimality is task-type dependent: 4-bit is optimal for knowledge-intensive tasks but sub-optimal for mathematical reasoning and code generation, and that KV cache compression is universally beneficial.
+
+---
+
+## Strengths
+
+- **Massive and well-structured empirical scope.** Over 1,700 configurations spanning six model sizes, three weight precisions, multiple token budgets, sampling group sizes, and KV compression methods. This breadth enables cross-cutting analysis that reveals scale-dependent transitions.
+
+- **Novel and actionable finding on task-type dependent precision.** The paper shows that 4-bit quantization, broadly optimal for knowledge-intensive tasks (consistent with prior work on non-reasoning models), consistently underperforms 8-bit and 16-bit for mathematical reasoning and code generation. Concretely, the 32B 4-bit model is strictly dominated on AIME25 by the 14B 8-bit model—a direct and striking challenge to the universal 4-bit prescription of Dettmers & Zettlemoyer (2023).
+
+- **KV cache compression finding.** Finding 4 shows that compressing the KV cache advances the Pareto frontier even atop aggressively quantized weights across all weight precision levels. This is a practically important result for deployment under tight budgets.
+
+- **Cross-quantization-scheme robustness.** Replication with AWQ and FP8 confirming near-identical memory–accuracy curves to GPTQ meaningfully rules out quantization-scheme confounds.
+
+- **Multi-model-family validation.** The scale-dependent findings are verified on DeepSeek-R1-Distill and OpenReasoning-Nemotron, providing evidence that the Qwen3-based conclusions are not architecture-specific.
+
+- **Pareto frontier framing.** Reformulating deployment optimization as a memory allocation problem with explicit Pareto frontiers is a principled, practical, and clear presentation method that translates directly into deployment decisions.
+
+---
+
+## Weaknesses
+
+### Fatal
+None.
+
+### Major
+
+- **Internal inconsistency in the stated threshold for Finding 5.** The paper's bullet-point summary of findings (and introduction, line 27) states that KV eviction outperforms quantization "for models with an effective size smaller than an 8-bit **4B** model." However, Section 5's supporting text (and the conclusion) explicitly says "For models with an effective size smaller than an **8-bit 8B** model, eviction consistently provides the best memory–accuracy trade-off" (Section 5, Figure 9 description). These are meaningfully different thresholds (~4.2 GB vs. ~9 GB effective size), and the paper provides no explanation for the discrepancy. This is not merely a typo—one of the two statements about the threshold is wrong. If the threshold is truly 8B (as the section body says), then the abstract's claim that "a single scale threshold" governs all five findings is overclaimed, since Findings 1–4 use the 4B threshold while Finding 5 uses the 8B threshold. The unified framing should be corrected.
+
+### Minor
+
+- **Qwen3 architectural idiosyncrasy not discussed.** As shown in Table 1, Qwen3-0.6B and Qwen3-1.7B share identical KV cache footprints (0.21/1.92/3.20 GB at 2k/18k/30k tokens), and Qwen3-4B and Qwen3-8B similarly share identical KV cache footprints (0.27/2.47/4.12 GB). This means the models in pairs (0.6B, 1.7B) and (4B, 8B) differ only in weight count but have identical KV memory, creating discrete jumps in the memory-accuracy landscape rather than a smooth continuum. The paper's identified threshold (falling at the 4B–8B boundary) may partly be an artifact of this KV head-sharing design rather than a universally applicable principle. This should at minimum be flagged, and the cross-architecture experiments (DeepSeek, OpenReasoning-Nemotron) should be analyzed with their specific KV architectures noted.
+
+- **Single-request vs. batched inference scope not fully delineated in the main body.** The paper motivates its work with serving scenarios ("in batched inference: with model weights amortized, the aggregated KV cache becomes the primary memory constraint"), but the main analysis is conducted in the single-request regime. Appendix C.3 addresses batched inference, but the main findings do not state their regime of validity explicitly. A practitioner deploying a batched inference server reading the main findings would be uncertain which recommendations apply. Even a single sentence per finding clarifying "this result holds in the single-request regime; see Appendix C.3 for batched settings" would significantly improve usability.
+
+- **Speculative causal mechanism for precision sensitivity.** Finding 2 attributes math/code sensitivity to 4-bit quantization to "numerical precision within the weights." The cited Feng et al. (2025) concerns numerical precision in activations/computations during reasoning, not weight quantization per se, so the causal link is not established. An alternative explanation—that 4-bit degrades general reasoning capability, not specifically numerical precision—is equally supported by the current evidence. This is presented as fact rather than hypothesis.
+
+### Trivial
+
+- **No statistical uncertainty quantification on AIME25.** AIME25 consists of 30 problems; the paper averages over 32 generations per instance, which provides meaningful statistical power, but no confidence intervals or standard deviations are reported anywhere in the main body. Given that several Pareto frontier comparisons differ by small margins, stating uncertainty estimates would strengthen the conclusions.
+
+---
+
+## Nice-to-Haves
+
+- A figure showing the KV cache fraction of total memory as a function of token budget for each model size would make the memory regime transitions more intuitive and directly illustrate when each recommendation applies.
+- Theoretical or mechanistic analysis of *why* the threshold exists at this specific scale (e.g., an information-theoretic argument about KV cache redundancy relative to model capacity) would significantly elevate the contribution from empirical observation to principled understanding.
+- For large-scale serving deployments, analysis of how the optimal strategy shifts as batch size increases from 1 to 4 to 16 in the main body would make the paper's scope more transparent.
+
+---
+
+## Removed Points
+
+*These points are flagged to be removed; treat them with caution.*
+
+- **Harsh Critic: "The entire analysis predicated on single-request inference and prescriptions may reverse in batched settings."** → WEAKENED rather than removed. The paper does include Appendix C.3 on batched inference and explicitly assumes a batched setting for parallel scaling (Finding 3). The main body could be clearer about regime of validity, but the concern is only partially valid. Retained as a Minor rather than a Major weakness.
+
+- **Harsh Critic: "PRM finding may not generalize to lighter-weight PRMs."** → REMOVED as scope creep. The paper clearly states in Section 7 that it performed "a limited evaluation of an external verifier rather than a comprehensive comparison." The finding is presented appropriately for its single tested PRM, and the limitation is explicitly acknowledged.
+
+- **Harsh Critic: "DeepSeek-R1-Distill and OpenReasoning-Nemotron results relegated to appendix."** → REMOVED. The paper explicitly states it chose Qwen3 for its tractable and systematic size range, and that the additional model families confirm generalization. This is a reasonable scope decision, not a methodological flaw.
+
+---
+
+## Novel Insights
+
+The most genuinely novel insight in this paper—absent from prior quantization or inference-scaling literature—is the task-type dependence of weight precision optimality. Prior work treats 4-bit as broadly optimal; this paper shows this is true for knowledge-intensive tasks but reverses for mathematical reasoning and code, where models under 4-bit precision are strictly dominated by higher-precision configurations at comparable memory. This reframes precision choice from a model-centric decision to a task-centric one. The Pareto frontier formalism applied to the joint (weights, KV cache, token budget, group size) space for memory-constrained reasoning models is also a useful practical contribution, even if the specific "unified threshold" framing is somewhat overstated given the 4B vs. 8B inconsistency in Finding 5.
+
+---
+
+## Suggestions
+
+1. **Fix the Finding 5 threshold inconsistency** — determine whether the eviction/quantization transition is at 4B or 8B effective size, state it consistently across the summary, introduction, body, and conclusion, and explain if it is truly different from the 4B threshold governing Findings 1–3.
+2. **Add a scope qualifier per finding** — one sentence noting whether the recommendation holds for single-request or batched inference (or both) would greatly improve practical usability.
+3. **Discuss the KV head-sharing in Qwen3** — note that 0.6B/1.7B and 4B/8B share KV configurations and assess whether the threshold is sensitive to this architectural choice, using the DeepSeek and OpenReasoning-Nemotron results as cross-checks.
+4. **Report confidence intervals or standard deviations** on AIME25 comparisons for key Pareto frontier claims.
+5. **Rephrase the causal mechanism** for precision sensitivity as a hypothesis rather than a conclusion, and consider a diagnostic experiment (e.g., logical vs. numerical multi-step reasoning tasks) to help distinguish the mechanism.
+
+---
+
+## Score and Decision
+
+**Calibration anchors used:**
+
+| Paper | Path | Avg Score | Comparison |
+|---|---|---|---|
+| Inference Scaling Laws (empirical analysis) | VNckp7JEHn | 5.75 | Most similar in type: empirical Pareto frontier analysis of inference trade-offs; fewer factors studied, no KV/memory framing, FLOPs-based |
+| Scaling LLM Test-Time Compute Optimally | 4FWAwZtd2n | 7.50 | Similar domain; higher bar — oral acceptance, more novel framing, clear compute-optimal algorithm |
+| Scaling Laws for Precision | wg1PCg3CUP | 8.00 | Related on precision scaling; much stronger theoretical contribution with fitted functional forms across 465+ runs |
+| Scaling Laws For Mixed Quantization | UldnqRQWKS | 3.00 | Low anchor: rejected for limited novelty confirming existing intuitions; paper under review is clearly stronger |
+
+The paper under review sits above VNckp7JEHn (5.75) in scope (5 factors vs. 3, specific reasoning model focus, multi-model validation, KV+weight joint analysis) and practical relevance (memory rather than FLOPs). The task-type dependent precision finding is genuinely novel. However, the Finding 5 threshold inconsistency (a real editorial error that may indicate the "unified threshold" framing is overclaimed), the absence of statistical uncertainty, and the primarily empirical nature (no theoretical model of why the threshold exists) keep it below the 7.0+ range of the oral-worthy papers. Positioning it at **6.0** — a solid poster-worthy paper with a clearly stated and experimentally well-supported set of practical findings, one real flaw that needs fixing (Finding 5 threshold), and some areas for improvement.
+
+**Originality:** Good — task-type dependence of precision is novel; memory-constrained Pareto framing for reasoning models is a fresh angle.  
+**Importance:** High — directly relevant to the growing practice of deploying reasoning models on memory-limited hardware.  
+**Claim support:** Mostly solid, with the notable exception of the Finding 5 threshold inconsistency.  
+**Experimental soundness:** Good — systematic, multi-factor, multi-model-family; slightly weakened by absent uncertainty quantification.  
+**Clarity:** Good overall; the threshold inconsistency creates real confusion for practitioners.  
+**Value to community:** Concrete and actionable; practitioners can immediately use the findings.
+
+MY FINAL SCORE: <pineapple>6.0</pineapple>
+MY FINAL DECISION: <orange>Accept</orange>
+
+--- Scorer Output ---
+6.0
+
+--- Decision ---
+Accept
+
+============================================================
+Paper: ../iclr2026_cspaper/papers/P1qlqfRtgo.txt
+Timestamp: 2026-04-25T17:52:27
+
+--- Token Usage ---
+  Harsh Critic: N/A (claude_sdk path)
+  Strength Finder: input=6979 (cached=0) output=1077 (reasoning=0) total=8056 requests=1 duration=n/ams
+  Merger: N/A (claude_sdk path)
+  TOTAL: input=6979 output=1077 total=8056
+
+--- Claude SDK Usage ---
+  [Harsh Critic]
+    Model: claude-sonnet-4-6
+    Session ID: 4bdbf97e-68f4-48cd-88c1-61b3fa595ecc
+    Cost (USD): 0.11100405
+    Turns: 3
+    Duration: total=93362ms api=92475ms
+    Tokens: input=7 output=4585 cache_read=6456 cache_creation=10739
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  [Merger]
+    Model: claude-sonnet-4-6
+    Session ID: edac9414-197c-4cbd-bb77-a6ad7f792ed7
+    Cost (USD): 0.3419394
+    Turns: 17
+    Duration: total=227118ms api=179696ms
+    Tokens: input=24 output=8856 cache_read=260733 cache_creation=34882
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  TOTAL Claude SDK cost (USD): 0.4529
+
+--- Merged Inputs ---
+
+### Harsh Critic
+I'll start by reading the paper before writing the review.---
+
+## Critical Issues
+
+### 1. The "DeepONet-style" model is not DeepONet — the headline comparison is structurally invalid
+**[Structural — Section 4.3, Results Table 1, Introduction]**
+
+The standard DeepONet architecture encodes an *input function* sampled at sensor points (branch net) and a *query coordinate* (trunk net), learning a mapping between function spaces. The paper's "DeepONet-style" model does nothing of this kind: it routes 12 state variables through one feedforward branch and the scalar `dt` through a second branch, then takes their matrix product. This is a bilinear factored MLP, not operator learning. There are no sensor points, no function encoding, no query coordinates, and no operator mapping. The central architectural claim — that the paper evaluates "operator-learning paradigms" against U-Net — is therefore false. The comparison does not test DeepONet; it tests U-Net vs. MLP vs. a slightly different MLP with a bilinear interaction layer. Every result in Table 1 and every sentence in the paper attributing DeepONet's weakness to its "branch-trunk decomposition smoothing operator mappings" is reasoning about a model that was never implemented. The headline claim that U-Net outperforms DeepONet does not establish anything about DeepONet.
+
+---
+
+### 2. The "U-Net-like" architecture is a standard residual network, and the decisive feature is not identified or ablated
+**[Structural — Section 4.2, Section 5]**
+
+The described architecture is five dense layers with (a) a local skip connection summing two adjacent block outputs, and (b) a global skip adding the original input vector directly to the final output. This is a residual network, not a U-Net. U-Nets require a spatial encoder-decoder with downsampling and upsampling across spatial dimensions; none of that is present. More importantly, the global skip — effectively teaching the network to predict ΔX rather than the full output X — is a well-known and highly effective inductive bias for small-timestep ODE surrogates (the network need only learn small perturbations, not reconstruct the full state). This one design choice almost certainly explains the bulk of the observed MSE gap. The paper never ablates local vs. global skip; readers cannot tell whether the improvement comes from the residual formulation, the skip connectivity, the increased depth, or the global skip alone. The mechanism behind the claimed improvement is unidentified, which means the stated explanation ("hierarchical feature extraction," "multi-scale representation") is speculation rather than evidence.
+
+---
+
+### 3. The dataset scale and training budget are inadequate to support general claims about architecture ranking
+**[Evidential — Section 3, Section 4.4]**
+
+The training set contains 50,000 single-step samples spanning four orders of magnitude each in temperature (250–5000 K), pressure (10⁴–2×10⁷ Pa), and timestep (10⁻¹⁰–10⁻⁵ s). No analysis is provided of how samples are distributed across this enormous parameter space, whether the most physically critical sub-regions (near ignition threshold, near explosion onset) are adequately sampled, or whether the models have converged. Training runs for 100 epochs with batch size 5,000 (i.e., only 1,000 gradient steps per epoch, 100,000 total). No training or validation loss curves are reported. The paper acknowledges in the abstract that "the problem remains unresolved," yet draws broad architectural conclusions from this one limited experiment on one mixture at one scale. The evidential base is insufficient to generalize the ranking beyond these specific conditions.
+
+---
+
+## Section-by-Section Notes
+
+**Abstract**: The admission that "the problem remains unresolved" directly contradicts the conclusion that "the U-Net opens the way for more reliable and interpretable predictive models." These two statements cannot coexist — either the method works or it doesn't. This tension is never resolved in the paper.
+
+**Introduction**: The criticism of Goswami et al. (2024) for using fixed timestep and predicting at only four instants is fair on its face. However, the paper's own DeepONet implementation does *not* address this limitation — it still takes a single state vector at a fixed timestep as input. The critique therefore does not motivate the paper's own methodology in any meaningful way.
+
+**Section 3**: The output normalization is mentioned ("All trajectories are plotted in the same normalized space") but the normalization scheme is never described. The MSE values in Table 1 are therefore unitless and uninterpretable without knowing the scale. A model with MSE 0.0013 on poorly normalized outputs could perform worse in physical space than a model with MSE 0.02 on well-normalized outputs.
+
+**Section 4.4 — Loss function**: The multi-step loss (Eq. 4) trains over 30 recursive steps. However, the test evaluation is described as MSE on a held-out *test set* of 5,000 samples (Section 3), while Figures 3 and 4 show trajectory plots. It is never clarified whether the test MSE in Table 1 is: (a) one-step prediction MSE on 5,000 independent samples, or (b) accumulated MSE over multi-step trajectories. These are very different quantities. The large standard deviations (0.0218 for U-Net, 0.0582 for DeepONet) are consistent with per-trajectory variance in multi-step rollouts, but if so the number of trajectories (not individual samples) determines statistical power.
+
+**Section 5 — Figure 3/4 selection**: Figures 3 and 4 are cherry-picked as the "best 10%" and "upper quartile" of MSE performance. No figures show the median or worst-case predictions, which are precisely where the authors acknowledge failure and where the large standard deviations originate. This omission obscures the actual failure mode.
+
+**Section 5 — Confidence intervals**: The 95% CI is computed treating all 5,000 test samples as independent draws from the same distribution. If samples include multiple timesteps from correlated trajectories, the CI will be too narrow and the claimed statistical significance overstated.
+
+**Section 6**: The conclusions claim the U-Net provides "interpretable" predictions — no interpretability analysis appears anywhere in the paper. This claim is unsupported.
+
+---
+
+## Strengths
+
+- The motivation (surrogate modeling for stiff combustion ODE systems) is practically relevant, and the problem setup (fixed-volume hydrogen-air autoignition with a reduced 11-species mechanism) is clearly described.
+- Including the self-admission that "the problem remains unresolved" is honest, even if it undermines the paper's positive framing; this prevents overclaiming in a domain where overclaiming is common.
+- The multi-step training loss (Eq. 4) correctly addresses error accumulation in recursive prediction, which is a genuine concern in ODE surrogate training.
+
+---
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+1. **Ablation of the global residual skip**: Add a variant of the "U-Net" without the global skip (input-to-output shortcut) and one without the local skip. Without this, the entire Section 5 conclusion about hierarchical feature extraction is unsupported. The global skip is the most likely single driver of the performance gap.
+2. **Comparison with a proper DeepONet implementation**: The paper's DeepONet variant must use actual sensor-function inputs or be retitled. Without a properly implemented DeepONet (or an honest relabeling), the most prominent element of the comparison framework is invalid.
+3. **Statistical breakdown across combustion regimes**: The enormous variance (STD ≈ 10× mean MSE for all models) indicates that performance is highly regime-dependent. Stratifying MSE by induction-phase vs. ignition-phase vs. post-ignition trajectories would identify where each architecture fails, which is the scientifically interesting question.
+
+### Deeper Analysis Needed
+1. **Normalization scheme and physical-space error**: Report MSE in physical units (K for temperature, mol/m³ for species) so performance can be compared to simulation tolerances. The current normalized MSE values are interpretable only within this paper.
+2. **Error accumulation analysis**: Show how prediction error grows over the 30-step recursive rollout for each architecture. This is the relevant metric for deployment in a CFD loop and would directly support or undermine the paper's claims about practical reliability.
+
+### Visualizations & Case Studies
+1. **Worst-case trajectory plots**: The median-error and worst-decile trajectories must be shown. The current figures are the best 10% and top quartile, which obscures where models fail. Given that the large standard deviations are explicitly noted as a key finding, the failure cases are more diagnostic than the successes.
+
+### Obvious Next Steps
+1. **Test on out-of-distribution conditions**: All results use random holdout from the same sampling distribution. A test on conditions outside the training range (e.g., near detonation limits, extreme lean/rich mixtures) is necessary to assess generalization, which is the stated motivation for the whole research line.
+
+---
+
+## Overall Assessment
+
+This paper should not be accepted in its current form. The central comparison — U-Net vs. DeepONet — is built on a DeepONet implementation that does not implement DeepONet. It is a bilinear MLP with two branches, and any results attributed to "DeepONet" behavior reflect that architecture, not operator learning. This is a structural problem: no revision can retroactively fix a result table that compares against the wrong model. Beyond this, the "U-Net" is a standard residual network whose performance advantage is most plausibly explained by its global skip connection (ΔX prediction), yet the paper attributes it to hierarchical feature extraction without ablation evidence. The experimental scale (70k samples, 100 epochs, models of ~40k parameters) is toy-scale for a top-tier ML venue, and the paper's own abstract acknowledges the problem remains unresolved. The contribution — "a small residual MLP outperforms a plain MLP on combustion kinetics" — does not rise to the level expected at ICLR, and the analysis does not provide the architectural insights needed to justify even a narrower publication.
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+1. **Statistically significant architectural comparison with non-overlapping confidence intervals**: The U-Net's 95% CI [7.692×10⁻⁴, 1.980×10⁻³] does not overlap with either the MLP's [1.840×10⁻², 2.218×10⁻²] or DeepONet's [1.647×10⁻², 1.969×10⁻²], providing rigorous statistical evidence that architecture materially affects predictive accuracy (Table 1).
+
+2. **Controlled experimental design isolating architectural effects**: All three models are trained on the same 50,000-sample dataset with identical training procedure (Adam optimizer, lr=0.001, batch size 5,000, 100 epochs, LeakyReLU activations) and evaluated on the same test set, ensuring performance differences can be attributed to architecture rather than training conditions (Section 4.4).
+
+3. **Multi-step rollout training objective penalizes error accumulation**: The loss function (Eq. 4) recursively forecasts up to 30 steps ahead, which directly tests each architecture's ability to handle error compounding—a critical requirement for stiff ODE surrogate models—rather than evaluating only single-step accuracy.
+
+### Supporting strengths
+1. **Physically realistic and broad parameter sampling**: The dataset covers T∈[250, 5000]K, p∈[10⁴, 2×10⁷]Pa, and Δt∈[10⁻¹⁰, 10⁻⁵]s with randomized initial conditions, capturing diverse combustion regimes from slow reactions to abrupt autoignition, making the benchmark relevant to real-world conditions (Section 3).
+
+2. **Enforcement of physical invariants**: All models directly copy dt and inert species (N₂, Ar) concentrations from input to output (Sections 4.1–4.3), embedding conservation constraints into the architecture rather than relying on the network to learn them.
+
+3. **Qualitative trajectory analysis beyond aggregate metrics**: Figures 3 and 4 show predictions for both best-case (bottom 10% MSE) and worst-case (upper quartile MSE) trajectories, demonstrating that the U-Net maintains phase alignment and physical consistency even in difficult regimes where MLP and DeepONet exhibit drift and phase lag.
+
+4. **Identification of a structural limitation of DeepONet for combustion**: The paper articulates a concrete mechanistic hypothesis—"the branch–trunk decomposition tends to smooth operator mappings, whereas combustion dynamics often exhibit strongly localized nonlinearities and discontinuities" (Section 1)—providing an explanation grounded in architecture-design logic for why DeepONet underperforms.
+
+### Presentation / practical strengths
+1. **Complete architectural specification enabling reproducibility**: All three models are fully specified with layer dimensions and connectivity (Section 4), and the 13-dimensional input/output format including the physical meaning of each component (Eq. 2, Section 4) is clearly defined.
+
+## Summary
+
+The paper demonstrates that neural network architecture significantly impacts the accuracy of data-driven modeling of thermal explosion kinetics, with the U-Net-style residual network substantially outperforming MLP and DeepONet-style alternatives. The single most important piece of evidence is Table 1, where the U-Net achieves a mean MSE of 1.374×10⁻³ with a 95% CI that does not overlap with either competitor, established under rigorously controlled training conditions on an identical, physically broad dataset with a multi-step rollout loss.
+
+--- Merged Review ---
+Now let me search for calibration anchors.Now I have enough to write the full review. Let me synthesize everything I've verified from the paper.
+
+---
+
+## Summary
+
+This paper compares three neural network architectures—a plain MLP, a "U-Net-style" residual network, and a "DeepONet-inspired" model—for single-step surrogate modeling of hydrogen-air thermal explosion kinetics described by a stiff 11-species ODE system. All models share the same 13-dimensional input/output format, training procedure, and dataset (50k train / 15k val / 5k test samples). The U-Net-style model achieves a substantially lower mean MSE (1.37×10⁻³) with non-overlapping 95% CI versus the MLP (2.03×10⁻²) and DeepONet-inspired model (1.81×10⁻²), leading the authors to conclude that architectural design is a critical determinant of prediction quality.
+
+---
+
+## Strengths
+
+- **Statistically rigorous comparison via non-overlapping CIs.** Table 1 reports 95% CIs, and the U-Net's interval [7.69×10⁻⁴, 1.98×10⁻³] does not overlap with those of the MLP or DeepONet-inspired model, providing genuine statistical evidence that the architectural difference is not noise.
+
+- **Controlled training conditions isolating architecture.** All three models are trained with identical Adam optimizer settings (lr=0.001, batch size 5000, 100 epochs, LeakyReLU) on the same dataset, ensuring the observed MSE differences are attributable to architecture rather than training variance.
+
+- **Multi-step rollout training loss correctly penalizes error accumulation.** Eq. 4 recursively forecasts up to 30 steps ahead with an 1/k weighting, which directly addresses error compounding—a well-known failure mode of single-step-trained ODE surrogates.
+
+- **Physically motivated hard constraints.** All three models directly copy the dt and inert species (N₂, Ar) components from input to output, embedding conservation constraints rather than relying on the network to learn them from data.
+
+- **Broad thermodynamic coverage.** The sampling space spans T∈[250–5000 K], p∈[10⁴–2×10⁷ Pa], and Δt∈[10⁻¹⁰–10⁻⁵ s], covering slow reaction zones through abrupt autoignition events.
+
+---
+
+## Weaknesses
+
+### Fatal
+None. The core claim—that the described residual architecture outperforms the plain MLP and bilinear variant—is supported by Table 1. However, the paper severely misidentifies *why* this is true (see Major).
+
+### Major
+
+- **The decisive architectural feature is unidentified and never ablated.** Section 4.2 describes two distinct residual connections: (a) a local skip summing adjacent block outputs, and (b) a global skip that adds the original 13-dimensional input directly to the final output. The global skip is the classic ΔX-prediction inductive bias—the network learns only the change from the current state, not the full output, which is well-known to substantially improve accuracy for ODE surrogates with small timesteps. The paper attributes the U-Net's improvement to "hierarchical feature extraction" and "multi-scale representation" (Section 5), but no ablation is provided to disentangle: (i) local skip only, (ii) global skip only, or (iii) depth. Without this, the stated mechanistic explanation is speculation rather than evidence, and the paper's contribution reduces to "a residual MLP outperforms a plain MLP"—a conclusion that provides little actionable guidance.
+
+- **Architecture naming is systematically misleading and inflates the paper's apparent scope.** The "U-Net" (Section 4.2) is a five-layer dense residual MLP; it has no spatial dimensions, no encoder-decoder, no downsampling or upsampling. The "DeepONet-style" model (Section 4.3) routes dt through one branch and the 12 state variables through another, computing a matrix product. While the paper consistently says "inspired by" and "style," the branch-trunk terminology and repeated references to "operator-learning paradigms" in the introduction create a false impression that this paper bears on the applicability of DeepONet to combustion. The paper's critique of DeepONet—that its "branch–trunk decomposition tends to smooth operator mappings"—is attributed to a model that performs one bilinear factored pass over a static state vector, not actual operator learning over a function space with sensor inputs and query coordinates. Any conclusions about operator-learning architectures from this comparison are therefore unsupported.
+
+- **The "interpretability" claim is entirely unsupported.** Both the abstract ("interpretable predictive models") and Section 6 ("interpretable, accurate, and robust tools") make an interpretability claim. No interpretability analysis—attention maps, feature attribution, sensitivity analysis, or any mechanistic explanation—appears anywhere in the paper.
+
+### Minor
+
+- **Normalization scheme undescribed.** Section 5 states "all trajectories are plotted in the same normalized space," but the normalization scheme is never defined. The MSE values in Table 1 are therefore unitless and cannot be related to physical simulation tolerances or compared to results from other studies.
+
+- **Figures show only best cases.** Figure 3 visualizes trajectories from the *lowest 10% MSE* (best cases) and Figure 4 from the *upper quartile* (challenging but not worst). The paper explicitly notes that large standard deviations indicate frequent failures, yet no median or worst-decile trajectories are shown. Since the paper's self-identified open problem is precisely this failure behavior, omitting failure-case figures is a significant presentational gap.
+
+- **Abstract contains contradictory framing.** The abstract states "the problem remains unresolved" (an honest admission) while the conclusion states the U-Net "opens the way for more reliable and interpretable predictive models." These statements cannot both be true without clarification of what is resolved and what is not.
+
+- **Test MSE metric ambiguity.** The paper trains with a 30-step recursive multi-step loss (Eq. 4) but reports test MSE on 5,000 held-out samples. It is never clarified whether the test MSE is one-step or accumulated over multi-step rollouts. These are very different quantities, and given the large standard deviations (STD ≈ 16× mean MSE for U-Net), clarifying the evaluation protocol is important for interpreting the results.
+
+### Trivial
+- Section 5's attribution of U-Net superiority to "encoder–decoder design" is factually inaccurate; the architecture has no encoder-decoder (it is purely feedforward with skip connections).
+
+---
+
+## Nice-to-Haves
+
+- An ablation removing the global residual skip (and separately the local skip) would be the single most impactful experiment to add. It would directly test whether the improvement comes from residual ΔX prediction or from deeper feature mixing.
+- Physical-space error reporting (Kelvin for temperature, mol/m³ for species) would make results interpretable outside this paper.
+- Showing error accumulation over the 30-step rollout for each model (error vs. step index) would directly support the multi-step training claim.
+- Median-error and worst-decile trajectory plots to characterize failure modes.
+- Out-of-distribution testing (conditions outside training ranges) to assess generalization.
+
+---
+
+## Removed Points
+
+*These points are flagged to be removed; treat them with caution.*
+
+- **"The comparison is structurally invalid because the DeepONet implementation is wrong" (Harsh Critic §1).** The paper consistently and explicitly labels its model "DeepONet-inspired," "DeepONet-style," and "a design that follows the operator-learning principle of DeepONet." It never claims to implement standard DeepONet. The harsh critic's framing of this as a structural invalidation of Table 1 is an overreading; the paper's actual claim is narrower—that its architecture outperforms the branch-trunk factored variant. The critique that this fails to establish anything about *true* DeepONet is valid and retained as a Major weakness above, but the characterization of the entire comparison as "built on the wrong model" is too strong.
+
+- **Dataset size and training budget inadequacy as a fatal flaw (Harsh Critic §3).** 70k total samples and 100 epochs are modest, but no evidence is provided that the models have *not* converged. The critic correctly notes the absence of learning curves, which is a Minor concern, but elevating this to a structural problem without convergence evidence is speculative.
+
+- **95% CI statistical power concern (Harsh Critic, CI section).** The critic argues that if test samples are correlated (multiple timesteps from the same trajectory), the CI will be too narrow. The paper describes 5,000 independent test samples (randomly held out), not sequential trajectory data, so this concern is not clearly supported by the paper's setup.
+
+- **Strength: "Identification of a structural limitation of DeepONet" (Strength Finder §4).** This is a hypothesis made in the introduction about branch-trunk decomposition smoothing discontinuities. It is not empirically validated in the paper; no ablation, no analysis of intermediate representations, and no comparison against a proper DeepONet supports this claim. Removed as a genuine strength.
+
+- **Strength: "Qualitative trajectory analysis beyond aggregate metrics" (Strength Finder §3).** The figures show best 10% and upper quartile only—not a representative sampling of model behavior. This is only a partial strength at best and conflicts with the Major weakness about figure selection.
+
+---
+
+## Novel Insights
+
+The paper hints at one genuinely useful observation—that the massive gap in standard deviation (STD 0.022 for U-Net vs. 0.058–0.068 for MLP/DeepONet-inspired) may be more diagnostic than mean MSE for combustion surrogates, since it directly reflects how often models fail on extreme regimes. This consistency improvement could matter more than mean accuracy in CFD coupling contexts. However, this insight is underdeveloped and not analyzed mechanistically.
+
+---
+
+## Suggestions
+
+1. Add an ablation study removing (a) the global skip only and (b) both skips, keeping all other hyperparameters equal. This single experiment would convert the paper's main claim from speculation to evidence.
+2. Rename architectures honestly: "ResidualMLP" and "BilinearMLP" are accurate; "U-Net" and "DeepONet" are not and will confuse readers familiar with those architectures.
+3. Describe the output normalization explicitly and report at least one metric in physical units.
+4. Add a median-error trajectory figure alongside the existing best-case and hard-case figures.
+5. Resolve the abstract tension: either claim the U-Net solves the problem (with qualifications) or acknowledge it does not—do not do both.
+
+---
+
+## Score and Decision
+
+**Calibration anchors retrieved:**
+
+| Path | Avg Score | Comparison to this paper |
+|------|-----------|--------------------------|
+| `/home/wg25r/review_agent/human_reviews/SYiOxXWlKU.md` | 2.50 | EPINN for stiff ODEs — similar scope (one application, small experiments, no strong baselines); rejected for insufficient evidence and limited scope. Very similar profile to this paper. |
+| `/home/wg25r/review_agent/human_reviews/CgBhR1NSLM.md` | 3.00 | Residual MLP landscape analysis — empirical study of residual MLPs on toy datasets with no clear conclusions. Similar breadth, also rejected. |
+| `/home/wg25r/review_agent/human_reviews/TB5THwq1sq.md` | 3.60 | PINeCONes (neural ODE + PINNs) — more methodological contribution than this paper but also rejected; closer to this paper's quality than to acceptance. |
+| `/home/wg25r/review_agent/human_reviews/A23C57icJt.md` | 6.25 | Open-CK combustion kinetics benchmark — accepted; much stronger, creates a novel large-scale dataset with comprehensive multi-architecture benchmarks on HPC infrastructure. Shows what a combustion ML paper needs for acceptance. |
+| `/home/wg25r/review_agent/human_reviews/x4ZmQaumRg.md` | 7.00 | Active Learning for Neural PDE Solvers — accepted; novel framework, ablations, multiple baselines. Far stronger than this paper. |
+| `/home/wg25r/review_agent/human_reviews/LgfaMR6Sst.md` | 6.80 | Flexible Active Learning of PDE Trajectories — rejected despite high scores by some reviewers; methodologically richer with theoretical and empirical contributions in PDE surrogate learning. |
+
+**Assessment relative to anchors:** This paper is most similar to the EPINN (2.5) and residual MLP landscape (3.0) papers in terms of scope, scale, and quality. It is substantially weaker than the accepted combustion benchmark paper (Open-CK, 6.25), which provides a novel large-scale dataset and comprehensive experimental benchmarks. The key weaknesses—unablated mechanism, misleading architecture names, unsupported interpretability claim, no normalization description, small scale—align with the patterns that led reviewers to reject papers in the 2.5–3.5 range. The strongest aspect of this paper (statistically significant improvement with non-overlapping CIs) is genuine but narrowly scoped; knowing that a residual MLP with a global skip outperforms a plain MLP on one combustion mixture is not a contribution that rises to ICLR standards without the ablation that identifies *which* component drives the improvement.
+
+**Score: 3.0**
+
+**Originality:** Low — residual connections and ΔX prediction are well-established techniques; no new architectural insight.
+**Importance of research question:** Moderate — combustion kinetics surrogate acceleration is genuinely important for CFD.
+**Claims supported by experiments:** Partially — the MSE comparison is supported statistically, but the mechanistic claims (hierarchical feature extraction, interpretability) are entirely unsupported.
+**Soundness of experiments:** Weak — single dataset, no ablations, no learning curves, no normalization description, cherry-picked figures.
+**Clarity of writing:** Fair — the setup is clearly described, but conclusions overreach the evidence (interpretability, "U-Net," "DeepONet").
+**Value to research community:** Low — a finding that "small residual MLP > plain MLP" on one combustion dataset, without identifying the responsible mechanism, provides little actionable guidance.
+
+MY FINAL SCORE: <pineapple>3</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>
+
+--- Scorer Output ---
+3.0
+
+--- Decision ---
+Reject
+
+============================================================
+Paper: ../iclr2026_cspaper/papers/ecbEfXdqrV.txt
+Timestamp: 2026-04-25T17:53:06
+
+--- Token Usage ---
+  Harsh Critic: N/A (claude_sdk path)
+  Strength Finder: input=14787 (cached=0) output=1518 (reasoning=0) total=16305 requests=1 duration=n/ams
+  Merger: N/A (claude_sdk path)
+  TOTAL: input=14787 output=1518 total=16305
+
+--- Claude SDK Usage ---
+  [Harsh Critic]
+    Model: claude-sonnet-4-6
+    Session ID: 1dd288a3-7065-4432-be64-bd41d61ba12c
+    Cost (USD): 0.1849302
+    Turns: 5
+    Duration: total=119914ms api=116608ms
+    Tokens: input=9 output=5829 cache_read=36619 cache_creation=23062
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  [Merger]
+    Model: claude-sonnet-4-6
+    Session ID: 4ab0192a-f99b-476d-9a0a-80d6a249fcb9
+    Cost (USD): 0.3471468
+    Turns: 15
+    Duration: total=188375ms api=176482ms
+    Tokens: input=18 output=8350 cache_read=225151 cache_creation=41146
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  TOTAL Claude SDK cost (USD): 0.5321
+
+--- Merged Inputs ---
+
+### Harsh Critic
+I'll start by fetching the tools I need and reading the paper.Now I have enough to write a thorough review. Let me compose it.
+
+---
+
+# Review: "Why Is The Counterintuitive Phenomenon Of Likelihood Rare In Tabular Anomaly Detection With Deep Generative Models?"
+
+---
+
+## Critical Issues
+
+**1. Definition 3.3 creates circular reasoning that structurally undermines the central claim. [Structural]**
+
+The paper's headline claim is that "the counterintuitive phenomenon is consistently rare in tabular anomaly detection." The claim is established by showing that NF-SLT is not outperformed by comparison models (Definition 3.3). But Definition 3.3 *defines* the phenomenon as "most baselines outperform the generative model by margin γ." The paper then demonstrates the phenomenon does not occur by showing NF-SLT outperforms those same baselines. This is circular: the definition is crafted around comparative ranking, and the result is that the proposed model ranks highly. A finding of "our model performs well" does not imply the original distributional phenomenon — likelihood inversion — is absent. The original Nalisnick et al. (2019a) problem was that SVHN achieves *higher average log-likelihood under a model trained on CIFAR-10* than CIFAR-10 itself. This is a statement about likelihood values, not about relative AUROC ranks. The new definition changes the subject. A tabular dataset could exhibit this classical likelihood inversion while NF-SLT still achieves high AUROC (e.g., if the threshold is chosen appropriately), and Definition 3.3 would still declare no counterintuitive phenomenon has occurred. The paper criticizes the naive original definition (§3, paragraph 2) but replaces it with one whose operational content depends entirely on which baselines are chosen and how well they are tuned — a profoundly less stable criterion.
+
+**2. Theorem 5.4 rests on an independence assumption that is never verified and is violated in the exact settings where the theorem is applied. [Structural]**
+
+Theorem 5.4 requires P = ∏ᵢ pᵢ(xᵢ) and Q = ∏ᵢ qᵢ(xᵢ), i.e., both distributions are products of independent marginals. The paper then uses this theorem to explain why high dimensionality (as in images) degrades likelihood-based detection while low dimensionality (as in tabular data) does not. But:
+
+- Image data violates independence (strong pixel correlations), which the paper itself acknowledges in §5.2. So the theorem does not apply to images, undermining the dimension-based explanation for *why* images fail.
+- For tabular data, the paper measures d Ratio (§5.2) and finds that datasets with low d Ratio (high correlation, hence violated independence) are precisely the ones where NF-SLT fails. Independence is not generically satisfied in tabular data either.
+- The theorem's stated consequence — "the lower bound of the likelihood gap decreases linearly with d" — means only that a specific *lower bound* weakens. It does not imply the actual AUROC decreases, since the bound could be loose. Yet the subsequent Corollary 5.6 leaps from "the lower bound worsens" to "the upper bound of AUROC is inversely related to d," requiring additional moment conditions (O(d^k), k < n) that are stated but neither derived from the independence assumption nor verified empirically on any actual dataset.
+
+The theorem's most important application — explaining the image/tabular gap — is precisely where the independence assumption fails hardest. The theoretical edifice does not support the conclusion it is meant to establish.
+
+**3. The hyperparameter optimization protocol for NF-SLT is not applied consistently to baselines, making the performance comparison unfair. [Structural]**
+
+Section 4 states: "for each dataset, after experimenting with all combinations in the hyperparameter searching space with 10 repeated experiments, the hyperparameter combination with the highest average AUROC for all datasets is selected." For NF-SLT, this means the reported numbers represent the best hyperparameters found by exhaustive grid search (even if "global" across datasets, this is a search over the full configuration space evaluated against held-out test AUROC). The paper does not state that all 12 comparison models received equivalent hyperparameter search treatment; the description refers to "comparison models" only obliquely. If baselines use default or lightly tuned settings while NF-SLT is fully grid-searched, the 0.85+ AUROC and rank-1 result in Table 1 is an artifact of differential optimization, not evidence of a superiority attributable to the likelihood-based detection mechanism. This directly affects the primary empirical claim (NF-SLT outperforms all baselines) and the secondary definitional claim (no counterintuitive phenomenon occurs), since both depend on the comparative ranking.
+
+---
+
+## Section-by-Section Notes
+
+**Abstract / Introduction.** The abstract states the counterintuitive phenomenon "occurs far less often in tabular settings" as a demonstrated finding, but by the paper's own definition (Definition 3.3), this is established purely through relative AUROC ranking rather than any direct measurement of likelihood inversion. The claim as stated in the abstract overstates what the paper actually measures.
+
+**Section 3 (Definition).** The free parameters β and γ in Definition 3.3 are stated to be fully defined in Appendix B, which is unavailable in this submission. The main text gives the CIFAR-10/SVHN case as validation (AUROC of 6.4% vs. >90% for other methods) but provides no sensitivity analysis for β and γ. The dataset-level conclusions in Section 4 (e.g., the 'yeast' dataset "does not satisfy the second condition") depend entirely on these thresholds, which are unverifiable from the main text. For 'imdb,' it is claimed the performance difference is "very small," but without knowing γ, this is qualitative.
+
+**Section 4 (Experiment).** The decision to exclude NeuTraLAD from RobustScaler preprocessing because "a significant performance decrease was observed" is a result, not a justification for different preprocessing. If NeuTraLAD's performance is scale-sensitive, that is a property of NeuTraLAD that should be reflected in a fair comparison. Applying different preprocessing to different models can inflate or deflate relative rankings in unpredictable ways. Additionally, Table 1 shows only 6 deep baselines, of which DAGMM (AUROC 0.65) and GOAD (AUROC 0.61) perform far below NF-SLT. Including weak baselines inflates the "proportion of datasets where NF-SLT beats all" metric, which feeds directly into Definition 3.3's criterion.
+
+**Section 5.1.** Table 2 reports AUROC as a function of dimension for ICA-preprocessed image data. The ICA decomposition itself orders components by independence, so retaining fewer components retains the most independent dimensions—this directly imposes the independence assumption of Theorem 5.4. The experiment therefore does not test the theorem in a natural setting but constructs a setting artificially consistent with the theorem's assumptions. Table 3 (bilinear interpolation) is more naturalistic, but the paper acknowledges it violates the independence assumption and then uses the results qualitatively. This is appropriate, but it means neither table provides clean support for the theoretical claims.
+
+**Section 5.2.** The d Ratio analysis in Table 4 is observational and not linked to a formal claim about when Definition 3.3 is satisfied. The paper shows that NF-SLT "fails to achieve high performance on most datasets with low d Ratio" but provides no threshold separating "tabular" from "image-like" d Ratio behavior, no error bars on the ID estimates (MLE and TwoNN can have high variance), and no counterfactual showing that baselines also fail on low-d-Ratio tabular datasets. If all models fail on low-d-Ratio datasets, the failure is about dataset difficulty, not the counterintuitive phenomenon.
+
+**Conclusion.** The conclusion claims "flow-based likelihood tests effectively detect tabular anomalies, outperforming traditional models without facing image domain challenges." This statement conflates two things: (1) NF-SLT happens to achieve the best average AUROC among the tested models, and (2) the classical counterintuitive phenomenon (likelihood inversion) does not occur. The paper establishes (1), but its redefinition of "counterintuitive phenomenon" means (2) follows by construction.
+
+---
+
+## Strengths
+
+- The motivation is legitimate and well-framed: asking whether a documented failure mode of normalizing flows in image OOD detection transfers to tabular anomaly detection is a natural and useful question for practitioners.
+- The breadth of evaluation is genuinely notable: 47 tabular and 10 CV/NLP embedding datasets from ADBench, all included to avoid selection bias, benchmarked against 12 models. This is more comprehensive than most tabular AD studies.
+- The d Ratio analysis (Section 5.2) as a proxy for feature correlation is an interesting operationalization, and Table 4's comparison of image vs. tabular intrinsic dimensionality is an informative data point that stands independently of the theoretical issues.
+- The dimensionality reduction experiments (Tables 2 and 3) are a reasonable attempt to provide empirical evidence for the theoretical claims, even though they do not perfectly isolate the claimed mechanism.
+
+---
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+
+1. **Direct measurement of likelihood inversion on tabular datasets.** The original Nalisnick phenomenon is about whether anomaly samples receive higher average log-likelihood than normal samples under a normalizing flow trained on normal data. The paper should directly report this proportion — how often the mean log-likelihood of the anomaly set exceeds the mean log-likelihood of the normal test set — across all 47 datasets. This would test the original phenomenon without relying on the comparative Definition 3.3 and would either validate or substantially complicate the paper's central claim.
+
+2. **Equal hyperparameter search budget for all models.** The comparison in Table 1 is the most important empirical result. Without showing that all 12 baselines received comparable hyperparameter tuning (or explicitly reporting baselines' optimization protocol), the comparison is uninterpretable. At minimum, the paper should show NF-SLT AUROC with default hyperparameters alongside the optimized version.
+
+3. **Testing Theorem 5.4's independence assumption.** The theorem's key assumption is feature independence. For each of the 47 tabular datasets, the paper should verify whether the independence condition approximately holds (e.g., via pairwise mutual information or a diagnostic from the flow's learned representations) and restrict the theorem's claims to datasets where independence approximately holds.
+
+### Deeper Analysis Needed
+
+1. **Separation of "NF-SLT is strong" from "counterintuitive phenomenon is absent."** These are different claims. A deeper analysis would show (a) what fraction of tabular datasets exhibit likelihood inversion in the raw sense, (b) whether the few datasets where NF-SLT ranks poorly (like 'yeast', 'imdb') do or do not show likelihood inversion. This would decouple model quality from the phenomenon's presence.
+
+2. **Sensitivity to the β and γ thresholds of Definition 3.3.** The number of datasets counted as "exhibiting the counterintuitive phenomenon" will change with these thresholds. Reporting this sensitivity would show whether the conclusion ("almost no datasets exhibit the phenomenon") is robust.
+
+### Visualizations & Case Studies
+
+1. **Log-likelihood distribution overlap plots for representative tabular datasets.** A direct visualization of the log-likelihood distributions of normal vs. anomaly samples (analogous to the image-domain figures in Nalisnick et al., 2019a) for several tabular datasets — including both "easy" and "hard" ones (e.g., 'yeast', low d Ratio datasets) — would directly illustrate whether and when likelihood inversion occurs in the classical sense.
+
+### Obvious Next Steps
+
+1. **Flow architectures that handle feature correlation.** The paper identifies low d Ratio datasets as failure cases for NF-SLT, but does not explore whether architectures designed to handle correlated tabular features (e.g., coupling flows with correlation-aware masking, or copula-based flows) recover performance. This would both address the identified limitation and validate the feature-correlation explanation.
+
+---
+
+## Overall Assessment
+
+The paper's empirical finding that NF-SLT achieves state-of-the-art average AUROC on the ADBench tabular benchmark is substantively interesting and broadly supported by the Table 1 results, even if the hyperparameter optimization asymmetry is a concern. However, the paper's core theoretical and definitional framing has structural problems that prevent the stated central claims from standing. Definition 3.3 operationalizes the counterintuitive phenomenon as a comparative ranking claim, making "the phenomenon is absent" equivalent to "our model ranks first," which is circular and strips the definition of its original meaning. Theorem 5.4 establishes its dimensionality result under an independence assumption that fails in the high-dimensional image domain (the domain where the theorem's conclusion most needs to hold) and in the correlated subset of tabular datasets where the paper observes NF-SLT failures. The result is that the explanatory theory does not connect cleanly to either the image failure cases or the tabular success cases. As currently formulated, the paper should not be accepted: the central claim — "the counterintuitive phenomenon is rare in tabular data, for theoretically grounded reasons" — is not established by the evidence, because the definition of the phenomenon has been reshaped to make its absence almost tautological, and the theoretical explanation rests on an assumption that is neither verified nor appropriate in the critical cases. Narrowing the claim to "NF-SLT is a strong tabular AD baseline and its advantage is empirically correlated with high d Ratio," properly qualifying the theoretical results, and adding a direct test of likelihood inversion in the classical sense would produce a more defensible and still valuable paper.
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+
+1. **Formal, domain-agnostic definition of the counterintuitive phenomenon (Definition 3.3)**: Prior work lacked a precise criterion for when the phenomenon occurs, relying on informal arguments about likelihood overlap or inversion. The paper's two-condition definition—requiring both that a sufficient proportion β of baselines outperform the generative model *and* that the minimum performance gap exceeds γ—enables principled, cross-domain evaluation and directly grounds the empirical claim that the phenomenon is rare in tabular data.
+
+2. **Theorem 5.4 and Corollary 5.6 providing dimensionality-dependent bounds on the likelihood gap and AUROC**: The paper proves that under product-distribution assumptions, the lower bound of the expected likelihood gap decreases linearly with dimension d, and that the maximum achievable AUROC for distinguishing P from Q is inversely related to d when the average log-likelihood gap becomes negative. This gives a formal mathematical basis for why tabular data (typically low-dimensional) is less susceptible to likelihood inversion than high-dimensional image data.
+
+3. **Comprehensive empirical demonstration that NF-SLT reliably outperforms 12 baselines on tabular data**: Table 1 shows NF-SLT achieves the best mean AUROC (0.8575), best average rank (3.43), highest top-2 ratio (0.45), and lowest fail ratio (0.02) across all 47 tabular datasets, directly supporting the claim that the counterintuitive phenomenon is rare and that likelihood-only detection is practically effective in this domain.
+
+4. **Dimensionality-reduction experiment validating Theorem 5.4**: Table 2 demonstrates AUROC systematically improves as ICA-derived dimensionality is reduced on image OOD pairs (e.g., CIFAR-10/SVHN AUROC rising from 0.2311 at 1024 dims to 0.3143 at 30 dims when H(P) > H(Q)), providing controlled empirical evidence that dimensionality drives likelihood inversion severity.
+
+### Supporting strengths
+
+1. **Feature correlation analysis via intrinsic dimensionality (d Ratio)**: Table 4 shows image datasets have d Ratios of ~0.002–0.019 while tabular datasets have d Ratios of 0.389–0.810, and the bottom panel demonstrates that among the 25 datasets where NF-SLT ranks ≥ 3, the failure rate rises as the d Ratio threshold decreases, linking low feature correlation (high d Ratio) to successful likelihood-based detection.
+
+2. **Use of all 47+10 ADBench datasets without selection bias**: Following Shwartz-Ziv & Armon (2022)'s critique of dataset cherry-picking, the paper evaluates on every dataset in the benchmark, lending credibility to claims about the general rarity of the counterintuitive phenomenon in tabular domains.
+
+3. **Explanation for why CV/NLP embeddings also avoid the counterintuitive phenomenon**: The paper estimates intrinsic dimensions of 23 (CIFAR-10 embeddings) and 18 (SVHN embeddings) against an ambient dimension of 1000, yielding much higher d Ratios than raw pixels, which is consistent with Kirichenko et al. (2020)'s observation that semantic embeddings alleviate likelihood inversion and unifies this finding with the paper's correlation-based analysis.
+
+### Presentation / practical strengths
+
+1. **CIFAR-10/SVHN example concretely illustrates Definition 3.3**: The paper cites Morningstar et al. (2021) showing Glow achieves 6.4% AUROC vs. Sun et al. (2022) achieving >90% with other methods, making the two conditions of Definition 3.3 immediately interpretable.
+
+## Summary
+
+The paper proposes a formal domain-agnostic definition of the "counterintuitive phenomenon" in likelihood-based anomaly detection (Definition 3.3) and uses it to demonstrate—across all 57 datasets in ADBench against 12 baselines—that this phenomenon is consistently rare in tabular data, where NF-SLT achieves the best mean AUROC (0.8575) and lowest fail ratio (0.02). The most important piece of evidence supporting this contribution is the combination of Theorem 5.4 (showing the likelihood gap's lower bound decreases linearly with dimension) with the dimensionality-reduction validation in Table 2 and the intrinsic-dimensionality analysis in Table 4, which together explain *why* tabular data avoids the phenomenon through its lower dimensionality and weaker feature correlations relative to images.
+
+--- Merged Review ---
+Now let me run calibration searches to anchor my scoring.Now I have enough context to write the consolidated review. Let me compile the final assessment.
+
+---
+
+## Summary
+
+This paper investigates whether the "counterintuitive phenomenon" of likelihood-based detection failure — documented by Nalisnick et al. (2019a) for image OOD detection with normalizing flows — also appears in tabular anomaly detection. The authors propose a formal, domain-agnostic definition of this phenomenon (Definition 3.3) based on relative AUROC ranking against baselines, conduct extensive experiments on 47 tabular and 10 CV/NLP embedding datasets from ADBench against 12 baselines, and find that NF-SLT (a normalizing flow with simple likelihood thresholding) consistently outperforms or ties other methods. They further provide theoretical analysis (Theorem 5.4, Corollary 5.6) linking dimensionality and feature correlation to the rarity of the phenomenon in tabular settings, validated through dimensionality reduction experiments and d Ratio analysis.
+
+---
+
+## Strengths
+
+- **Comprehensive, unbiased empirical evaluation**: All 57 datasets from ADBench (47 tabular + 10 CV/NLP embeddings) are evaluated without cherry-picking, compared against 12 baselines including both shallow (PCA, LOF, OCSVM, etc.) and deep methods (DAGMM, DeepSVDD, ICL, NeuTraLAD, MCM). This is more thorough than typical tabular AD studies and gives real breadth to the empirical findings. NF-SLT achieves the best mean AUROC (0.8575), best average rank (3.43), and lowest fail ratio (0.02) in Table 1.
+
+- **d Ratio analysis as a practical interpretive tool**: Using intrinsic dimensionality (via MLE and TwoNN) relative to ambient dimension to quantify feature correlation is a concrete operationalization. Table 4 demonstrates that image datasets have d Ratios of ~0.002–0.019 while tabular datasets range from 0.389–0.810, and the correlation between low d Ratio and NF-SLT failure on the 25 underperforming datasets is an informative finding that stands independently.
+
+- **Controlled dimensionality reduction experiment (Table 2)**: Applying ICA to high-dimensional image data and measuring AUROC as a function of retained components provides empirical support that dimensionality degrades likelihood-based detection in a controlled, reproducible manner. The trend is consistent with Theorem 5.4.
+
+- **CV/NLP embedding results reconciled with existing literature**: The explanation that embedding representations (d Ratio ~0.018–0.023) are less correlated than raw pixels is consistent with and extends Kirichenko et al. (2020), providing a unified account of why embeddings alleviate the phenomenon.
+
+---
+
+## Weaknesses
+
+### Fatal
+None.
+
+### Major
+
+- **The central definitional framework partially conflates "our method works well" with "the phenomenon is absent."** Definition 3.3 operationalizes the counterintuitive phenomenon as *most baselines outperforming the generative model (NF-SLT) by margin γ*. By construction, if NF-SLT ranks at the top of the leaderboard — which is the primary empirical result — Definition 3.3 declares the phenomenon absent. This creates a conceptual circularity: the definition is established, NF-SLT is shown to outperform baselines, and it is concluded "no phenomenon." The original Nalisnick et al. problem was a distributional one — whether anomalies receive *higher average log-likelihood* than normal samples under a model trained on normal data — not a comparative ranking problem. A dataset could exhibit likelihood inversion (anomalies assigned higher log-likelihood than normal samples) while NF-SLT still achieves good AUROC through appropriate threshold setting, and Definition 3.3 would still declare no phenomenon. The paper justifies the definitional shift (§3) by arguing that pure likelihood inversion can stem from dataset difficulty rather than the phenomenon, which is a reasonable point. However, the paper then never directly measures the original likelihood inversion rate across the 47 datasets. The conclusion that "the phenomenon is consistently rare in tabular settings" would be substantially strengthened — and much less circular — if the authors also reported the fraction of datasets where anomalies have *higher mean log-likelihood* than normal samples, independently of the comparative ranking. As it stands, the paper's headline claim is weaker than stated.
+
+### Minor
+
+- **Theorem 5.4's independence assumption is acknowledged but incompletely addressed.** The theorem requires P and Q to be products of independent marginals. The ICA preprocessing in Table 2 is designed specifically to produce approximately independent components, which makes the experiment consistent with the assumption. However, in the naturalistic Table 3 experiment (raw image resize), the paper correctly notes independence is not guaranteed and therefore the theorem does not apply — yet Table 3 is still cited as qualitative evidence for the theory's predictions. For the tabular domain, the d Ratio analysis (§5.2) shows that some tabular datasets with low d Ratio (high correlation) are precisely where NF-SLT fails, suggesting the independence condition is not uniformly met. The paper should more carefully separate claims about "approximately independent tabular data" (where the theorem applies) from "correlated tabular data" (where it doesn't), rather than treating the theorem as a blanket explanation for tabular success.
+
+- **NeuTraLAD's preprocessing exclusion is ad hoc and could affect relative rankings.** Excluding NeuTraLAD from RobustScaler "because a significant performance decrease was observed" is a result, not a principled justification. If NeuTraLAD is scale-sensitive, that is a property of NeuTraLAD relevant to fair comparison. Using different preprocessing for different models creates an inconsistency that is hard to audit without the appendix. Ideally the paper would show NeuTraLAD's AUROC under both preprocessing regimes.
+
+- **Corollary 5.6's moment condition is stated but not empirically verified.** The condition that the n-th absolute central moment of the log-likelihood difference scales as O(d^k) for k < n is stated as an assumption in the corollary. The paper does not check whether this condition holds on any of the actual datasets used, which makes the corollary's claim about AUROC's upper bound remaining theoretical rather than grounded.
+
+### Trivial
+
+- The β and γ thresholds in Definition 3.3 are defined in Appendix B, but the main text gives no indication of their values or any sensitivity analysis. Readers evaluating the claims about 'yeast' and 'imdb' cannot assess the conclusions without these values.
+
+---
+
+## Nice-to-Haves
+
+- Directly reporting the fraction of tabular datasets where the anomaly set has higher mean log-likelihood than the normal test set under NF-SLT (i.e., testing the original Nalisnick et al. criterion) would directly validate or complicate the central claim without requiring any definitional reframing.
+- A sensitivity analysis over β and γ in Definition 3.3, showing how the count of "phenomenon-exhibiting" datasets changes, would assess robustness of the main conclusion.
+- For the 25 datasets where NF-SLT underperforms (rank ≥ 3), showing that baselines *also* fail on low-d-Ratio datasets (rather than only NF-SLT) would help disentangle "dataset difficulty" from "the counterintuitive phenomenon."
+- Log-likelihood distribution overlap plots (normal vs. anomaly) on representative tabular datasets — analogous to the image-domain figures in Nalisnick et al. (2019a) — would directly visualize whether classical likelihood inversion occurs.
+
+---
+
+## Removed Points
+
+*These points are flagged to be removed; treat them with caution.*
+
+- **Harsh critic's claim about hyperparameter optimization asymmetry**: The paper states "The hyperparameter search space for each model and hyperparameter sensitivity experiment is recorded in Appendix F," implying that all models received grid-search treatment. The criticism assumes unfair tuning without evidence of this from the paper text. Removed.
+
+- **Harsh critic's claim about Definition 3.3 producing a result entirely tautological**: While the circularity concern is real and kept as a major weakness, the harsh critic's framing that the definition was "crafted" post-hoc to guarantee NF-SLT wins is not supported. The paper provides a coherent conceptual motivation for why comparative ranking is a better criterion than raw likelihood inversion, and the CIFAR-10/SVHN example (AUROC 6.4% vs. >90%) serves as external validation. The valid part of the criticism is retained as a major weakness, but the extreme framing is removed.
+
+- **Claim that the ICA dimensionality reduction experiment does not test the theorem in a natural setting**: The harsh critic notes that ICA "directly imposes the independence assumption" of the theorem, which is true, but this is precisely what the paper intends — to validate the theorem in a controlled setting where its assumptions hold. The paper is transparent about this and also includes Table 3 as a less controlled companion. This is not a fair criticism of the methodology.
+
+- **Harsh critic's claim that circular reasoning "structurally undermines" the central claim as fatal**: After reviewing the paper, this concern is real but does not rise to fatal status. The empirical finding that NF-SLT outperforms 12 baselines on 47 datasets is meaningful and robust, even if the definition of "counterintuitive phenomenon" could be more directly tied to likelihood inversion. Retained as Major, not Fatal.
+
+---
+
+## Novel Insights
+
+The most genuinely novel aspect of this paper is the d Ratio analysis, which provides a domain-level diagnostic for when likelihood-based tabular anomaly detection is expected to succeed or fail. The empirical finding that image datasets have d Ratios 2–3 orders of magnitude lower than typical tabular datasets, and that this correlates with NF-SLT's failure pattern within tabular data (Table 4, bottom), is a concrete and actionable insight for practitioners — it suggests that before applying NF-SLT to a new tabular dataset, computing the TwoNN intrinsic dimensionality relative to ambient dimension can serve as a rough predictor of whether likelihood-only detection will be competitive.
+
+---
+
+## Suggestions
+
+1. Add a supplementary analysis directly measuring the fraction of the 47 tabular datasets where anomaly samples achieve higher mean log-likelihood than normal samples under NF-SLT (classical Nalisnick criterion). This would decouple the empirical finding from the definitional reframing and dramatically strengthen the paper's claims.
+2. Report the β and γ values for Definition 3.3 in the main text (even briefly) and include a sensitivity table showing how the count of "phenomenon-exhibiting" datasets changes across a grid of thresholds.
+3. Add a brief per-dataset breakdown for the 25 NF-SLT underperforming cases: do baselines also fail, or do they succeed? This would separate "hard datasets" from "datasets exhibiting the counterintuitive phenomenon."
+
+---
+
+## Score and Decision
+
+**Calibration anchors consulted:**
+
+| Path | Avg Score | Comparison to paper under review |
+|---|---|---|
+| `/home/wg25r/review_agent/human_reviews/oDGkq0AleM.md` | 3.0 | Low anchor. Tabular density-based AD with no supporting theory and logically unsound motivation. Weaker than this paper's empirical sweep and formal theorem. |
+| `/home/wg25r/review_agent/human_reviews/6Z8rZlKpNT.md` | 3.4 | Low anchor. NF-based OOD detection, missing baselines, poorly written, incomplete methods. More clearly deficient than this paper. |
+| `/home/wg25r/review_agent/human_reviews/hWF4KWeNgb.md` | 4.25 | Medium-low anchor. NF-based multi-class AD, partially valid method but rejected. Closer in quality to this paper. |
+| `/home/wg25r/review_agent/human_reviews/LGafQ1g2D2.md` | 5.2 | Medium anchor. "Can LLMs understand time series anomalies?" — empirical investigation of a phenomenon with comprehensive experiments. Structurally similar to this paper. Accepted poster. |
+| `/home/wg25r/review_agent/human_reviews/7VkHffT5X2.md` | 6.75 | Medium-high anchor. AnoLLM, tabular AD with LLMs. Novel method, accepted poster. More methodologically innovative, better-aligned definition of contribution. |
+| `/home/wg25r/review_agent/human_reviews/cJs4oE4m9Q.md` | 8.0 | High anchor. Deep anomaly detection with strong theory and rigorous experiments. Much stronger theoretical foundation. |
+
+**Assessment against anchors:** This paper is most similar in structure to the LGafQ1g2D2 "Can LLMs…?" paper (5.2, accepted poster) — it empirically investigates a phenomenon across many datasets with theoretical backing. However, that paper is clearer about what it measures and does not change the definition of the phenomenon mid-paper. This paper's major weakness (the conceptual circularity in Definition 3.3 conflating "our model works" with "phenomenon absent") is a meaningful flaw that would be highlighted in a rebuttal. The breadth of evaluation and the d Ratio analysis are genuine strengths that raise it above the 3.0–3.4 rejected papers. The lack of a direct measurement of the original likelihood inversion phenomenon is a notable gap. Positioning this between hWF4KWeNgb (4.25, rejected) and LGafQ1g2D2 (5.2, accepted), slightly closer to the lower end given the definitional circularity concern, I arrive at **4.5**.
+
+**Originality**: Moderate. The question is natural and well-motivated; the d Ratio operationalization is new; the definitional formalization is useful but imperfect.
+**Importance of research question**: Good. Practitioners using normalizing flows for tabular AD benefit from knowing when simple likelihood scoring is safe.
+**Claims vs. support**: Mixed. Empirical results strongly support NF-SLT's ranking; the claim that "the counterintuitive phenomenon is rare" is more fragile due to the definitional shift.
+**Soundness of experiments**: Generally sound; comprehensive evaluation; some concerns about NeuTraLAD preprocessing and the ICA-specific nature of Table 2.
+**Clarity**: Adequate; the paper is readable but the definitional arguments in §3 require careful attention.
+**Value to community**: Real but moderate; practitioner-relevant guidance exists, but the theoretical apparatus is somewhat underdeveloped for the claim it carries.
+
+MY FINAL SCORE: <pineapple>4.5</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>
+
+--- Scorer Output ---
+4.5
+
+--- Decision ---
+Reject
+
+============================================================
+Paper: ../iclr2026_cspaper/papers/N8ntZEb4Ap.txt
+Timestamp: 2026-04-25T17:53:44
+
+--- Token Usage ---
+  Harsh Critic: N/A (claude_sdk path)
+  Strength Finder: input=12302 (cached=0) output=1261 (reasoning=0) total=13563 requests=1 duration=n/ams
+  Merger: N/A (claude_sdk path)
+  TOTAL: input=12302 output=1261 total=13563
+
+--- Claude SDK Usage ---
+  [Harsh Critic]
+    Model: claude-sonnet-4-6
+    Session ID: 7c82e8a4-934f-4f59-bcef-6dfdd157217f
+    Cost (USD): 0.20004105
+    Turns: 6
+    Duration: total=205464ms api=174295ms
+    Tokens: input=10 output=7898 cache_read=51566 cache_creation=17619
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  [Merger]
+    Model: claude-sonnet-4-6
+    Session ID: e1392dda-ffc5-4209-810c-2ac38c0e28f4
+    Cost (USD): 0.31959225
+    Turns: 16
+    Duration: total=189685ms api=181317ms
+    Tokens: input=21 output=8118 cache_read=207410 cache_creation=36143
+    Plan usage: type=five_hour util=n/a status=allowed overage=rejected
+  TOTAL Claude SDK cost (USD): 0.5196
+
+--- Merged Inputs ---
+
+### Harsh Critic
+I'll start by reading the paper before writing the review.Now I have a thorough understanding of the paper. Let me write the review.
+
+---
+
+# Review: AutoNFS: Automatic Neural Feature Selection
+
+## Critical Issues
+
+**Issue 1 — Structural: The "automatic" feature count is controlled by λ, which is itself a user-defined hyperparameter**
+
+The paper's central distinguishing claim, stated in the abstract, introduction, and conclusion, is that AutoNFS "automatically determines the minimal set of features essential to solve a given downstream task," unlike existing methods that "require the number of selected features to be manually specified." This claim is false as stated. The number of features AutoNFS selects is entirely determined by λ, the weight on L_select (Equation in Section 3.4: L_total = L_task + λ · L_select). Different values of λ produce different feature counts. The paper tacitly acknowledges this in the Conclusion: "the balance between sparsity and accuracy, controlled through a single λ parameter." λ = 1 was chosen by the authors through empirical validation ("We experimentally verified that using a constant value λ = 1 gives satisfactory results across datasets"), which means it was selected across the benchmark datasets. AutoNFS does not eliminate the user-defined feature-count hyperparameter; it replaces a cardinality constraint (k) with a regularization weight (λ). Whether λ is "easier" to set than k is a reasonable argument to make, but it is not the same as being automatic. The claim as written is structurally misleading and cannot be fixed by adding experiments — it requires reconceiving what the paper claims.
+
+**Issue 2 — Structural: The baseline comparison constrains all competitors to a sub-optimal feature count**
+
+Section 4.1 states: "It is important to note that all baseline methods select the same number of features as were in the initial representation (before corruption), whereas our method automatically chooses a much smaller subset." This means every competitor is evaluated at k = D_original, a fixed value that includes none of the injected noise features. AutoNFS is free to select any k ≤ D_total. In all three scenarios (random, Gaussian-corrupted, second-order), the optimal k is likely smaller than D_original, because the original feature set may itself contain redundant features. Forcing baselines to a fixed k = D_original, rather than letting them cross-validate over k, systematically disadvantages them. The headline result — AutoNFS outperforms baselines while selecting fewer features — cannot be attributed to the quality of AutoNFS's selection mechanism under this setup; it could simply reflect that the constrained k for baselines is wrong. The proper experiment would tune k for each baseline via cross-validation. Without it, the performance comparison does not establish superiority of the AutoNFS mechanism.
+
+**Issue 3 — Evidential: The near-constant computational complexity claim (α ≈ 0.08) is architecturally unexplained and likely incorrect**
+
+Section 4.3 claims AutoNFS scales with D^0.08, presented as a "significant algorithmic advancement." However, the masking network f: R^{D_e} → R^D must output a D-dimensional logit vector. For any standard MLP, the final layer has D output neurons, each with D_e weights, giving O(D · D_e) parameters and O(D) forward-pass cost in the output layer alone. The task network g: R^D → Y receives D-dimensional masked inputs, so its first-layer cost also scales with D. Neither network can be constant-time in D under a standard MLP implementation. The paper does not describe the architecture of f or g in the main text (only references the appendix, which was stripped by the parser), so there is no way to evaluate how near-constant scaling is achieved. The empirical α ≈ 0.08 from curve-fitting empirical timings over an unspecified range of D is not a substitute for a clear architectural explanation. The claim as presented is unsupported.
+
+---
+
+## Section-by-Section Notes
+
+**Section 3.2 (Masking Network):** The masking network takes as input a "randomly initialized input embedding e ∈ R^{D_e}" and outputs w ∈ R^D. Since e is a fixed learned parameter (not derived from the dataset), f(e) is a parameterized mapping of a single fixed point to D outputs. Functionally, this is equivalent to maintaining D trainable scalar logits w_1, …, w_D directly, with the masking network f serving as a reparameterization. The paper gives no ablation showing that adding the network f on top of trainable e provides any benefit over simply optimizing w ∈ R^D directly. This potential redundancy — the most structurally unusual design choice in the paper — goes unexplored. The architecture of f (depth, width, activation functions) is not described in the main text, which also hampers reproducibility.
+
+**Section 3.4 / Section 3.5 (Training and Feature Importance):** The temperature annealing schedule uses α = 0.997 but E (total epochs) is not given in the main paper. The claim that the mask converges to near-binary is only valid if E is large enough (at α = 0.997, reaching τ < 0.1 from τ = 2.0 requires > 2400 epochs). This is relevant for understanding the computational budget comparisons. More critically, the "feature importance quantification" procedure (Section 3.5) applies a hard threshold at σ(w_i) > 0.5, but this threshold is arbitrary. Because Gumbel-Sigmoid logits are not calibrated probabilities, features near the boundary (σ(w_i) ≈ 0.5) will flip discretely based on minor training instability.
+
+**Section 4.1 (Analysis of Selected Features, Figure 3b):** The paper claims that "the average decrease for AutoNFS is equal to 0.313, which means that the returned set cannot be further reduced without affecting predictive performance." This is not what Figure 3b shows. A high average per-feature impact does not imply the set is irreducible — removing multiple features simultaneously can sometimes match removing any single one if there are redundancies in the joint set. Minimality requires leave-one-out be done on subsets, not just individual features. The minimality conclusion is overdrawn.
+
+**Section 4.2 (Metagenomic Results, Table 2):** The results are highly mixed. For MLP, AutoNFS-reduced features outperform full data on approximately 13/24 datasets, and underperform on ~9/24 (KeohaneDM, JieZ, FengQ, ZhuF, ThomasAM_2018b, HanniganGD_2017 vs RF, LiJ_2017 vs RF, ThomasAM_2018a, YuJ_2015). The average improvement of +0.7 pp for MLP and +1.2 pp for RF is reported without any statistical test (e.g., Wilcoxon signed-rank over 24 datasets). The claim that "AutoNFS maintains predictive performance" is barely supported; the claim that it consistently improves it is not. Notably, there is also no comparison to any baseline FS method on these datasets — it is only full data vs. AutoNFS-reduced, so the metagenomic section provides no evidence about comparative FS quality.
+
+**Abstract:** The abstract states AutoNFS "outperforms both the classical and neural FS methods." The related work section discusses neural FS methods (STG, LassoNet, Concrete Autoencoders, INVASE) at length. Whether these are included among the "10 established FS methods" in the benchmark comparison is not stated in the main paper. If they are absent, the claim about outperforming neural methods is unsupported.
+
+---
+
+## Strengths
+
+- The use of a single, globally-learned binary mask rather than input-dependent (instance-specific) selection is a well-motivated design choice for tabular data tasks where interpretability of a fixed feature subset is desired, and the paper explains this clearly.
+- The benchmark setup from Cherepanova et al. (2023) with three distinct noise injection scenarios (random, Gaussian-corrupted, second-order product features) is a rigorous protocol, and AutoNFS achieving zero misselection errors for the first two categories (Figure 3a) is a striking and specific empirical finding.
+- Including 24 metagenomic datasets goes meaningfully beyond synthetic benchmarks and addresses a domain where sparse feature selection has biological interpretability value.
+
+---
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+1. **Baseline comparison with cross-validated k**: All baseline FS methods should be evaluated with k selected by cross-validation, not fixed at D_original. Without this, the performance comparison does not attribute differences to the selection mechanism. This is the highest-priority missing experiment.
+2. **Neural FS baselines in computational comparison**: STG, LassoNet, and Concrete Autoencoders are neural FS methods that compete with AutoNFS on qualitative grounds. Omitting them from Figure 4 makes the runtime comparison uninformative about AutoNFS's actual computational advantage over its nearest competitors.
+3. **λ sensitivity analysis on held-out datasets**: The claim that λ = 1 works universally needs to be validated on datasets not used to verify it, showing that the selected k is stable and near-optimal across a range of λ and is not tuned post-hoc. Without this, the "no user intervention" claim remains unsubstantiated.
+
+### Deeper Analysis Needed
+1. **Ablation of the masking network vs. direct logit training**: Since the masking network takes a single fixed embedding as input, it may be functionally equivalent to maintaining a trainable logit vector. An ablation replacing f(e) with a trainable w ∈ R^D is essential to establish that the masking network architecture contributes anything.
+2. **Statistical validation of metagenomic results**: A signed-rank test over the 24 metagenomic datasets would establish whether the +0.7 pp / +1.2 pp improvements are statistically reliable; the current presentation does not support the claim of consistent improvement.
+
+### Visualizations & Case Studies
+1. **Failure mode analysis**: Show datasets where AutoNFS selects either too many or too few features, what value of λ would have corrected this, and why the method failed to find the correct sparsity level.
+
+### Obvious Next Steps
+1. **Comparison with fixed-budget AutoNFS**: Evaluate AutoNFS in a regime where λ is cross-validated (essentially using it as a fixed-budget method), and compare this directly to baselines with cross-validated k. This would cleanly isolate whether the selection mechanism is genuinely better, independent of the feature-count determination.
+
+---
+
+## Overall Assessment
+
+AutoNFS is a well-executed engineering effort with a clean implementation and solid benchmark results, but two structural problems prevent acceptance. First, the central claim — that AutoNFS automatically determines feature count without user intervention — is incorrect: λ = 1 is itself a user choice that controls the selected k, and the paper provides no principled argument that λ = 1 is universally near-optimal. Second, the comparative evaluation is unfair: baselines are constrained to a fixed k equal to the original feature count, while AutoNFS optimizes k freely. The reported performance advantage cannot be attributed to AutoNFS's feature selection mechanism under this setup. These are not addressable by adding ablations; they require reconceiving the claims and rerunning the comparison with a level playing field (baselines with cross-validated k). Until that comparison exists, the paper does not establish that AutoNFS is a better feature selector — only that using fewer features can be better than using more, which is not new.
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+
+1. **Automatic determination of the number of selected features without user specification**: Unlike baselines that require k as input, AutoNFS uses the cardinality penalty $\mathcal{L}_{\text{select}} = \frac{1}{D}\sum_{j=1}^D m_j$ (Eq. in §3.3) to learn the feature count during optimization. Table 1 (RHS) demonstrates this clearly—AutoNFS selects varying numbers of features across datasets (e.g., 8 for eye with random features vs. 42 for year with second-order features) and scenarios without any manual k specification.
+
+2. **Near-constant computational scaling with dimensionality**: The empirical complexity analysis in §4.3 (Figure 4a) shows AutoNFS scales as $t \approx D^{0.08}$, effectively constant, compared to $\alpha \approx 1.0$ for filter methods and $\alpha \approx 1.41$ for RFE with Linear SVC. This directly validates the claimed scalability advantage and is a meaningful practical improvement over prior neural FS methods whose cost grows with D.
+
+3. **Consistently superior predictive performance with fewer features**: Figure 2 shows AutoNFS achieves the best average rank across all three corruption scenarios (rank 2.1 for corrupted, best overall for random and second-order), while Table 1 (RHS) confirms it selects substantially fewer features than the original dimensionality—e.g., 47 of 136 features for microsoft (random scenario) vs. the 136 features used by all baselines.
+
+### Supporting strengths
+
+1. **Rigorous feature selection quality analysis beyond predictive accuracy**: Figure 3a shows AutoNFS achieves zero misselection errors for random and corrupted features (correctly excluding all noise), and Figure 3b demonstrates that each selected feature is necessary—the average predictive power decrease of 0.313 per removed feature confirms the selected set cannot be further reduced without performance loss. This analysis goes beyond standard FS evaluations.
+
+2. **Robustness across downstream classifiers**: The metagenomic experiments (Table 2) validate that the AutoNFS-selected features generalize across classifiers—not just the MLP used during training, but also Random Forest, with RF even showing a larger improvement (1.2 pp vs. 0.7 pp for MLP). This addresses a natural concern about classifier-specific selection bias.
+
+3. **Effective temperature annealing curriculum**: The annealing schedule (τ₀=2.0, α=0.997, Algorithm 1 lines 3 and 21) provides a principled transition from soft continuous masks to hard binary masks. Figure 5 visually demonstrates that the model explores extensively before converging to a final sparse selection, corroborating the described exploration-exploitation behavior.
+
+### Presentation / practical strengths
+
+1. **Reproducibility and integration with existing benchmark**: The implementation is shared (§Abstract), and experiments extend the codebase of Cherepanova et al. (2023) (§4.1), enabling direct and fair comparison with 10 established methods.
+
+## Summary
+
+The paper proposes AutoNFS, an end-to-end differentiable neural feature selection method that uses Gumbel-Sigmoid sampling with a cardinality penalty to automatically determine both which and how many features to retain. The single most important piece of evidence is Figure 2 combined with Table 1: AutoNFS achieves the best average rank across all three feature corruption scenarios while simultaneously selecting far fewer features than baselines require, demonstrating that automatic cardinality discovery does not come at the cost of predictive power.
+
+--- Merged Review ---
+Now let me search for calibration anchors.Good. Now let me run calibration searches while I finish reading the paper.Now I have enough information to write the consolidated review. Let me finalize it.
+
+---
+
+## Summary
+
+AutoNFS is a differentiable end-to-end feature selection method that combines a masking network (using Gumbel-Sigmoid sampling with temperature annealing) with a task network to jointly learn which features to select. The key claimed novelty is that AutoNFS automatically determines *how many* features to retain (not just *which* ones), using a cardinality penalty term L_select = (1/D)Σmⱼ in the total loss, rather than requiring the user to specify a budget k. It is evaluated on 11 tabular OpenML datasets under three noise-injection scenarios and 24 metagenomic datasets, consistently outranking 10 baseline FS methods.
+
+---
+
+## Strengths
+
+- **Zero misselection errors for random and Gaussian-corrupted noise scenarios (Figure 3a):** AutoNFS perfectly excludes injected noise features in two of three benchmark scenarios, while all baselines show substantially higher misselection rates. This is a concrete, specific empirical result with a clear quantitative advantage.
+
+- **Strong rank performance across all three corruption scenarios (Figure 2):** AutoNFS achieves best average rank in the random and second-order scenarios and rank 2.1 in the corrupted scenario — consistent across all three distinct settings and 11 datasets.
+
+- **Breadth of evaluation:** Experiments cover both synthetic benchmarks (Cherepanova et al. 2023 protocol), 24 metagenomic datasets, MNIST interpretability visualization, and computational scaling analysis. This multi-angle validation is above average for a feature selection paper.
+
+- **Generalization across classifiers in the metagenomic experiments:** The AutoNFS-selected features improve not just MLP (the training classifier) but also Random Forest (+1.2 pp), addressing the concern of classifier-specific selection bias.
+
+- **Clean, well-motivated architecture:** A single globally-learned binary mask trained end-to-end through Gumbel-Sigmoid relaxation is a principled and interpretable design for tabular data FS, and the paper explains the exploration-exploitation curriculum well.
+
+---
+
+## Weaknesses
+
+### Fatal
+
+None.
+
+### Major
+
+- **The "automatic feature count" claim is partially overstated.** The paper's central distinguishing claim is that AutoNFS "automatically determines the minimal set of features" without user specification, unlike methods that require k. However, the number of selected features is entirely controlled by λ (the cardinality penalty weight in L_total = L_task + λ·L_select). The paper explicitly acknowledges this in the Conclusion: "the balance between sparsity and accuracy, controlled through a single λ parameter." The authors justify λ = 1 by empirical validation on the benchmark datasets. This is a user-defined hyperparameter that implicitly sets the feature budget, just through a different interface (regularization weight vs. cardinality k). The claim is better framed as "replacing a cardinality constraint with a regularization weight that can be fixed universally at λ = 1," which is a weaker but still meaningful claim. As written, the framing misleads readers into thinking the method requires zero feature-count-related user input.
+
+- **Baseline comparison constrains competitors to a potentially suboptimal k.** The paper states: "all baseline methods select the same number of features as were in the initial representation (before corruption), whereas our method automatically chooses a much smaller subset." Baselines are locked to k = D_original while AutoNFS freely optimizes k. Baselines could likely achieve better performance with smaller k cross-validated on each dataset (Table 1 shows AutoNFS selects substantially fewer than D_original even after noise removal). The observed performance gap therefore conflates (a) the quality of AutoNFS's selection mechanism and (b) the benefit of choosing an appropriate k. A clean comparison would include at least one baseline with k tuned via cross-validation. Without it, the experiment demonstrates that "using fewer features is often better" (a known result) rather than "AutoNFS is a better feature selector." This ambiguity weakens the central performance claim, though automatic k-determination is itself a valuable contribution.
+
+### Minor
+
+- **The masking network design is unexplained and unablated.** The masking network f: R^{D_e} → R^D takes a single fixed (but learned) embedding e as input. Since e is a constant across examples, f(e) is functionally equivalent to a trainable vector w ∈ R^D reparameterized through an MLP. No ablation compares this design against directly training a logit vector w ∈ R^D. The architecture of f (depth, width, activations) is not described in the main text. This is the most structurally unusual design choice in the paper and goes entirely unexplained.
+
+- **Near-constant computational scaling claim (α ≈ 0.08) lacks architectural justification.** Section 4.3 presents α ≈ 0.08 as a "significant algorithmic advancement," but provides no architectural explanation for why the masking or task networks would be near-constant in D. The final output layer of f must produce D logits, and the task network g receives D-dimensional inputs — both scale at least O(D) in a standard MLP. The near-constant behavior may stem from GPU parallelism saturating across tested D values rather than an intrinsic algorithmic property. Empirical curve-fitting over an unspecified D range is not a substitute for an architectural argument.
+
+- **Minimality conclusion in Figure 3b is technically imprecise.** The paper states the "average decrease of 0.313 means that the returned set cannot be further reduced." This is a leave-one-out argument — it shows each individual feature is necessary, but does not rule out joint redundancies where removing a pair simultaneously would not hurt performance. The claim of a "minimal" set is technically unsupported by this analysis alone.
+
+- **No statistical test for metagenomic improvements.** The +0.7 pp (MLP) and +1.2 pp (RF) average improvements across 24 metagenomic datasets are reported without a significance test (e.g., Wilcoxon signed-rank). Table 2 shows multiple datasets where AutoNFS underperforms (e.g., KeohaneDM, JieZ, FengQ, ZhuF, ThomasAM_2018b). Without a test, these average differences cannot be claimed to be significant.
+
+### Trivial
+
+- The abstract claims AutoNFS "consistently outperforms both classical and neural FS methods." Whether neural FS baselines (STG, LassoNet, Concrete Autoencoders, INVASE — discussed at length in related work) are included in the 10 compared methods is not stated in the main text. This should be clarified explicitly.
+
+---
+
+## Nice-to-Haves
+
+- Provide a version of the comparison where at least one strong baseline (e.g., STG or Concrete Autoencoder) has its k cross-validated, isolating whether AutoNFS's gains come from mechanism quality or k-determination.
+- Ablate f(e) vs. direct logit training (w ∈ R^D trained directly) to verify the masking network contributes beyond parameterization convenience.
+- A sensitivity analysis showing how k varies as λ is changed across a range (0.1–10) would clarify the robustness of the λ = 1 default claim.
+- Statistical test (Wilcoxon signed-rank) over 24 metagenomic datasets for MLP and RF.
+
+---
+
+## Removed Points
+
+*These points are flagged to be removed; treat them with caution.*
+
+- **Harsh Reviewer: "Automatic" claim is structurally false** — Partially removed from Fatal tier. The concern is legitimate and retained as Major, but downgraded: the paper does determine k through optimization rather than direct specification; the issue is that λ substitutes for k as the effective budget parameter. This is worth flagging prominently but does not fully invalidate the contribution.
+
+- **Strength Finder: "Near-constant computational scaling validates scalability"** — Moved to Nice-to-Have / weakened: the α ≈ 0.08 claim is empirical and architecturally unexplained in the main text; it cannot be accepted uncritically as evidence of a fundamental algorithmic advance.
+
+- **Strength Finder: "Reproducibility and integration with Cherepanova et al. codebase"** — Removed as too generic (merely citing that code is shared and that the benchmark codebase was extended doesn't constitute a scientific strength).
+
+---
+
+## Novel Insights
+
+The most interesting observation synthesized across reviewers is the tension between two competing framings of AutoNFS's contribution: (1) as a *feature selection mechanism* (which features to pick), and (2) as a *feature budget estimator* (how many features to pick). The experimental setup, by fixing baselines to k = D_original, primarily demonstrates that AutoNFS excels at (2), but conflates (2) with (1). The correct test for (1) — comparing AutoNFS against a baseline given the same k that AutoNFS chose — is absent. Interestingly, if one accepts the Cherepanova benchmark protocol as standard, AutoNFS's automatic k-determination is genuinely the key innovation, and the benchmark result legitimately shows that fixing k to the original feature count is suboptimal. The more precise and defensible story for this paper is not "better selector" but "the first practically useful automatic-k neural selector," which would actually be a compelling and honest contribution.
+
+---
+
+## Suggestions
+
+1. Reframe the core claim from "automatically determines the minimal set" to "eliminates the need to specify k by replacing it with a regularization weight λ that can be fixed at 1 across datasets" — this is honest and still compelling.
+2. Add one comparison where a strong baseline (STG or Concrete Autoencoder) has k tuned by cross-validation, to isolate selection mechanism quality from k-determination advantage.
+3. Add an ablation table comparing f(e) → mask vs. direct w ∈ R^D → mask (i.e., remove the masking network, keep only the trainable logit vector with Gumbel-Sigmoid). This would clarify the role of the masking network.
+4. Add a Wilcoxon test over the 24 metagenomic datasets.
+5. Clarify in the main text which of the 10 baselines are neural FS methods.
+
+---
+
+## Score and Decision
+
+**Calibration anchors retrieved:**
+
+| Paper | Avg Score | Relevance |
+|---|---|---|
+| `lt6xKGGWov.md` — Feature selection with neural MI estimation | 2.33 | Low anchor — feature selection paper, far weaker (no real datasets, poor presentation, unsound method) |
+| `Ai4L058yoO.md` — Unsupervised Feature Selection vs. Extraction | 4.50 | Medium-low anchor — feature selection comparison paper; broader scope but weaker methodology than AutoNFS |
+| `1MRfyGLCcU.md` — Graph-enhanced Semi-supervised Feature Selection | 4.75 | Medium anchor — end-to-end neural feature selector; comparable contribution scope but weaker benchmark |
+| `xtTut5lisc.md` — EASE iterative feature space optimization | 5.00 | Medium anchor — feature space optimization, good experiments but presentation issues; comparable overall quality to AutoNFS |
+| `0SOhDO7xI0.md` — DeepDRK knockoff-based feature selection | 5.75 | Medium-high anchor — more theoretically grounded FS paper, strong experiments; rejected at 5.75 |
+| `vNdOHr7mn5.md` — Deep Weight Factorization sparse learning | 7.00 | High anchor — sparse neural learning with theory + strong experiments; substantially stronger theoretical contribution |
+
+**Positioning:** AutoNFS is clearly above the low anchor (lt6xKGGWov). It is stronger than EASE (5.0) and the semi-supervised FS paper (4.75) in terms of experimental breadth and clarity, but shares with them the weakness of evaluation ambiguity and overclaimed contributions. It is below DeepDRK (5.75) in rigor and below Deep Weight Factorization (7.0) in theoretical depth. The two Major weaknesses — partially misleading "automatic" claim and the baseline comparison that does not isolate mechanism quality — are real and substantive, but they don't invalidate the core results. The paper has genuine value in a well-established benchmark setting and is more comprehensive than most feature-selection papers in the corpus.
+
+**Score: 4.5** — The experimental setup provides evidence for AutoNFS's k-determination advantage but does not cleanly establish superiority of the selection *mechanism* itself. Combined with the overclaimed "automatic" framing, this sits in the lower-borderline range, below DeepDRK (rejected at 5.75) and comparable to EASE/graph-FS papers.
+
+MY FINAL SCORE: <pineapple>4.5</pineapple>
+MY FINAL DECISION: <orange>Reject</orange>
+
+--- Scorer Output ---
+4.5
+
+--- Decision ---
+Reject
