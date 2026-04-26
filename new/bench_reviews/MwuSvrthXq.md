@@ -1,21 +1,18 @@
-Now I have enough information to write the final review. Let me synthesize.## Summary
-WeCAN is an end-to-end reinforcement learning framework for heterogeneous DAG scheduling with task-pool compatibility coefficients. The paper makes two primary technical contributions: (1) a weighted cross-attention (WeCA) layer that embeds compatibility coefficients multiplicatively outside the softmax, enabling adaptable environment-aware task embeddings; and (2) a theoretical analysis of the optimality gap in list scheduling, paired with a parametric skip-action mechanism adapted for single-pass inference to close that gap. Evaluations on TPC-H and Computation Graphs benchmarks show 7–18% gains over heuristics and 7–9% gains over included neural baselines, with competitive inference speed.
+Now I have enough calibration. Let me write the final review.
 
----
+## Summary
+
+The paper proposes WeCAN, an end-to-end reinforcement learning framework for heterogeneous DAG scheduling with task-resource compatibility coefficients. Its key contributions are: (1) a weighted cross-attention (WeCA) layer that places compatibility coefficients K_acc as diagonal scaling outside the softmax, enabling variable-size heterogeneous environment embeddings; (2) a theoretical analysis showing list scheduling has an inherent optimality gap that is most pronounced for heavy tasks, along with a skip-action mechanism that provably closes this gap within single-pass inference; and (3) empirical validation on TPC-H and Computation Graphs benchmarks showing up to 18% improvement over heuristics and 7.7–9.5% over neural baselines at near-heuristic inference speed.
 
 ## Strengths
 
-- **WeCA outside-softmax design is technically well-justified and empirically validated.** The paper provides a crisp two-pool, two-task example showing why placing Kacc inside the softmax collapses embeddings of tasks with different compatibility profiles. Table 3 confirms this is not a minor detail: "WeCA-final-only" drops to +0.5% over Tetris on TPC-H-30, while WeCA+LDDGNN achieves +14.0%. The ablation decisively supports the design.
+- **The WeCA mechanism is a principled and well-motivated design choice.** The outside-softmax placement of K_acc (Eq. 4) directly addresses a real limitation: when compatibility coefficients are placed inside the softmax (log form), normalization collapses the embedding distinction between tasks with identical attributes but different compatibility profiles (the v₁/v₂ example in Section 3.1). The ablation in Table 3 confirms this: WeCA achieves 14.0% vs. 10.5% for WeCA-inside on TPC-H-30. The architecture also naturally handles variable pool counts and task types, which is validated in Figure 2's generalization experiments.
 
-- **Formal optimality-gap analysis is a genuine contribution.** Theorems 1 and 2 establish that list scheduling's generation map is not surjective over the optimal solution space, and that the skip-augmented map closes this gap. The constructive proof and the criterion (Assumption 1) provide a principled framework that prior neural scheduling work lacked.
+- **The skip-action design provides both theoretical grounding and practical benefit.** Theorem 1 (parts ii–iii) formally establishes that without skip, the generation map fails to assign positive probability to optimal solutions for some problems, and that the skip mechanism restores this property. Figure 3 empirically validates that this gap manifests for heavy-task scenarios, where WeCAN with skip outperforms all baselines including the non-list-scheduling HEFT. The single-pass skip score formula u_skip = u_a(1−k/(2n))^{u_b} + u_c avoids multi-round computation while preventing excessive idling.
 
-- **LDDGNN outperforms standard GNN alternatives on directed dependency structure.** Table 3 shows a systematic ordering: WeCA+LDDGNN (14.0%) > WeCA+GAT(forward) (10.5%) > WeCA+GAT(bidirectional) (9.9%), consistent across both TPC-H-30 and TPC-H-50. The LDD-based attention bias is a targeted design for DAGs.
+- **Strong empirical performance with dramatic efficiency gains.** WeCAN-Greedy achieves makespan 62,587 in 1.72s on TPC-H-100, compared to PPO-BiHyb's 67,695 in 179.19s (7.7% improvement, ~104× speedup) and One-Shot-S(256)'s 66,173 in 9.85s (5.4% improvement). On Computation Graphs, improvements over the best neural baseline reach 9.5% (Table 2). The greedy mode runs at heuristic-scale speeds (0.15–1.72s), making it practically deployable.
 
-- **Practical inference speed is a real advantage.** WeCAN-Greedy runs at 0.15–1.72s across TPC-H datasets, comparable to heuristics and orders of magnitude faster than PPO-BiHyb (20–179s), while producing better makespan. For time-sensitive scheduling, this tradeoff is operationally meaningful.
-
-- **Generalization to varying environments is demonstrated.** Figure 2 shows sustained improvement over best heuristics under variation in pool number, pool type, task number, and task type at test time — supporting the adaptability claim of the WeCA architecture.
-
----
+- **Comprehensive generalization experiments.** Figure 2 tests robustness to changes in pool number, pool type, task number, and task type from a single training configuration, showing that WeCAN's architectural design enables zero-shot adaptation to unseen environment configurations.
 
 ## Weaknesses
 
@@ -24,81 +21,71 @@ None.
 
 ### Major
 
-- **Two directly relevant RL baselines are absent from all comparison tables.** Section 2.1 explicitly characterizes Zhadan et al. (2023) and Wang et al. (2025) as RL methods for heterogeneous DAG scheduling that use averaging of compatibility coefficients — the exact limitation WeCAN claims to address. Yet neither appears in Tables 1 or 2. The included RL baselines, PPO-BiHyb (Wang et al., 2021) and One-Shot (Jeon et al., 2023), either solve a structurally easier problem (One-Shot ignores compatibility coefficients entirely, as the paper itself notes) or use a radically different and slower inference paradigm (PPO-BiHyb with beam search at 20–179s vs. WeCAN at sub-5s). The headline "7.7% improvement over the best neural baseline" is therefore against competitors that do not operate in the same problem setting. Without Zhadan et al. (2023) and Wang et al. (2025), the claim of state-of-the-art RL performance for heterogeneous DAG scheduling is not established.
+- **Unclear adaptation of neural baselines for the heterogeneous setting.** The paper explicitly notes (Section 2.1) that One-Shot "does not consider compatibility coefficients or pool allocation." Yet One-Shot and PPO-BiHyb serve as the primary neural baselines in Tables 1–2, and the paper describes applying "three pool-selection rules" only for the four heuristic baselines, remaining silent on how the neural baselines handle pool assignment and compatibility. Without this information, it is difficult to assess whether the 7.7–9.5% improvements over the best neural baseline reflect genuine architectural advances or simply a stronger adaptation to the heterogeneous setting. This concern matters because the improvements over heuristic baselines (which are fully adapted) are even larger, suggesting baseline adaptation matters significantly for comparisons.
+
+- **The skip score formula u_skip = u_a(1−k/(2n))^{u_b} + u_c lacks formal or empirical justification for this specific parametric family.** Theorem 1 part (iv) guarantees that *some* set of scores exists to greedily recover an optimal solution, but this is an existence result — it does not justify why this particular three-parameter polynomial-decay form is the right choice, nor does the paper provide an ablation against simpler alternatives (e.g., a single learned scalar, or a linear decay). The claim that this form "clusters most poor solutions in the high-u_a, high-u_c region" (Section 4.2) is asserted without formal analysis or empirical validation of the loss landscape. Since the skip action is one of the two core technical contributions, this gap matters.
 
 ### Minor
 
-- **Skip action's practical benefit on standard benchmarks is not isolated.** The skip ablation (Figure 3) uses a dataset specifically modified to contain 1% heavy tasks — a setting engineered to exhibit list scheduling's failure mode. Tables 1 and 2 have no "WeCAN-no-skip" row, making it impossible to quantify how much the skip mechanism contributes under typical (unmodified) scheduling conditions versus how much comes from the WeCA+LDDGNN architecture. Given that the skip analysis is one of the paper's two headline contributions, this gap is worth addressing.
+- **The non-autoregressive vs. autoregressive comparison is deferred to Appendix B.** The decoder uses a non-autoregressive design where action probabilities depend only on s₁ (Section 3.2), discarding conditioning on previously selected actions. Since the paper claims improvements over an autoregressive baseline (PPO-BiHyb), having this comparison in the main text would strengthen the architectural argument. However, this is a presentation issue rather than a fundamental concern since the empirical results already include the comparison.
 
-- **Ablation sample size is small.** Table 3 reports results from 10 test problems per condition. With standard deviations on the order of 0.2%, differences of 0.5–4% between ablation variants may not be statistically robust. A modest increase in test set size or a paired significance test would strengthen these comparisons.
-
-- **Main experiments use only 3 resource pools.** The heterogeneous scheduling setting the paper targets is motivated by environments with varying pool counts, but all Tables 1 and 2 results use exactly 3 pools. The generalization experiment in Figure 2 tests varying pool counts but only reports relative improvement over heuristics, not absolute comparisons to RL baselines. This limits the scope of empirical evidence for the scalability claim.
+- **The heavy-task experiment (Figure 3) only compares WeCAN variants against heuristics, not against neural baselines.** Showing that One-Shot and PPO-BiHyb also struggle (or don't) with heavy tasks would more directly validate the skip mechanism's unique contribution.
 
 ### Trivial
-None beyond the usual.
-
----
+None.
 
 ## Nice-to-Haves
 
-- Move the auto-regressive vs. non-auto-regressive quality comparison from Appendix B into the main paper, with a table showing numbers. The non-AR design is the core speed-quality tradeoff of the approach; quantifying the quality cost would help readers understand where the design lands in the Pareto frontier.
-- Provide training convergence curves with and without skip to substantiate the variance-reduction claim ("clusters poor solutions in high-ua, high-uc region") made in Section 4.
-- A concrete schedule visualization on a heavy-task DAG instance would make the theoretical gap analysis in Section 4 tangible.
-
----
+- A worked numerical example (4–5 task DAG) illustrating how list scheduling fails and skip succeeds would make the theoretical contribution more accessible.
+- Confidence intervals or statistical significance tests for comparisons against deterministic baselines would strengthen the empirical claims.
+- Analysis of WeCA's computational overhead scaling with the number of pools/task types (n_c) would help assess scalability.
 
 ## Removed Points
-*These points are flagged to be removed, treat them with caution.*
 
-- **Non-AR decoder "mischaracterized as pure engineering win"** (Harsh Critic, structural point): The paper explicitly states in Section 3.2 "comparison with auto-regressive one in Appendix B" and discusses the tradeoff. The appendix exists even if not parsed. The concern about missing main-body quantification is a presentation preference, not a factual mischaracterization. Downgraded to Nice-to-Have.
-- **Formula for skip score lacks formal derivation** (Harsh Critic): The formula uπ_skip = ua(1 − k/2n)^ub + uc is a parametric design choice for a learned module. Demanding a formal derivation for a neural architecture component is outside community norms for empirical RL papers; the paper provides intuitive justification and empirical validation (Figure 3).
-- **REINFORCE convergence guarantee absent** (Harsh Critic): Demanding convergence proofs for REINFORCE in an empirical systems paper is not standard in this community. Moved to Nice-to-Have.
-- **Small test set for Figure 2** (Harsh Critic): The generalization experiment is presented as a robustness check, not a primary result. Criticizing its sample size without evidence of instability is insufficient to sustain as a weakness.
-- **Large-scale results in Appendix F** (Harsh Critic): Per rules, appendix content exists in the original submission. Not a valid criticism.
+- **"Theorems 1 and 2 proofs are inaccessible in Appendix A"** — The appendix is part of the submission. The parser strips appendices, but they exist in the original. The paper states "we provide the details of the proof in Appendix A," which is standard practice. Removed: this is a parser artifact, not an author error.
 
----
+- **"F(t,v) notation inconsistency"** — This is a minor notation issue that appears to be a formatting artifact. The meaning (tasks running on pool c at time t) is clear from context. Removed as a formatting nitpick.
+
+- **"The abstract overclaims novelty for observing list scheduling suboptimality"** — The paper's specific contribution is the analysis of S_list's non-surjectivity and the reduced-space mapping T∘S framework, not merely observing that list scheduling is suboptimal. The wording in the abstract ("revealing their inability to guarantee optimal solutions") is the paper's formal result (Theorem 1, parts ii–iii), not a generic observation. Removed as a mischaracterization.
+
+- **"The outside-softmax argument is a design heuristic rather than principled"** — The paper provides both a concrete counterexample (v₁/v₂ tasks) and empirical validation via ablation (Table 3: 14.0% vs 10.5%). This is a well-justified design choice, not merely heuristic. Removed as understating the evidence provided.
+
+- **"Request for statistical significance / confidence intervals"** — Standard practice in this community for RL-based scheduling methods is to report mean and std over seeds, which the paper does. Demanding significance tests against deterministic baselines is beyond community norms. Moved to Nice-to-Have.
+
+- **"Request for computational overhead analysis of WeCA"** — This is a reasonable suggestion for future work but not a weakness that affects the current claims, since inference times are already reported. Moved to Nice-to-Have.
+
+- **"Claim that WeCA's generalization is a strength"** — This is genuinely supported by Figure 2 experiments and is kept.
 
 ## Novel Insights
 
-The most non-obvious insight in this paper is the combination of a **surjectivity criterion** (Assumption 1) as the formal condition for a generation map to guarantee access to the optimal solution, together with the observation that the naive surjective map (Sn) concentrates training variance badly while the skip-augmented list scheduling map clusters poor solutions in a identifiable region of the parameter space. This framing converts what is usually treated as an engineering heuristic (adding skip/wait actions) into a theoretically grounded design decision. The characterization is crisp and more actionable than prior work on the subject.
+The paper identifies a clean theoretical characterization of when list scheduling provably fails: T∘S_list is neither identity nor surjective, meaning the generation map shrinks its image and can exclude optimal solutions. The skip action transforms the reduced space to make the composition surjective, which is a non-obvious insight. The outside-softmax placement of K_acc is also more than a design choice — it preserves the norm/magnitude of compatibility information, which inside-softmax normalization would destroy. However, the specific skip score formula remains an engineering choice without clear theoretical necessity beyond the existence guarantee of Theorem 1(iv).
 
----
+## Suggestions
 
-## Evaluation on Key Axes
+- Clarify in the experimental section (or an appendix) exactly how One-Shot and PPO-BiHyb handle compatibility coefficients and pool assignment in the heterogeneous experiments, so that the 7–10% improvement over neural baselines can be properly interpreted.
+- Ablate the skip score formula against simpler alternatives (e.g., constant u_skip, linear decay) to demonstrate that the polynomial-decay form is beneficial rather than merely sufficient.
 
-**Originality:** Moderate-to-good. The WeCA outside-softmax placement and the skip-augmented surjection analysis are specific and motivated innovations, not incremental variations on known architectures. The LDDGNN is an application of known ideas (Graphormer-style biases) to a new domain.
+## Evaluation
 
-**Importance of research question:** Good. Heterogeneous DAG scheduling is practically important, and the gap between current RL methods and heuristics in this space is real.
+**Originality**: High. The WeCA layer and skip-action formalization for single-pass heterogeneous scheduling are novel contributions not seen in prior work.
 
-**Claim support:** Partially strong. The WeCA design and LDDGNN contributions are well-supported by ablations. The "state-of-the-art RL" claim is not adequately supported given the absence of Zhadan et al. (2023) and Wang et al. (2025).
+**Importance**: High. Heterogeneous DAG scheduling with compatibility coefficients is a practically important problem; the near-heuristic-speed results are compelling for time-sensitive applications.
 
-**Experimental soundness:** Adequate for the included comparisons; limited by the missing baselines and the skip ablation being restricted to an engineered scenario.
+**Claims support**: Moderate. The WeCA claims are well-supported by ablation and generalization experiments. The skip-action theoretical claims are partly verifiable (Theorem statements are clear) but the specific formula lacks justification. The neural baseline comparison would be stronger with adaptation details.
 
-**Clarity:** Good. The paper is clearly written with well-structured technical content.
+**Experiments**: Good. Strong results across two datasets, ablation study, and generalization experiments. The main gap is the lack of clarity around baseline adaptation.
 
-**Value to community:** Moderate. The theory of optimality gaps in list scheduling is a useful framework; the WeCA design and LDDGNN are reusable components.
-
----
-
-## Calibration Anchors
-
-| Paper | Avg Score | Comparison |
-|---|---|---|
-| jsWCmrsHHs (DRL improvement heuristic for JSSP) | 7.5 | Stronger: comprehensive baselines vs. all state-of-the-art DRL methods, clean claim support. WeCAN is weaker on baseline coverage. |
-| Aly68Y5Es0 (L-RHO for FJSP) | 6.75 | Comparable in methodology quality; WeCAN slightly weaker on breadth of experimental validation. |
-| z2z9suDRjw (GOAL generalist CO) | 6.25 | Comparable; GOAL's generalist scope is broader, WeCAN's theory is deeper. |
-| VIEbRFp6s3 (MARL datasets) | 5.8 | WeCAN is technically more novel. |
-| ziB549CQ30 (Fuzzy JSSP) | 3.5 | WeCAN is clearly superior: real architecture novelty, theoretical analysis, solid ablations. |
-| bntJK4NyIW (Decentralized training) | 2.0 | WeCAN is significantly stronger in every dimension. |
-
-WeCAN's technical quality places it above the 5.0–5.8 cluster but below the 6.75–7.5 band due to the missing RL baseline comparisons (the exact gap that separates incomplete from comprehensive empirical validation in this subfield). A score of **5.5** is appropriate, reflecting real contributions constrained by a significant experimental gap.
+**Clarity**: Adequate. The paper covers significant ground (architecture, theory, experiments) and is generally readable, though Sections 3–4 could benefit from a concrete example to ground the abstract formalism.
 
 ## Score and Decision
 
-**Score: 5.5**  
-**Decision: Reject (Borderline)**
+**Calibration comparison:**
 
-The paper has real technical contributions — the WeCA design, LDDGNN, and the optimality-gap framework are all concrete and well-supported. However, the absence of Zhadan et al. (2023) and Wang et al. (2025) as baselines — methods the paper itself characterizes as the closest prior RL work for the exact problem setting — prevents verification of the central empirical claim. Addressing this gap in a revision would likely bring the paper into acceptance range.
+- High anchors: jsWCmrsHHs (avg 7.5, DRL for JSSP with novel GNN mechanism, strong empirical results) — this paper has comparable novelty and empirical quality but weaker theoretical grounding and the baseline adaptation concern.
+- Medium anchors: z2z9suDRjw (avg 6.25, GOAL generalist CO agent with mixed-attention) — this paper has more focused and deeper contributions than GOAL.
+- Low anchors: riQmzq5FaQ (avg 3.75, RL with elastic time steps, weak theory/experiments); 8WtBrv2k2b (avg 5.0, quantum scheduling RL with overclaimed 3× improvement but weak theoretical justification).
 
-MY FINAL SCORE: <pineapple>5.5</pineapple>
-MY FINAL DECISION: <orange>Reject</orange>
+This paper is substantially stronger than the low-scoring papers — it has genuine technical novelty (WeCA + skip), provable theoretical results (Theorems 1–2), and strong empirical results. It is somewhat below the high-scoring papers in terms of completeness (baseline adaptation concern, skip formula justification), but the core contributions are solid. The score should be in the 6–7 range, leaning toward 6.5 given the two major weaknesses but strong overall contribution.
+
+MY FINAL SCORE: <pineapple>6.5</pineapple>
+MY FINAL DECISION: <orange>Accept</orange>
