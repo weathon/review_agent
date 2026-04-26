@@ -4,8 +4,8 @@ export MERGER_MODEL="ollama:glm-5.1:cloud"
 export NEUTRAL_MODEL="ollama:glm-5.1:cloud"
 export SUBAGENT_MODEL="ollama:glm-5.1:cloud"
 export CALIBRATION_SET="2025"
-export OUTPUT_CSV="results/bench_scores_2026.csv"
-export MERGE_LOG="results/pipeline_whole_2026.log"
+export OUTPUT_CSV="results/bench_scores_glm_2026.csv"
+export MERGE_LOG="results/pipeline_whole_glm_2026.log"
 export CONCURRENCY=5    
 export MAX_PAPERS=200
 # rm bench_scores_qwen.log
