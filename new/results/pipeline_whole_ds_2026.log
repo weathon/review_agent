@@ -1,0 +1,212 @@
+
+============================================================
+Paper: ../iclr2026_cspaper/papers/b6qQmQ2F13.txt
+Timestamp: 2026-04-26T02:25:22
+
+--- Token Usage ---
+  Harsh Critic: input=10588 (cached=0) output=10421 (reasoning=8491) total=21009 requests=1 duration=n/ams
+  Strength Finder: input=9750 (cached=0) output=2533 (reasoning=1691) total=12283 requests=1 duration=n/ams
+  Merger: input=535301 (cached=471424) output=15184 (reasoning=7292) total=550485 requests=28 duration=709960ms speed=21.39 tokens/s
+  TOTAL: input=555639 output=28138 total=583777
+
+--- Merged Inputs ---
+
+### Harsh Critic
+## Critical Issues
+
+### Issue 1 (Structural) — Parallel scaling memory trade-off is based on an unnecessary batching assumption, invalidating Finding 3
+
+Section 4 (parallel scaling) and Finding 3 assume that majority voting must be performed with concurrent (batched) generation, multiplying KV‑cache memory by the group size \(G\). In reality, majority voting can be implemented by generating the \(G\) samples **sequentially**, reusing the same KV‑cache space; the memory footprint then remains **identical** to that of serial scaling (model weights + one KV cache). The paper’s stated question — “Under a fixed memory budget, how should one navigate the trade‑offs … ?” — is answered as if parallel scaling intrinsically consumes more memory, but the memory budget does **not** force this trade‑off: a user could always obtain the accuracy gains of majority voting without exceeding the memory used by serial scaling, at the cost of higher latency.
+
+The conclusion that “parallel scaling only improves the memory–accuracy trade‑off for models effectively larger than 8‑bit 4B” (Finding 3) is therefore an artifact of the batching assumption, not a genuine memory‑efficiency principle. The associated comparisons with serial scaling, the claim that the optimal group size grows with memory budget, and the comparison with external verifiers all rest on this flawed premise. Because the paper presents this as a core finding (third contribution listed in the abstract) and uses it to derive deployment guidelines, the error undermines a substantial part of the claimed contribution.
+
+### Issue 2 (Evidential) — The serial‑scaling threshold (8‑bit 4B) is established only on Qwen3; generalization is unsupported
+
+Finding 1 — that the memory‑efficient allocation strategy flips at an effective size of roughly an 8‑bit 4B model — is derived **exclusively** from experiments on the Qwen3 family (Figures 1, 2, and the surrounding analysis). While the paper briefly evaluates DeepSeek‑R1‑Distill and OpenReasoning‑Nemotron for *parallel scaling* (Section 4, Figure 6, Appendix C.6), it provides **no evidence** that the serial‑scaling threshold generalizes to other architectures. The abstract and introduction present this threshold as a general principle, but a single model family cannot support a precise numeric threshold (∼4.2 GB weight memory) that is likely sensitive to architecture, training recipe, and task. The limitation statement attempts to claim generalization but does not supply the needed serial‑scaling experiments.
+
+## Section-by-Section Notes
+
+**Abstract and Introduction.**  
+The motivation is clear and the problem statement well framed. The claim that “4‑bit quantization has emerged as a memory‑optimal choice for non‑reasoning models” is somewhat oversimplified but not a major issue. The list of contributions is faithful to the body of the paper except for the parallel‑scaling overclaim.
+
+**Section 2 – Background.**  
+The survey of weight quantization, KV‑cache quantization, and eviction is adequate. The test‑time scaling discussion correctly limits the scope to self‑contained methods.
+
+**Section 3 – Experimental Setup.**  
+The memory formula \( M = M_{\text{weights}}(N, P_W) + M_{\text{KV}}(N, \pi_{kv}, T, G) \) is appropriate for the considered scenarios. The definition of “effective size” as the weight footprint is sensible. One concern is that **activation memory** is omitted; while it may be small relative to the KV cache for long generations, it could become non‑negligible in batched inference or with very large models. The paper does not discuss this.
+
+**Section 4 – Test‑Time Scaling with Weight‑Only Quantization.**  
+*Serial scaling:* The budget‑forcing experiments produce clear Pareto frontiers, and the observation that 4‑bit is not always optimal for mathematical reasoning is a valuable counterpoint to prior work. The analysis convincingly shows a regime where model‑weight investment beats token‑budget expansion for small models. However, the threshold (8‑bit 4B) is entirely empirical; the paper does not attempt to explain *why* this particular value arises (e.g., through scaling‑law arguments), leaving it as a somewhat brittle numer.
+
+*Parallel scaling:* The critical flaw described above dominates. Even within the batched‑inference framing, the paper does not discuss whether generating samples sequentially could be done under the same memory budget, nor does it justify why batching is mandatory. The comparison with an external verifier (Section 4.1) inherits the same problem: majority voting’s memory cost is overestimated, which could affect the conclusion that verifiers are inefficient (though the verifier’s large model memory alone may still be a bottleneck).
+
+**Section 5 – KV Cache Compression.**  
+This section is the strongest. The experiments with eviction (R‑KV) and quantization (HQQ) are reasonably configured, and the finding that both methods advance the Pareto frontier is well supported. The claim that eviction is preferable for small effective sizes and quantization becomes competitive for larger models is plausible and backed by the per‑model plots. However, the generality across eviction algorithms is limited (only R‑KV is tested, while StreamingLLM is mentioned but not evaluated).
+
+**Section 6 – Conclusion.**  
+The conclusion summarises the findings, but the overstatement of the threshold’s generality and the flawed parallel‑scaling advice weaken its reliability.
+
+**Section 7 – Limitations and Future Work.**  
+The paper acknowledges the narrow model‑family focus, but the discussion of generalization is imprecise — it does not specify which findings are verified on the additional model families, and it omits the parallel‑scaling assumption issue.
+
+## Strengths
+
+- The systematic exploration of serial test‑time scaling across a wide range of model sizes, weight precisions, and token budgets is thorough and reveals a non‑trivial scale‑dependent trade‑off.
+- The observation that 4‑bit weight quantization is **not** memory‑optimal for mathematical reasoning and code generation — and that task type dictates the preferred weight precision — is a well‑demonstrated and practically relevant insight.
+- The KV‑cache compression analysis convincingly shows that both eviction and quantization can improve the memory–accuracy frontier, and it provides actionable guidance on when each is preferable.
+
+## Missing Parts and Places to Improve
+
+### Missing Experiments
+1. **Serial scaling threshold on non‑Qwen3 models.** Without experiments on at least one other reasoning model family (e.g., DeepSeek‑R1‑Distill) showing where the inflection point lies, the claimed universality of the 8‑bit 4B threshold is unsupported. This directly affects the credibility of Finding 1 as a general principle.
+2. **Parallel scaling without the batching memory penalty.** The paper should compare majority voting implemented sequentially (same memory as serial scaling) against serial scaling to isolate the pure compute‑to‑accuracy trade‑off, and then, **separately**, analyse the memory cost of batched parallel scaling when latency constraints demand it.
+
+### Deeper Analysis Needed
+1. **Why does the threshold emerge?** The paper identifies an empirical boundary but provides no mechanistic or scaling‑law insight. A discussion of how KV‑cache growth rate interacts with diminishing accuracy returns from longer generations would strengthen the contribution.
+2. **Activation memory footprint.** In batched inference with many parallel samples, activation memory may be non‑trivial. The study should at least estimate its magnitude and argue that it does not alter the Pareto frontiers.
+
+### Visualizations & Case Studies
+1. **Error bars or variance.** The accuracy numbers are averages over 32 (or 8) generations per instance, but no variance is reported. For Pareto‑frontier plots with many points, showing confidence bands (e.g., via bootstrapping across problem instances) would help readers assess the robustness of the frontiers.
+
+### Obvious Next Steps
+1. **Joint optimization over all axes.** The current study treats factors partially independently (serial, parallel, KV compression). A unified empirical or analytical model that predicts the optimal multi‑axis combination for a given memory budget would be a natural (and publishable) extension.
+
+## Overall Assessment
+
+The paper addresses a timely problem and contains a number of interesting empirical observations, particularly concerning the task‑dependence of weight precision and the benefits of KV‑cache compression. However, the parallel‑scaling analysis — presented as a core contribution — rests on an unjustified assumption that majority voting must be batched, which fundamentally undermines Finding 3 and the associated deployment advice. This issue is structural: it cannot be fixed by adding experiments without fundamentally reinterpreting the role of parallel scaling. Moreover, the headline serial‑scaling threshold is established only on one model family, leaving its generality unsupported.
+
+Given these problems, the paper in its current form does **not** provide a reliable set of principles for memory‑efficient reasoning. I recommend **rejection**, with the suggestion that a substantially revised version — removing or thoroughly re‑framing the parallel‑scaling claims and adding cross‑family evidence for the serial threshold — could form a solid contribution.
+### Strength Finder
+## Strengths
+
+### Core strengths (directly support the paper's main claims)
+1. **Scale-dependent allocation between weight precision and generation length**: The paper demonstrates a clear threshold at an effective size of 8‑bit 4B. In Figure 2(b) for AIME25, the Pareto frontier below ∼10 GB memory is advanced primarily by choosing larger models or higher weight precision rather than longer generations, while above this budget frontier configurations use token budgets over 20k, establishing that the memory‑efficient strategy flips at this scale.
+
+2. **Task‑dependent weight precision optimality**: The claim that 4‑bit is memory‑optimal for knowledge‑intensive tasks but not for mathematical reasoning is directly backed by the Pareto frontiers on GPQA‑Diamond (Figure 4), where 4‑bit models dominate, versus AIME25 (Figures 1 and 2), where 8‑bit and 16‑bit configurations consistently lie on or push the frontier.
+
+3. **Parallel scaling only memory‑efficient for large models**: Figure 5 shows that for models effectively smaller than 8‑bit 4B, parallel scaling configurations fall below the serial‑frontier, while for larger models they improve the trade‑off and the memory‑optimal group size grows with budget. This is also reproduced on DeepSeek‑R1‑Distill (Figure 6) and OpenReasoning‑Nemotron (Appendix C.6).
+
+4. **KV cache compression broadly improves memory–accuracy trade‑offs**: Figure 8 aggregates results across all weight precisions and model sizes, showing that both eviction and quantization decisively shift the aggregate Pareto frontier beyond the no‑compression baseline, proving that weight quantization alone is insufficient for memory‑optimal reasoning.
+
+5. **Eviction outperforms quantization for small effective sizes**: Per‑model analysis in Figure 9 shows that for the 4B full‑precision model, eviction with an 8k token budget maintains near‑lossless accuracy while substantially reducing memory, whereas 4‑bit KV cache quantization causes large accuracy drops. For the 8B 16‑bit model, quantization becomes competitive, directly illustrating the scale‑dependent preference.
+
+### Supporting strengths
+1. **Generality across model families**: The findings are validated beyond the main Qwen3 family on DeepSeek‑R1‑Distill and OpenReasoning‑Nemotron (Section 4, Figures 6 and Appendix C.6), indicating the scale‑dependent threshold is not an artifact of a single architecture.
+
+2. **Robustness to quantization method**: The key memory–accuracy curves remain consistent when GPTQ is replaced by AWQ or FP8 weight quantization (Appendix C.2, Figure 12), supporting that the conclusions do not hinge on a specific quantization implementation.
+
+3. **Explicit, reproducible memory model**: Table 1 provides exact memory footprints for every model/precision/token‑budget combination used, and Appendix B details the memory cost equations, enabling practitioners to apply the guidelines with precise numbers.
+
+4. **Controlled experimental design with budget forcing and majority voting**: Serial scaling is implemented via a uniform budget‑forcing protocol and parallel scaling via majority voting without external tools, ensuring fair comparisons across configurations and high internal validity (Section 3).
+
+## Summary
+
+The paper’s contribution is the identification of a previously unrecognized scale‑dependent threshold (effective size ≈ 8‑bit 4B) that governs memory‑optimization strategy for reasoning models: below this size, allocating memory to larger or higher‑precision weights dominates spending on generation length; above it, increasing the test‑time compute budget becomes the most memory‑efficient route, and parallel scaling becomes beneficial. The single most important piece of evidence is the comprehensive Pareto frontier analysis on AIME25 (Figure 2(b)), which cleanly demonstrates the crossover where the frontier transitions from being advanced by higher weight capacity to being advanced by larger token budgets, providing an actionable guide for deployment under fixed memory constraints.
+
+--- Merged Review ---
+Now I have enough information. Let me compose the final review.
+
+---
+
+## Summary
+
+This paper empirically investigates memory-optimal deployment strategies for reasoning LLMs, spanning five axes: model size, weight precision, token budget, parallel sampling (majority voting), and KV cache compression. Conducted primarily on the Qwen3 family across 1,700+ configurations, it identifies a scale-dependent threshold (~8-bit 4B effective size) below which memory is better allocated to larger/higher-precision weights rather than longer generations, and finds that 4-bit quantization is not universally optimal — higher precision benefits mathematical reasoning while 4-bit suffices for knowledge-intensive tasks. The KV cache compression analysis shows both eviction and quantization advance the Pareto frontier, with eviction preferred for small models.
+
+## Strengths
+
+- **Task-dependent weight precision finding is well-supported and practically significant.** The Pareto frontiers on AIME25 (Figures 1, 2) show 8-bit and 16-bit configurations consistently on or ahead of the frontier for mathematical reasoning, while GPQA-Diamond (Figure 4) shows 4-bit models dominate for knowledge-intensive tasks. This directly challenges the "4-bit is always optimal" narrative from prior work and is backed by cross-task evidence.
+
+- **Comprehensive and well-controlled experimental design.** The paper systematically varies model size (0.6B–32B), weight precision (4/8/16-bit), token budgets (2k–30k in 4k increments), parallel group sizes (up to G=16), and KV compression strategies across 1,700+ configurations. Budget forcing is applied uniformly for serial scaling, and majority voting without external tools ensures fair internal comparisons. The explicit memory model (Table 1, Appendix B) makes the analysis transparent and reproducible.
+
+- **KV cache compression analysis is thorough and yields actionable guidance.** Figure 8 demonstrates that both eviction (R-KV) and quantization (HQQ) decisively advance the aggregate Pareto frontier beyond the no-compression baseline across all weight precisions. Figure 9 provides per-model analysis showing eviction is clearly preferable for small effective sizes (near-lossless accuracy with substantial memory reduction on the 4B model), while quantization becomes competitive at larger scales — a scale-dependent preference that parallels the serial scaling findings.
+
+- **Robustness checks across quantization schemes.** Appendix C.2 (referenced in the main text) shows that replacing GPTQ with AWQ or FP8 yields nearly identical memory–accuracy curves, confirming the conclusions are not tied to a specific quantization implementation.
+
+## Weaknesses
+
+### Fatal
+
+None. The paper's core empirical findings are not invalidated by any single identified issue.
+
+### Major
+
+- **The serial scaling threshold (Finding 1) is established exclusively on the Qwen3 family, yet presented as a general principle.** The paper states that models with effective size below 8-bit 4B benefit more from larger weights than longer generations, with the precise numeric threshold (~4.2 GB weight memory) derived entirely from Qwen3 experiments (Figures 1, 2). The generalization experiments on DeepSeek-R1-Distill and OpenReasoning-Nemotron (Section 4, Figure 6) cover only parallel scaling (Finding 3), not serial scaling. While the paper acknowledges the narrow model-family focus in its limitations (Section 7), the abstract and Findings present the threshold as a broadly applicable principle. A numeric threshold this precise is likely sensitive to architecture, training recipe, and task distribution — the paper provides no evidence that it holds beyond Qwen3. This weakens the headline contribution and the deployment guidelines derived from it.
+
+### Minor
+
+- **The parallel scaling analysis assumes batched inference without discussing the sequential alternative.** The paper explicitly states "assuming a batched inference setting" (lines 96, 25), which is a reasonable deployment scenario. Under this assumption, the KV cache multiplies by G and the memory–accuracy trade-off analysis is valid. However, majority voting can also be implemented by generating samples sequentially, reusing the same KV cache space — in that regime, parallel scaling incurs no additional memory cost (only latency). The paper would be strengthened by acknowledging this alternative and explaining why batched inference is the practically relevant setting for deployment scenarios where latency matters. This is a scope limitation, not an error — the assumption is stated — but its implications for Finding 3's generality should be discussed.
+
+- **No theoretical or mechanistic explanation for the 8-bit 4B threshold.** Finding 1 identifies an empirical boundary but provides no analysis of *why* this particular threshold emerges — e.g., how KV-cache growth rate interacts with diminishing accuracy returns from longer generations in small vs. large models. An empirical study need not provide theory, but given that the threshold is presented as a central contribution, some discussion of the underlying dynamics would substantially strengthen it.
+
+- **Only one KV eviction method (R-KV) is evaluated.** StreamingLLM is mentioned in the introduction and background as one of the eviction approaches but does not appear in the experimental results (Section 5). Given that the choice of eviction algorithm can significantly affect the accuracy–memory trade-off, this limits the generality of Finding 5 (that eviction is preferable to quantization for small effective sizes).
+
+### Trivial
+
+- Activation memory is omitted from the memory model (equation in Section 3). While typically small relative to KV cache for long generations, it could become non-negligible for batched inference with large models. A brief note estimating its magnitude would improve completeness.
+
+- No confidence intervals or variance estimates are reported for the accuracy measurements (averaged over 32 or 8 generations per instance). For Pareto frontier plots with many points, bootstrapping across instances would help readers assess frontier robustness.
+
+## Nice-to-Haves
+
+- A unified joint-optimization framework across all five axes (model size, weight precision, token budget, group size, KV compression) rather than the current partially independent treatment of serial, parallel, and KV compression analyses. This would be a natural extension but is beyond the paper's already-large scope.
+
+- Discussion of the sequential majority-voting alternative and explicit justification for why batched inference is the relevant regime for deployment.
+
+- Error bars or bootstrapped confidence bands on the Pareto frontier plots.
+
+## Removed Points
+
+These points were flagged but removed after verification against the paper:
+
+- **"Parallel scaling memory trade-off is based on an unnecessary batching assumption, invalidating Finding 3"** — REMOVED. The paper explicitly states "assuming a batched inference setting" on lines 25 and 96. This is not a hidden or unjustified assumption; batched inference is a standard deployment scenario. Finding 3 is valid under its stated scope. The sequential alternative is a worthwhile discussion point (moved to Minor), not an error.
+
+- **"Activation memory footprint could become non-negligible"** — KEPT as Trivial only. The paper's memory model is well-documented and activation memory is genuinely secondary for the long-generation scenarios studied. This doesn't threaten any finding.
+
+- **"The paper does not discuss whether generating samples sequentially could be done under the same memory budget"** — REMOVED as a standalone criticism. The paper's stated scope is batched inference. Moved to Minor as a scope discussion point.
+
+- **"External verifier comparison inherits the parallel scaling assumption problem"** — REMOVED. Same reasoning as above: the assumption is explicit and reasonable.
+
+- **"The paper does not attempt to explain why this particular threshold value arises"** — KEPT as Minor. This is a substantive suggestion, not a factual error.
+
+- **"StreamingLLM is mentioned but not evaluated"** — KEPT as Minor. Factually correct — StreamingLLM appears in the introduction and background but is absent from Section 5 results.
+
+- **"The paper acknowledges the narrow model-family focus, but the discussion of generalization is imprecise"** — KEPT as Major. The paper does not specify that generalization experiments only cover parallel scaling, not the serial threshold.
+
+- **Strength: "Generality across model families"** — PARTIALLY RETAINED but qualified. The generalization experiments exist but only for parallel scaling (Finding 3), not the serial scaling threshold (Finding 1). This is a partial strength for Finding 3 but does not support Finding 1.
+
+- **Strength: "Explicit, reproducible memory model"** — KEPT. Table 1 and Appendix B provide concrete numbers.
+
+- **Strength: "Controlled experimental design with budget forcing and majority voting"** — KEPT. The methodology is sound.
+
+## Novel Insights
+
+The most genuinely novel insight from this work is the task-dependence of weight precision optimality for reasoning models. Prior work established that 4-bit quantization is broadly sufficient for zero-shot, non-reasoning tasks; this paper shows that mathematical reasoning and code generation demand higher precision (8-bit or 16-bit), likely because numerical fidelity in weights matters for multi-step computation, while knowledge-intensive tasks remain robust to 4-bit quantization. This finding has immediate practical implications for model selection under memory constraints and suggests that the "quantize to 4-bit by default" heuristic should be reconsidered for reasoning workloads. The scale-dependent threshold (Finding 1) is also novel, though its generality remains to be validated.
+
+## Suggestions
+
+- Add serial scaling experiments on DeepSeek-R1-Distill (at minimum) to substantiate the generality of Finding 1. Even a limited set of model sizes would significantly strengthen the paper.
+- Explicitly discuss the sequential majority-voting alternative and why batched inference is the relevant deployment regime, clarifying the scope of Finding 3.
+- Provide a brief discussion of why the KV-cache-to-weight trade-off flips at the observed threshold — even a qualitative argument about how KV cache growth rate interacts with diminishing accuracy returns would help.
+- Include StreamingLLM results in Section 5 to support the generality of Finding 5 across eviction algorithms.
+
+## Score and Decision
+
+**Calibration anchors used:**
+
+- **High:** `Scaling Laws for Precision` (avg 8.0, Oral) — derived precision-aware scaling laws with mathematical forms fitted on 465 pretraining runs. The current paper is purely empirical with no theoretical contribution; clearly below this tier.
+- **High:** `Scaling LLM Test-Time Compute Optimally` (avg 7.5, Oral) — proposed a novel compute-optimal strategy with PRM-based search and adaptive revision. The current paper identifies trade-offs but doesn't propose or optimize new strategies; below this tier.
+- **Medium:** `HeadKV` (avg 6.5, Poster) — novel head-level KV cache compression with strong results but limited scope and marginal methodology. The current paper has broader scope (five axes vs. one) and more comprehensive experiments, but shares the limitation of narrow model-family validation for its headline finding. Comparable tier.
+- **Medium:** `Palu` (avg 5.75, Poster) — novel low-rank KV cache compression with experimental concerns. The current paper has a cleaner experimental design and broader scope but no methodological novelty. Slightly above.
+- **Low:** `Evaluating the Generalization Ability of Quantized LLMs` (avg 4.75, Reject) — a benchmark study without new algorithms, criticized for being "just" a benchmark. The current paper synthesizes actionable principles beyond benchmarking and has richer analysis; clearly above this tier.
+- **Low:** `IntelLLM` (avg 3.0, Withdrawn) — KV cache compression with unclear presentation, insufficient baselines, weak benchmarks. The current paper has none of these problems.
+
+**Positioning:** The paper is a strong empirical study that synthesizes actionable principles from a systematic exploration. It is clearly above pure-benchmark papers (ClkfwM3STw, 4.75) and method papers with significant weaknesses (Palu, 5.75). It approaches the quality of method papers with narrower but well-executed scope (HeadKV, 6.5) through breadth and thoroughness. However, it falls short of top-tier papers (8.0 range) due to the absence of theoretical grounding, methodological novelty, or complete cross-family validation. The serial threshold's single-family validation is the most significant limitation but does not undermine the paper's core value — the Qwen3 analysis alone provides useful guidance, and the task-dependent precision finding is independently strong. The score lands at **6.0**, reflecting solid empirical work with broadly useful findings that could be strengthened by broader validation.
+
+MY FINAL SCORE: <pineapple>6.0</pineapple>
+MY FINAL DECISION: <orange>Accept</orange>
+
+--- Scorer Output ---
+6.0
+
+--- Decision ---
+Accept
