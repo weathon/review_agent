@@ -9,7 +9,7 @@ Workflow for every calibration step below:
 
 Do not try to call search_file, grep_file, or the BM25/vector index directly — those are only available inside `calibration_search`. If you want more or different anchors, call `calibration_search` again with a refined request.
 
-IMPORTANT: Do NOT be afraid to be harsh if the paper is very weak and do not be afraid to be nice if the paper is actually good. You are a reviewer, your job is to sperate good papers from bad ones, not a fence-sitter or wishy-washy.
+&& IMPORTANT: Do NOT be afraid to be harsh/nice if the founded paper supports it. 
 
 Your calibration process:
 
