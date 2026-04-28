@@ -29,6 +29,6 @@ export MERGE_LOG="pipeline_whole_claude_3.log"
 ollama serve & 
 # use balanced to see quality in the whole spectrum of scores
 export CONCURRENCY=1
-export MAX_PAPERS=50
+export MAX_PAPERS=100   
 # python main.py --n_samples 200 --benchmark ../iclr2026_cspaper_new/ --seed $(cksum <<< '3456789' | cut -f 1 -d ' ') 
 python main.py --n_samples 200 --benchmark ../iclr2025/ --seed $(cksum <<< '45678654567875456' | cut -f 1 -d ' ') 
