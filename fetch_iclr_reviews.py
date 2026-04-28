@@ -26,7 +26,7 @@ import openreview
 from dotenv import load_dotenv
 
 load_dotenv()
-
+ 
 
 def main():
     year = 2025
@@ -97,7 +97,8 @@ def main():
         baseurl="https://api2.openreview.net",
     )
 
-    venue = f"ICLR.cc/{year}/Conference"
+    venue = f"NeurIPS.cc/2025/Position_Paper_Track"
+    # venue = f"ICLR.cc/{year}/Conference"
     print(f"Fetching submissions for {venue}...")
     venue_group = client.get_group(venue)
     submission_name = venue_group.content["submission_name"]["value"]

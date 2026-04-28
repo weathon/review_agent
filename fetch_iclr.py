@@ -31,15 +31,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DEFAULT_DATA_DIR = Path(__file__).parent / "iclr2026_data"
-OPENREVIEW_URL = "https://openreview.net"
+DEFAULT_DATA_DIR = Path(__file__).parent / "icml2025_position"
+OPENREVIEW_URL = "https://openreview.net" 
 YEAR = 2025
 
 def fetch_notes():
     f"""Fetch all ICLR {YEAR} submission notes with reviews via OpenReview API."""
     client = get_or_client()
 
-    venue = f"ICLR.cc/{YEAR}/Conference"
+    # venue = f"ICLR.cc/{YEAR}/Conference"
+    venue = "ICML.cc/2025/Position_Paper_Track"
     print(f"Fetching submissions for {venue}...")
     venue_group = client.get_group(venue)
     submission_name = venue_group.content["submission_name"]["value"]
