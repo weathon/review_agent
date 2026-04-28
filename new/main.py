@@ -24,6 +24,11 @@ _cli_calibration_set = _extract_cli_arg("--calibration_set")
 if _cli_calibration_set:
     os.environ["CALIBRATION_SET"] = _cli_calibration_set
 
+if "--position" in sys.argv:
+    os.environ["POSITION_MODE"] = "1"
+
+_POSITION_MODE = os.environ.get("POSITION_MODE", "").strip().lower() in ("1", "true", "yes")
+
 from tools import CALIBRATION_REVIEW_DIR, read_file, read_file_full, grep_file, search_file  # glob_files removed (unused)
 import weave
 weave.init("openai-agents")
@@ -150,15 +155,19 @@ def resolve_model(spec: str | None):
         return OpenAIChatCompletionsModel(model=name, openai_client=client)
     return spec
 
+_harsh_prompt = "harsh_critic_position.md" if _POSITION_MODE else "harsh_critic.md"
+_neutral_prompt = "neutral_reviewer_position.md" if _POSITION_MODE else "neutral_reviewer.md"
+_merger_prompt_file = "merger_position.md" if _POSITION_MODE else "merger.md"
+
 if HARSH_MODEL.startswith("claude_sdk:"):
     harsh = None  # Claude SDK Harsh Critic — invoked per-call in run_pipeline
     _HARSH_SDK_MODEL = HARSH_MODEL[len("claude_sdk:"):]
-    _harsh_sdk_system_prompt = load_prompts("harsh_critic.md", paper_access=PAPER_ACCESS_FILE)
+    _harsh_sdk_system_prompt = load_prompts(_harsh_prompt, paper_access=PAPER_ACCESS_FILE)
 else:
-    harsh = Agent(name="Harsh Critic", instructions=load_prompts("harsh_critic.md"), model=resolve_model(HARSH_MODEL))
+    harsh = Agent(name="Harsh Critic", instructions=load_prompts(_harsh_prompt), model=resolve_model(HARSH_MODEL))
     _HARSH_SDK_MODEL = None
     _harsh_sdk_system_prompt = None
-neutral_reviewer = Agent(name="Strength Finder", instructions=load_prompts("neutral_reviewer.md"), model=resolve_model(NEUTRAL_MODEL))
+neutral_reviewer = Agent(name="Strength Finder", instructions=load_prompts(_neutral_prompt), model=resolve_model(NEUTRAL_MODEL))
 
 _NO_CAL = "--no_cal" in sys.argv
 
@@ -191,7 +200,7 @@ if MERGER_MODEL.startswith("claude_sdk:"):
     merger = None  # Claude SDK merger — created per-call in run_pipeline
     _MERGER_SDK_MODEL = MERGER_MODEL[len("claude_sdk:"):]
 else:
-    _merger_instructions = load_prompts("merger.md", paper_access=PAPER_ACCESS_FILE, no_cal=_NO_CAL)
+    _merger_instructions = load_prompts(_merger_prompt_file, paper_access=PAPER_ACCESS_FILE, no_cal=_NO_CAL)
     if _NO_CAL:
         _merger_tools = [read_file, grep_file]
     else:
@@ -228,6 +237,15 @@ The paper was extracted from PDF by an automated parser. Treat formatting artifa
 {paper_content}
 --- PAPER CONTENT END (everything after references stripped by parser) ---"""
 
+REVIEW_PROMPT_POSITION = """Review the following position paper thoroughly. This is a position paper that argues for a viewpoint or perspective, not a standard research paper reporting accomplished advances. Evaluate it on clarity of position, quality of argumentation, contemporary interest, and whether it invites productive discussion.
+
+The paper was extracted from PDF by an automated parser. Treat formatting artifacts (broken equations, garbled tables, OCR errors) as parser issues, not paper flaws. The appendix and references were stripped by the parser; assume they exist in the original submission and don't flag them as missing.
+
+{paper_path}
+--- PAPER CONTENT START ---
+{paper_content}
+--- PAPER CONTENT END (everything after references stripped by parser) ---"""
+
 
 # ── Core pipeline ────────────────────────────────────────────────────
 import time
@@ -238,7 +256,8 @@ async def run_pipeline(paper_path: str, skip_scoring: bool = False, no_cal: bool
         paper_content = f.read()
     paper_content = paper_content
 
-    review_prompt = REVIEW_PROMPT.format(paper_path=paper_path_abs, paper_content=paper_content)
+    _review_template = REVIEW_PROMPT_POSITION if _POSITION_MODE else REVIEW_PROMPT
+    review_prompt = _review_template.format(paper_path=paper_path_abs, paper_content=paper_content)
 
     # Harsh Critic input: when running via Claude SDK, replace the inline paper
     # content with a directive to read it from disk (SDK has a CLI input length
@@ -683,6 +702,7 @@ if __name__ == "__main__":
     parser.add_argument("--balanced", action="store_true")
     parser.add_argument("--calibration_set", choices=["2025", "2026"], default=os.getenv("CALIBRATION_SET", "2025"))
     parser.add_argument("--no_cal", action="store_true", help="Skip calibration sample search; score based on paper merits alone")
+    parser.add_argument("--position", action="store_true", help="Use position paper prompts and calibration dataset")
     parser.add_argument("--accept_csv", type=str, default=None, help="Path to bench CSV; predict acceptance rate at predicted score and ±0.5")
     args = parser.parse_args()
 

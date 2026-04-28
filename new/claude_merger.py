@@ -15,7 +15,11 @@ from openai import OpenAI
 import dotenv
 dotenv.load_dotenv()
 
-HUMAN_REVIEW_DIR = os.path.abspath("../human_reviews/")
+_position_mode = os.environ.get("POSITION_MODE", "").strip().lower() in ("1", "true", "yes")
+if _position_mode:
+    HUMAN_REVIEW_DIR = os.path.abspath("../neurips_position_human_review/")
+else:
+    HUMAN_REVIEW_DIR = os.path.abspath("../human_reviews/")
 
 # ── Build indexes (mirrors tools.py) ──────────────────────────────────
 _bm25_db: dict = {}
@@ -40,12 +44,14 @@ def _ensure_indexes():
     _bm25_db["bm25"] = BM25Okapi(tokenized)
     _bm25_db["files"] = all_file_paths
 
-    with open("./human_reviews_embeddings.pkl", "rb") as f:
+    _emb_path = "./human_reviews_embeddings_position.pkl" if _position_mode else "./human_reviews_embeddings.pkl"
+    _idx_path = "./human_review_score_index_position.pkl" if _position_mode else "./human_review_score_index.pkl"
+    with open(_emb_path, "rb") as f:
         db = pickle.load(f)
     _bm25_db["filenames"] = list(db.keys())
     _bm25_db["vectors"] = np.array(list(db.values()))
 
-    with open("./human_review_score_index.pkl", "rb") as f:
+    with open(_idx_path, "rb") as f:
         _bm25_db["score_index"] = pickle.load(f)
 
 
@@ -168,7 +174,7 @@ def _make_merger_mcp_server(paper_dir: str, no_cal: bool = False):
                 if not np.isfinite(masked[idx]):
                     break
                 fn = filenames[idx]
-                fpath = os.path.abspath(f"../human_reviews/{fn}")
+                fpath = os.path.abspath(os.path.join(HUMAN_REVIEW_DIR, fn))
                 rel = similarities[idx]
                 avg = score_index.get(fn, -1.0)
                 with open(fpath, "r", errors="replace") as fh:
@@ -341,7 +347,8 @@ async def run_merger_claude_sdk(model_id: str, merger_prompt: str, paper_dir: st
     Run the merger agent via Claude Agent SDK.
     Returns (final merged review text, usage dict with cost/tokens/turns).
     """
-    with open("prompts/merger.md", "r") as f:
+    _merger_prompt_file = "prompts/merger_position.md" if _position_mode else "prompts/merger.md"
+    with open(_merger_prompt_file, "r") as f:
         system_prompt = f.read()
     system_prompt = system_prompt.replace(
         "{{PAPER_ACCESS_INSTRUCTION}}",

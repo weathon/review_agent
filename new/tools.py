@@ -3,7 +3,12 @@ import os
 
 
 _calibration_set = os.getenv("CALIBRATION_SET", "2025").strip().lower()
-if _calibration_set in ("2026", "iclr2026"):
+_position_mode = os.getenv("POSITION_MODE", "").strip().lower() in ("1", "true", "yes")
+if _position_mode:
+    CALIBRATION_REVIEW_DIR = os.path.abspath("../neurips_position_human_review/")
+    _embeddings_path = "./human_reviews_embeddings_position.pkl"
+    _score_index_path = "./human_review_score_index_position.pkl"
+elif _calibration_set in ("2026", "iclr2026"):
     CALIBRATION_REVIEW_DIR = os.path.abspath("../human_reviews_2026/")
     _embeddings_path = "./human_reviews_embeddings_2026.pkl"
     _score_index_path = "./human_review_score_index_2026.pkl"
